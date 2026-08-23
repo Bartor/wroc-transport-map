@@ -337,3 +337,254 @@ def stage_ped(idx):
         })
     write("ped.json", out)
     return out
+
+
+# ------------------------------------------------- public transport (6.4 / 6.3)
+def stage_pt(idx, sidx):
+    """6.4: passengers counted on board buses and trams.
+
+    Careful: the point ids here (KW_01, PR_02, R1_03...) are a *different*
+    numbering from the road cross-sections that share the prefix - KW_01 is
+    "Pracze Odrzanskie" here and "ul. Kamienskiego" there. So place these by
+    stop name against OSM instead of joining on the id.
+    """
+    def where(s):
+        for cand in (s["stop"].most_common(1)[0][0] if s["stop"] else None, s["name"]):
+            g = geocode.find_stop(sidx, cand) if cand else None
+            if g:
+                return g, "stop"
+        g = geocode.street_centroid(idx, s["loc"]) if s["loc"] else None
+        if g:
+            return g, "street"
+        return (None, None), "unresolved"
+
+    secs = {}
+    for r in sheet(F64, "DANE - potoki pasażerskie", 4):
+        if not r[0]:
+            continue                                # 31k trailing blank rows
+        sid, pt = txt(r[4]), txt(r[3])
+        if not sid:
+            continue
+        s = secs.setdefault(sid, {
+            "point": pt, "name": txt(r[6]), "loc": txt(r[7]),
+            "osiedle": txt(r[9]), "stop": collections.Counter(),
+            "h": collections.Counter(), "hveh": collections.Counter(),
+            "traction": collections.Counter(), "line": collections.Counter(),
+            "carrier": collections.Counter(), "dir": collections.Counter(),
+            "board": 0, "alight": 0, "exch": 0,
+            "pax": 0, "veh": 0, "load": [], "dates": set()})
+        h = r[13] if isinstance(r[13], int) else hour_of(r[14])
+        pax = num(r[25]) or 0
+        s["pax"] += pax
+        s["veh"] += 1
+        s["dates"].add(txt(r[1]))
+        if txt(r[8]):
+            s["stop"][txt(r[8])] += 1
+        tr = txt(r[22]) or "?"
+        s["traction"][tr] += 1
+        if txt(r[17]):
+            s["line"][txt(r[17])] += pax
+        if txt(r[20]):
+            s["carrier"][txt(r[20])] += 1
+        if txt(r[19]):
+            s["dir"][txt(r[19])] += pax
+        if h is not None:
+            s["h"][(h, tr)] += pax
+            s["hveh"][(h, tr)] += 1
+        u = num(r[26])
+        if u is not None:
+            s["load"].append(u)
+        # boarding/alighting was only surveyed on a subset of the runs
+        for col, key in ((28, "board"), (27, "alight"), (29, "exch")):
+            v = num(r[col])
+            if v is not None:
+                s[key] += v
+
+    out = []
+    for sid, s in sorted(secs.items()):
+        (lat, lon), how = where(s)
+        tract = sorted(s["traction"])
+        out.append({
+            "id": sid, "point": s["point"], "name": s["name"], "loc": s["loc"],
+            "stop": s["stop"].most_common(1)[0][0] if s["stop"] else "",
+            "osiedle": s["osiedle"], "lat": lat, "lon": lon, "geo": how,
+            "dates": sorted(x for x in s["dates"] if x),
+            "pax": round(s["pax"]), "veh": s["veh"],
+            "avgLoad": round(sum(s["load"]) / len(s["load"]), 4) if s["load"] else None,
+            "byHour": {t: [round(s["h"].get((h, t), 0)) for h in range(24)] for t in tract},
+            "vehByHour": {t: [s["hveh"].get((h, t), 0) for h in range(24)] for t in tract},
+            "byTraction": dict(s["traction"]),
+            "byCarrier": dict(s["carrier"].most_common(8)),
+            "byLine": dict(s["line"].most_common(15)),
+            "byDir": dict(s["dir"].most_common(10)),
+            "boarded": round(s["board"]) or None,
+            "alighted": round(s["alight"]) or None,
+        })
+    write("pt.json", out)
+    return out
+
+
+# -------------------------------------------------------------- railways (7.1)
+def find_station(stations, name):
+    g = geocode.find_station(stations, name)
+    if g:
+        return g
+    r = geocode.nominatim('stacja kolejowa %s, Polska' % name)
+    return r if r and 50.7 < r[0] < 51.6 and 16.3 < r[1] < 17.7 else None
+
+
+def stage_rail(stations):
+    """7.1: passengers on trains crossing the cordon, grouped into 11 sections."""
+    ov = load_overrides()
+    rows = []
+    for r in sheet(F71, "DANE SUROWE", 4):
+        if not r[0]:
+            continue
+        rows.append({
+            "cordon": txt(r[0]), "from": txt(r[1]), "to": txt(r[2]),
+            "carrier": txt(r[5]).strip(), "train": txt(r[6]),
+            "relation": txt(r[7]), "dep": txt(r[8]), "arr": txt(r[9]),
+            "hour": int(txt(r[10])) if txt(r[10]).isdigit() else None,
+            "quarter": txt(r[11]), "dir": txt(r[12]), "type": txt(r[13]),
+            "pax": num(r[14]) or 0, "load": num(r[15]),
+            "date": dstr(r[16]), "seats": num(r[18]),
+        })
+    coords = {}
+    for st in sorted({s for r in rows for s in (r["from"], r["to"])}):
+        if st in ov:
+            coords[st] = list(ov[st]) + ["manual"]
+        else:
+            g = find_station(stations, st)
+            coords[st] = (list(g) + ["osm"]) if g else [None, None, "unresolved"]
+
+    cordons = {}
+    for r in rows:
+        c = cordons.setdefault(r["cordon"], {
+            "stations": set(), "trains": 0, "pax": collections.Counter(),
+            "seats": collections.Counter(), "byHour": collections.Counter(),
+            "carriers": collections.Counter(), "dates": set(), "runs": []})
+        c["stations"].update([r["from"], r["to"]])
+        c["trains"] += 1
+        c["pax"][r["dir"]] += r["pax"]
+        if r["seats"]:
+            c["seats"][r["dir"]] += r["seats"]
+        if r["hour"] is not None:
+            c["byHour"][(r["hour"], r["dir"])] += r["pax"]
+        c["carriers"][r["carrier"]] += 1
+        c["dates"].add(r["date"])
+        c["runs"].append(r)
+
+    out = []
+    for cid, c in sorted(cordons.items(), key=lambda kv: int(kv[0][1:])):
+        sts = sorted(c["stations"])
+        pts = [coords[s] for s in sts if coords[s][0]]
+        dirs = sorted(c["pax"])
+        out.append({
+            "id": cid, "stations": sts,
+            "stationCoords": {s: coords[s] for s in sts},
+            "lat": sum(p[0] for p in pts) / len(pts) if pts else None,
+            "lon": sum(p[1] for p in pts) / len(pts) if pts else None,
+            "geo": "stations" if pts else "unresolved",
+            "trains": c["trains"], "dates": sorted(c["dates"]),
+            "pax": {d: round(v) for d, v in c["pax"].items()},
+            "seats": {d: round(v) for d, v in c["seats"].items()},
+            "byHour": {d: [round(c["byHour"].get((h, d), 0)) for h in range(24)]
+                       for d in dirs},
+            "carriers": dict(c["carriers"]),
+            "runs": sorted(c["runs"], key=lambda r: r["dep"]),
+        })
+    write("rail.json", out)
+    return out
+
+
+# ------------------------------------------------ household survey sample (shp)
+def stage_survey():
+    """The two shapefiles: addresses drawn for the household interview sample."""
+    import shapefile
+    out = []
+    for f, city in ((os.path.join(DATA, "KBRWr_2024_proba_Wroclaw_cz1"), True),
+                    (os.path.join(DATA, "KBRWr_2024_proba_gminy_cz2"), False)):
+        for sr in shapefile.Reader(f, encoding="cp1250").iterShapeRecords():
+            if not sr.shape.points:
+                continue
+            d = sr.record.as_dict()
+            lon, lat = sr.shape.points[0]
+            out.append({
+                "lat": round(lat, 6), "lon": round(lon, 6),
+                "zone": str(d.get("rejon_kom_") or d.get("rejon_kom") or ""),
+                "gmina": d.get("gmina") or "", "city": city,
+                "addr": d.get("pkt_start") or "",
+                "n": d.get("Liczbawywi") or None,
+            })
+    write("survey.json", out)
+    return out
+
+
+# ---------------------------------------------------------------------- driver
+def read_cat_labels():
+    out = {}
+    for r in sheet(F33, "Kategorie pojazdów", 4):
+        if r[0]:
+            out[txt(r[0])] = txt(r[1]).rstrip(",;")
+    return out
+
+
+def stage_points(cat):
+    """The road cross-section catalogue, plus a peak-hour total per section so
+    the map can size markers without loading road.json."""
+    road = json.load(open(os.path.join(OUT, "road.json"), encoding="utf8"))
+    for c in cat:
+        s = road["sections"].get(c["id"])
+        tot, peak, hourly = 0, 0, [0] * 24
+        if s:
+            for d in s["dirs"].values():
+                for h in range(24):
+                    v = sum(d["h"][h])
+                    hourly[h] += v
+                    tot += v
+            peak = max(hourly)
+        c["total"] = tot
+        c["peak"] = peak
+        c["byHour"] = hourly
+        c["hasOff"] = bool(s and "off" in s)
+    write("points.json", cat)
+    return cat
+
+
+def main(stages):
+    log("geocoding index...")
+    idx = geocode.build_index(geocode.overpass_roads())
+    cat = read_catalogue()
+    if "road" in stages:
+        stage_road(cat)
+    if "points" in stages:
+        stage_points(cat)
+    if "pt" in stages:
+        stage_pt(idx, geocode.stop_index(geocode.overpass_stops()))
+    if "bike" in stages:
+        stage_bike(idx)
+    if "ped" in stages:
+        stage_ped(idx)
+    if "rail" in stages:
+        stage_rail(geocode.overpass_stations())
+    if "survey" in stages:
+        stage_survey()
+    if "meta" in stages:
+        write("meta.json", {
+            "generated": datetime.date.today().isoformat(),
+            "source": "Kompleksowe Badania Ruchu Wrocław 2024",
+            "vehCats": read_cat_labels(),
+            "vehCatOrder": VEH_CATS,
+            "offCatOrder": OFF_CATS,
+            "motorCats": ["c", "d", "e", "f", "g", "h", "i", "j", "l"],
+            "bikePlace": BIKE_PLACE, "bikeMode": BIKE_MODE, "bikeUser": BIKE_USER,
+            "pedMobility": PED_MOB, "pedMobility2": PED_MOB2, "sex": SEX,
+            "areas": sorted({c["area"] for c in cat}),
+        })
+    log("done")
+
+
+ALL = ["road", "points", "pt", "bike", "ped", "rail", "survey", "meta"]
+
+if __name__ == "__main__":
+    main(sys.argv[1:] or ALL)

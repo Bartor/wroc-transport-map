@@ -284,3 +284,101 @@ def resolve(idx, street, odcinek, hint=None, overrides=None, key=None):
         if r:
             return [r[0], r[1], "nominatim"]
     return None
+
+
+def overpass_stops():
+    """Named bus/tram stops in the bbox, so transit points can be placed by
+    stop name. Poles sharing a name are averaged into one location."""
+    path = os.path.join(CACHE, "overpass_stops.json")
+    if os.path.exists(path):
+        return json.load(open(path, encoding="utf8"))
+    q = """[out:json][timeout:300];
+(
+  node["highway"="bus_stop"]["name"](%f,%f,%f,%f);
+  node["railway"="tram_stop"]["name"](%f,%f,%f,%f);
+  node["public_transport"="platform"]["name"](%f,%f,%f,%f);
+  node["public_transport"="stop_position"]["name"](%f,%f,%f,%f);
+);
+out;""" % (BBOX * 4)
+    sys.stderr.write("querying overpass for transit stops...\n")
+    js = json.loads(_get("https://overpass-api.de/api/interpreter",
+                         data=urllib.parse.urlencode({"data": q}).encode()))
+    acc = {}
+    for el in js.get("elements", []):
+        n = el["tags"].get("name")
+        if not n or "lat" not in el:
+            continue
+        a = acc.setdefault(n, [0.0, 0.0, 0])
+        a[0] += el["lat"]
+        a[1] += el["lon"]
+        a[2] += 1
+    out = {n: [round(a[0] / a[2], 6), round(a[1] / a[2], 6)] for n, a in acc.items()}
+    json.dump(out, open(path, "w", encoding="utf8"), ensure_ascii=False)
+    sys.stderr.write("  %d named stops cached\n" % len(out))
+    return out
+
+
+def stop_index(stops):
+    idx = {}
+    for n, c in stops.items():
+        idx.setdefault(_stopkey(n), []).append(c)
+    return idx
+
+
+def _stopkey(n):
+    n = str(n).lower().replace("\xa0", " ")
+    n = re.sub(r"\(.*?\)", " ", n)                  # drop "(stacja kolejowa)" etc.
+    n = re.sub(r"^(plac|aleja|ulica|osiedle|pl|al|ul|os)\.?\s+", "", n)
+    n = re.sub(r"[^0-9a-ząćęłńóśźż]+", " ", n).strip()
+    return n
+
+
+def find_stop(sidx, name):
+    """Coordinates for an MPK stop name; the data sometimes joins several stop
+    names with '/', so try each part."""
+    for part in re.split(r"\s*/\s*", str(name or "")):
+        k = _stopkey(part)
+        if not k:
+            continue
+        cs = sidx.get(k)
+        if not cs:
+            hits = [v for kk, v in sidx.items() if kk.startswith(k) or k.startswith(kk)]
+            cs = hits[0] if len(hits) == 1 else None
+        if cs:
+            return [sum(c[0] for c in cs) / len(cs), sum(c[1] for c in cs) / len(cs)]
+    return None
+
+
+def overpass_stations():
+    """Railway stations and halts across the wider region (rail cordons reach
+    well outside the city bbox)."""
+    path = os.path.join(CACHE, "overpass_stations.json")
+    if os.path.exists(path):
+        return json.load(open(path, encoding="utf8"))
+    box = (50.70, 16.30, 51.60, 17.70)
+    q = """[out:json][timeout:300];
+(
+  node["railway"~"^(station|halt)$"]["name"](%f,%f,%f,%f);
+  way["railway"~"^(station|halt)$"]["name"](%f,%f,%f,%f);
+);
+out center;""" % (box + box)
+    sys.stderr.write("querying overpass for railway stations...\n")
+    js = json.loads(_get("https://overpass-api.de/api/interpreter",
+                         data=urllib.parse.urlencode({"data": q}).encode()))
+    out = {}
+    for el in js.get("elements", []):
+        lat = el.get("lat") or (el.get("center") or {}).get("lat")
+        lon = el.get("lon") or (el.get("center") or {}).get("lon")
+        if lat and lon:
+            out.setdefault(_stopkey(el["tags"]["name"]), [round(lat, 6), round(lon, 6)])
+    json.dump(out, open(path, "w", encoding="utf8"), ensure_ascii=False)
+    sys.stderr.write("  %d stations cached\n" % len(out))
+    return out
+
+
+def find_station(stations, name):
+    k = _stopkey(name)
+    if k in stations:
+        return stations[k]
+    hits = [v for kk, v in stations.items() if kk.startswith(k) or k.startswith(kk)]
+    return hits[0] if len(hits) == 1 else None
