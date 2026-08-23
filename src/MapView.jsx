@@ -1,12 +1,15 @@
 import { useMemo } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Tooltip, LayerGroup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { LAYERS, ROAD_METRICS, roadVolume, radius, fmt, sumHours } from './data'
+import {
+  LAYERS, ROAD_METRICS, roadVolume, radius, fmt, sumHours, spread, sectionOf,
+  parentOf,
+} from './data'
 
 const CENTRE = [51.1097, 17.0324]
 
 /** One entry per drawn marker: position, size input, and what to select on click. */
-function useMarkers(data, visible, hours, metric, areas) {
+function useMarkers(data, visible, hours, metric, areas, aggregate) {
   return useMemo(() => {
     const catOrder = data.meta.vehCatOrder
     const out = {}
@@ -18,28 +21,28 @@ function useMarkers(data, visible, hours, metric, areas) {
         .map((p) => ({
           id: p.id, lat: p.lat, lon: p.lon, kind: 'road', ref: p,
           value: roadVolume(data.roadById[p.id], { cats, hours }, catOrder),
-          title: `${p.id} · ${p.name}`,
+          title: `${p.id} · ${p.name}`, sub: sectionOf('road', p),
         }))
     }
     if (visible.pt) {
       out.pt = data.pt.filter((p) => p.lat).map((p) => ({
         id: p.id, lat: p.lat, lon: p.lon, kind: 'pt', ref: p,
         value: Object.values(p.byHour).reduce((a, arr) => a + sumHours(arr, hours), 0),
-        title: `${p.id} · ${p.stop || p.name}`,
+        title: `${p.id} · ${p.stop || p.name}`, sub: sectionOf('pt', p),
       }))
     }
     if (visible.bike) {
       out.bike = data.bike.filter((p) => p.lat).map((p) => ({
         id: p.id, lat: p.lat, lon: p.lon, kind: 'bike', ref: p,
         value: sumHours(p.byHour, hours),
-        title: `${p.id} · ${p.name}`,
+        title: `${p.id} · ${p.name}`, sub: sectionOf('bike', p),
       }))
     }
     if (visible.ped) {
       out.ped = data.ped.filter((p) => p.lat).map((p) => ({
         id: p.id, lat: p.lat, lon: p.lon, kind: 'ped', ref: p,
         value: sumHours(p.byHour, hours),
-        title: `${p.id} · ${p.short || p.name}`,
+        title: `${p.id} · ${p.short || p.name}`, sub: sectionOf('ped', p),
       }))
     }
     if (visible.rail) {
@@ -49,12 +52,44 @@ function useMarkers(data, visible, hours, metric, areas) {
         title: `${p.id} · ${p.stations.join(' / ')}`,
       }))
     }
+    for (const k of Object.keys(out)) {
+      if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k])
+      spread(out[k])
+    }
     return out
-  }, [data, visible, hours, metric, areas])
+  }, [data, visible, hours, metric, areas, aggregate])
 }
 
-export default function MapView({ data, visible, hours, metric, areas, period, selected, onSelect }) {
-  const markers = useMarkers(data, visible, hours, metric, areas)
+/** One marker per measurement point: its cross-sections are separate approaches
+ *  of the same place, so their counts add up rather than overlap. */
+function mergeToPoints(kind, list) {
+  const by = new Map()
+  for (const m of list) {
+    const key = parentOf(kind, m.ref)
+    if (!by.has(key)) by.set(key, [])
+    by.get(key).push(m)
+  }
+  return [...by.entries()].map(([key, ms]) => {
+    if (ms.length === 1) return ms[0]
+    return {
+      id: key, kind,
+      lat: ms.reduce((a, m) => a + m.lat, 0) / ms.length,
+      lon: ms.reduce((a, m) => a + m.lon, 0) / ms.length,
+      value: ms.reduce((a, m) => a + m.value, 0),
+      title: `${key} · ${ms[0].ref.name || ms[0].ref.stop || ''}`,
+      sub: `suma ${ms.length} przekrojów: ${ms.map((m) => m.id.slice(-1)).join(', ')}`,
+      ref: {
+        aggregate: true, id: key, members: ms.map((m) => m.ref),
+        name: ms[0].ref.name || ms[0].ref.stop || '',
+      },
+    }
+  })
+}
+
+export default function MapView({
+  data, visible, hours, metric, areas, period, aggregate, selected, onSelect,
+}) {
+  const markers = useMarkers(data, visible, hours, metric, areas, aggregate)
 
   return (
     <MapContainer className="map" center={CENTRE} zoom={12}>
@@ -98,6 +133,12 @@ export default function MapView({ data, visible, hours, metric, areas, period, s
                     <b>{m.title}</b><br />
                     {fmt(m.value)} {LAYERS[kind].unit}
                     <span className="period"> · {period}</span>
+                    {m.sub && <><br /><span className="period">{m.sub}</span></>}
+                    {m.shifted && (
+                      <><br /><span className="period">
+                        {m.shifted} przekroje w tym samym miejscu — znaczniki rozsunięte
+                      </span></>
+                    )}
                   </Tooltip>
                 </CircleMarker>
               )

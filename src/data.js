@@ -82,6 +82,71 @@ export function roadProfile(section, { cats, dir }, catOrder) {
 
 export const sumHours = (profile, hours) => hours.reduce((a, h) => a + (profile[h] || 0), 0)
 
+/** 24-value hourly profile for any layer, so points and cross-sections can be
+ *  summed the same way. */
+export function profileFor(data, kind, p, metric) {
+  if (kind === 'road') {
+    return roadProfile(data.roadById[p.id], { cats: ROAD_METRICS[metric].cats },
+      data.meta.vehCatOrder)
+  }
+  if (kind === 'pt' || kind === 'rail') {
+    const out = new Array(24).fill(0)
+    Object.values(p.byHour).forEach((arr) => arr.forEach((v, h) => { out[h] += v }))
+    return out
+  }
+  return p.byHour || new Array(24).fill(0)
+}
+
+/** Cross-sections of one point summed together — the whole junction, not one
+ *  approach of it. */
+export function addProfiles(profiles) {
+  const out = new Array(24).fill(0)
+  for (const pr of profiles) for (let h = 0; h < 24; h++) out[h] += pr[h] || 0
+  return out
+}
+
+// A measurement point (punkt) is split into lettered cross-sections (przekroje):
+// KW_08 -> KW_08A, KW_08B, KW_08C. Each letter is one approach at that place -
+// a separate street or slip road for road counts, one side of the street for
+// cycle counts, one street of an interchange for transit counts.
+export const parentOf = (kind, p) =>
+  kind === 'road' || kind === 'pt' ? p.point : p.id.replace(/[A-Z]$/, '')
+
+export const sectionLetter = (id) => (/[A-Z]$/.test(id) ? id.slice(-1) : null)
+
+/** What distinguishes this cross-section from its siblings. */
+export function sectionOf(kind, p) {
+  if (kind === 'pt') return p.loc
+  if (kind === 'bike' || kind === 'ped') return (p.where || [])[0] || p.segment
+  return p.segment
+}
+
+/**
+ * Transit cross-sections all sit on the same stop, so identical coordinates
+ * would hide each other. Fan coincident markers onto a small ring around the
+ * shared position; the popup still names the real location.
+ */
+export function spread(markers, metres = 20) {
+  const by = new Map()
+  for (const m of markers) {
+    const k = `${m.lat.toFixed(5)},${m.lon.toFixed(5)}`
+    if (!by.has(k)) by.set(k, [])
+    by.get(k).push(m)
+  }
+  for (const group of by.values()) {
+    if (group.length < 2) continue
+    const dLat = metres / 111320
+    const dLon = dLat / Math.cos((group[0].lat * Math.PI) / 180)
+    group.forEach((m, i) => {
+      const a = (2 * Math.PI * i) / group.length
+      m.lat += dLat * Math.sin(a)
+      m.lon += dLon * Math.cos(a)
+      m.shifted = group.length
+    })
+  }
+  return markers
+}
+
 /** Marker radius: sqrt so area, not radius, tracks the volume. */
 export function radius(value, max, min = 3, cap = 22) {
   if (!value || !max) return min

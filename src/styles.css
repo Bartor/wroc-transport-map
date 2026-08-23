@@ -115,3 +115,21 @@ select {
 
 .leaflet-tooltip { font-size: .76rem; }
 .leaflet-tooltip .period { color: #6b7280; }
+
+.hint { color: var(--dim); font-size: .72rem; line-height: 1.5; margin: .4rem 0 0; }
+.hint b { color: var(--text); font-weight: 600; }
+
+.sections { margin-top: 1.2rem; }
+.sec {
+  display: flex; align-items: center; gap: .55rem; width: 100%;
+  background: #262a34; color: var(--text); border: 1px solid transparent;
+  border-radius: 6px; padding: .35rem .5rem; margin-top: .25rem;
+  cursor: pointer; text-align: left; font-size: .76rem;
+}
+.sec:hover { border-color: #4a6ea9; }
+.sec.on { background: #37507a; border-color: #4a6ea9; }
+.sec b {
+  flex: 0 0 1.35rem; height: 1.35rem; display: grid; place-items: center;
+  background: #1c1f26; border-radius: 4px; font-size: .7rem;
+}
+.sec span { overflow: hidden; text-overflow: ellipsis; }

@@ -14,6 +14,7 @@ export default function App() {
   const [hour, setHour] = useState(null) // single hour overrides the preset
   const [metric, setMetric] = useState('all')
   const [areas, setAreas] = useState(null) // null = all
+  const [aggregate, setAggregate] = useState(false)
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
@@ -35,15 +36,17 @@ export default function App() {
         data={data} visible={visible} setVisible={setVisible}
         preset={preset} setPreset={setPreset} hour={hour} setHour={setHour}
         metric={metric} setMetric={setMetric} areas={areas} setAreas={setAreas}
-        hours={hours} period={period} onSelect={setSelected} selected={selected}
+        hours={hours} period={period} aggregate={aggregate} setAggregate={setAggregate}
+        onSelect={setSelected} selected={selected}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
-        areas={areas} period={period} selected={selected} onSelect={setSelected}
+        areas={areas} period={period} aggregate={aggregate}
+        selected={selected} onSelect={setSelected}
       />
       {selected && (
         <Details data={data} sel={selected} hours={hours} metric={metric}
-          period={period} onClose={() => setSelected(null)} />
+          period={period} onSelect={setSelected} onClose={() => setSelected(null)} />
       )}
     </div>
   )

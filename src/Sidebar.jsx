@@ -12,7 +12,8 @@ const COUNTS = {
 
 export default function Sidebar({
   data, visible, setVisible, preset, setPreset, hour, setHour,
-  metric, setMetric, areas, setAreas, hours, period, onSelect, selected,
+  metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
+  onSelect, selected,
 }) {
   const catOrder = data.meta.vehCatOrder
 
@@ -60,6 +61,20 @@ export default function Sidebar({
             <button className="link" onClick={() => setHour(null)}>wróć do okresu</button>
           )}
         </label>
+      </section>
+
+      <section>
+        <h2>Punkty i przekroje</h2>
+        <label className="row">
+          <input type="checkbox" checked={aggregate}
+            onChange={() => setAggregate(!aggregate)} />
+          <span>Sumuj przekroje do punktu pomiarowego</span>
+        </label>
+        <p className="hint">
+          Litera w numerze (KW_08<b>A</b>, KW_08<b>B</b>) to przekrój — osobny
+          wlot, jezdnia lub strona ulicy w tym samym miejscu. Włącz, żeby
+          zobaczyć ruch całego punktu zamiast pojedynczego wlotu.
+        </p>
       </section>
 
       <section>

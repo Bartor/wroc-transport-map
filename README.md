@@ -46,6 +46,21 @@ komunikacja zbiorowa albo rowery i UTO na jezdni.
 Kliknięcie znacznika otwiera panel z profilem dobowym, podziałem na kierunki
 i strukturą rodzajową.
 
+## Punkty a przekroje
+
+Numer w rodzaju `KW_08B` to **przekrój pomiarowy** wewnątrz **punktu
+pomiarowego** `KW_08`. Litera oznacza osobny wlot tego samego miejsca:
+
+* ruch drogowy — osobna jezdnia, ulica albo łącznica (każda ma własne
+  współrzędne, więc znaczniki się nie nakładają),
+* komunikacja zbiorowa — osobna ulica tego samego węzła; wszystkie przekroje
+  siedzą na współrzędnych jednego przystanku,
+* ruch rowerowy — strona ulicy (północna / południowa).
+
+Pomiary przekrojów są rozłączne, więc się sumują. Znaczniki leżące dokładnie
+na sobie są rozsuwane na mały okrąg (~20 m), a przełącznik „Sumuj przekroje do
+punktu pomiarowego" scala je w jeden znacznik z sumą całego punktu.
+
 ## Uwaga o położeniu punktów
 
 Tylko wykaz przekrojów drogowych (Zał. 3.3) zawiera współrzędne. Punkty

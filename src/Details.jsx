@@ -1,7 +1,40 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
 } from 'recharts'
-import { LAYERS, ROAD_METRICS, roadProfile, fmt, pct, HOUR_LABEL, sumHours } from './data'
+import {
+  LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
+  HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf,
+} from './data'
+
+const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
+
+/**
+ * The letter in KW_08B is a cross-section within measurement point KW_08.
+ * Siblings often sit on the same spot, so spell out what each one covers and
+ * make them clickable.
+ */
+function Sections({ data, kind, p, onSelect }) {
+  if (!SOURCE[kind]) return null
+  const parent = parentOf(kind, p)
+  const sibs = data[SOURCE[kind]].filter((x) => parentOf(kind, x) === parent)
+  if (sibs.length < 2) return null
+  return (
+    <div className="sections">
+      <h4>Punkt {parent} — {sibs.length} przekroje</h4>
+      <p className="hint">
+        Litera oznacza przekrój pomiarowy: osobny wlot, jezdnię lub stronę
+        ulicy w tym samym punkcie. Pomiary są rozłączne, nie powielone.
+      </p>
+      {sibs.map((x) => (
+        <button key={x.id} className={x.id === p.id ? 'sec on' : 'sec'}
+          onClick={() => onSelect({ kind, id: x.id, ref: x })}>
+          <b>{sectionLetter(x.id) || '—'}</b>
+          <span>{sectionOf(kind, x) || x.name}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 const Profile = ({ values, hours, color }) => (
   <ResponsiveContainer width="100%" height={130}>
@@ -54,14 +87,51 @@ const GEO_NOTE = {
   point: 'środek punktu pomiarowego',
 }
 
-export default function Details({ data, sel, hours, metric, period, onClose }) {
+export default function Details({ data, sel, hours, metric, period, onSelect, onClose }) {
   const { kind, ref: p } = sel
   const color = LAYERS[kind].color
   const catOrder = data.meta.vehCatOrder
 
   let body = null
 
-  if (kind === 'road') {
+  if (p.aggregate) {
+    const profs = p.members.map((m) => profileFor(data, kind, m, metric))
+    const total = addProfiles(profs)
+    const bySection = Object.fromEntries(
+      p.members.map((m, i) => [
+        `${sectionLetter(m.id) || m.id} — ${sectionOf(kind, m) || m.name}`,
+        sumHours(profs[i], hours),
+      ]),
+    )
+    body = (
+      <>
+        <dl>
+          <dt>Przekroje</dt><dd>{p.members.map((m) => m.id).join(', ')}</dd>
+          <dt>Suma w okresie {period}</dt><dd>{fmt(sumHours(total, hours))}</dd>
+          <dt>Suma dobowa</dt><dd>{fmt(total.reduce((a, b) => a + b, 0))}</dd>
+        </dl>
+        <p className="hint">
+          Punkt pomiarowy widziany jako całość — przekroje A, B, C to osobne
+          wloty tego samego miejsca, więc ich pomiary się sumują.
+        </p>
+        <h4>Profil dobowy — cały punkt</h4>
+        <Profile values={total} hours={hours} color={color} />
+        <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
+        {onSelect && (
+          <div className="sections">
+            <h4>Przejdź do przekroju</h4>
+            {p.members.map((m) => (
+              <button key={m.id} className="sec"
+                onClick={() => onSelect({ kind, id: m.id, ref: m })}>
+                <b>{sectionLetter(m.id) || '—'}</b>
+                <span>{sectionOf(kind, m) || m.name}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  } else if (kind === 'road') {
     const sec = data.roadById[p.id]
     const cats = ROAD_METRICS[metric].cats
     const prof = roadProfile(sec, { cats }, catOrder)
@@ -107,9 +177,7 @@ export default function Details({ data, sel, hours, metric, period, onClose }) {
         <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
       </>
     )
-  }
-
-  if (kind === 'bike' || kind === 'ped') {
+  } else if (kind === 'bike' || kind === 'ped') {
     body = (
       <>
         <dl>
@@ -131,9 +199,7 @@ export default function Details({ data, sel, hours, metric, period, onClose }) {
         {kind === 'ped' && <Breakdown title="Strona ulicy" obj={p.bySide} />}
       </>
     )
-  }
-
-  if (kind === 'pt') {
+  } else if (kind === 'pt') {
     const prof = new Array(24).fill(0)
     Object.values(p.byHour).forEach((arr) => arr.forEach((v, h) => { prof[h] += v }))
     body = (
@@ -155,9 +221,7 @@ export default function Details({ data, sel, hours, metric, period, onClose }) {
         <Breakdown title="Przewoźnicy (liczba pojazdów)" obj={p.byCarrier} />
       </>
     )
-  }
-
-  if (kind === 'rail') {
+  } else if (kind === 'rail') {
     const prof = new Array(24).fill(0)
     Object.values(p.byHour).forEach((arr) => arr.forEach((v, h) => { prof[h] += v }))
     body = (
@@ -189,6 +253,9 @@ export default function Details({ data, sel, hours, metric, period, onClose }) {
       </div>
       <div className="dbody">
         {body}
+        {!p.aggregate && (
+          <Sections data={data} kind={kind} p={p} onSelect={onSelect} />
+        )}
         {p.geo && GEO_NOTE[p.geo] && <p className="geo">📍 {GEO_NOTE[p.geo]}</p>}
       </div>
     </div>
