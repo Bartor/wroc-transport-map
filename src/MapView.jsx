@@ -53,7 +53,7 @@ function useMarkers(data, visible, hours, metric, areas) {
   }, [data, visible, hours, metric, areas])
 }
 
-export default function MapView({ data, visible, hours, metric, areas, selected, onSelect }) {
+export default function MapView({ data, visible, hours, metric, areas, period, selected, onSelect }) {
   const markers = useMarkers(data, visible, hours, metric, areas)
 
   return (
@@ -97,6 +97,7 @@ export default function MapView({ data, visible, hours, metric, areas, selected,
                   <Tooltip>
                     <b>{m.title}</b><br />
                     {fmt(m.value)} {LAYERS[kind].unit}
+                    <span className="period"> · {period}</span>
                   </Tooltip>
                 </CircleMarker>
               )

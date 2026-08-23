@@ -15,13 +15,25 @@ export async function loadAll() {
   return d
 }
 
+// Units are plain nouns: every map value is a sum over the selected period,
+// never a rate, so the period is spelled out next to it instead.
 export const LAYERS = {
-  road: { label: 'Ruch drogowy', color: '#e4572e', unit: 'poj./h' },
+  road: { label: 'Ruch drogowy', color: '#e4572e', unit: 'poj.' },
   pt: { label: 'Potoki w autobusach i tramwajach', color: '#2e86ab', unit: 'pasażerów' },
   bike: { label: 'Ruch rowerowy', color: '#3fa34d', unit: 'rowerzystów' },
   ped: { label: 'Ruch pieszy', color: '#b5179e', unit: 'pieszych' },
   rail: { label: 'Potoki w pociągach (kordon)', color: '#7048e8', unit: 'pasażerów' },
   survey: { label: 'Próba badania ankietowego', color: '#8d99ae', unit: 'adresów' },
+}
+
+const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i)
+
+export const PRESETS = {
+  day: { label: 'Cała doba', hours: ALL_HOURS },
+  am: { label: 'Szczyt poranny 7–9', hours: [7, 8] },
+  pm: { label: 'Szczyt popołudniowy 15–17', hours: [15, 16] },
+  midday: { label: 'Międzyszczyt 10–14', hours: [10, 11, 12, 13] },
+  night: { label: 'Noc 22–5', hours: [22, 23, 0, 1, 2, 3, 4, 5] },
 }
 
 // Road metric = which vehicle categories to count.
@@ -82,3 +94,9 @@ export const fmt = (n) =>
 export const pct = (n) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`)
 
 export const HOUR_LABEL = (h) => `${String(h).padStart(2, '0')}:00`
+
+/** What the numbers on the map are summed over, for labelling. */
+export function periodLabel(preset, hour) {
+  if (hour != null) return `${HOUR_LABEL(hour)}–${HOUR_LABEL((hour + 1) % 24)}`
+  return PRESETS[preset].label.toLowerCase()
+}

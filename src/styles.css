@@ -114,3 +114,4 @@ select {
 .geo { margin-top: 1.4rem; color: var(--dim); font-size: .72rem; line-height: 1.5; }
 
 .leaflet-tooltip { font-size: .76rem; }
+.leaflet-tooltip .period { color: #6b7280; }

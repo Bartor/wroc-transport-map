@@ -54,7 +54,7 @@ const GEO_NOTE = {
   point: 'środek punktu pomiarowego',
 }
 
-export default function Details({ data, sel, hours, metric, onClose }) {
+export default function Details({ data, sel, hours, metric, period, onClose }) {
   const { kind, ref: p } = sel
   const color = LAYERS[kind].color
   const catOrder = data.meta.vehCatOrder
@@ -102,8 +102,8 @@ export default function Details({ data, sel, hours, metric, onClose }) {
         </dl>
         <h4>Profil dobowy — {ROAD_METRICS[metric].label.toLowerCase()}</h4>
         <Profile values={prof} hours={hours} color={color} />
-        <Breakdown title="Kierunki (wybrany okres, wszystkie pojazdy)" obj={byDir} />
-        <Breakdown title="Kategorie pojazdów (wybrany okres)" obj={byCat} />
+        <Breakdown title={`Kierunki — ${period}, wszystkie pojazdy`} obj={byDir} />
+        <Breakdown title={`Kategorie pojazdów — ${period}`} obj={byCat} />
         <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
       </>
     )
@@ -117,7 +117,7 @@ export default function Details({ data, sel, hours, metric, onClose }) {
           {p.where?.length ? <><dt>Miejsce</dt><dd>{p.where.join('; ')}</dd></> : null}
           {p.date ? <><dt>Pomiar</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd></> : null}
           <dt>Łącznie</dt><dd>{fmt(p.total)}</dd>
-          <dt>W wybranym okresie</dt><dd>{fmt(sumHours(p.byHour, hours))}</dd>
+          <dt>W okresie {period}</dt><dd>{fmt(sumHours(p.byHour, hours))}</dd>
         </dl>
         <h4>Profil dobowy</h4>
         <Profile values={p.byHour} hours={hours} color={color} />

@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
-import { LAYERS, ROAD_METRICS, roadVolume, fmt, sumHours, HOUR_LABEL } from './data'
-import { PRESETS } from './App'
+import { LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, HOUR_LABEL } from './data'
 
 const COUNTS = {
   road: (d) => d.points.length,
@@ -13,7 +12,7 @@ const COUNTS = {
 
 export default function Sidebar({
   data, visible, setVisible, preset, setPreset, hour, setHour,
-  metric, setMetric, areas, setAreas, hours, onSelect, selected,
+  metric, setMetric, areas, setAreas, hours, period, onSelect, selected,
 }) {
   const catOrder = data.meta.vehCatOrder
 
@@ -99,7 +98,7 @@ export default function Sidebar({
       </section>
 
       <section className="totals">
-        <h2>W wybranym okresie</h2>
+        <h2>Suma — {period}</h2>
         <div><span>Pojazdy (wszystkie przekroje)</span><b>{fmt(totals.road)}</b></div>
         <div><span>Pasażerowie autobusów i tramwajów</span><b>{fmt(totals.pt)}</b></div>
         <div><span>Rowerzyści (punkty rowerowe)</span><b>{fmt(totals.bike)}</b></div>
@@ -107,7 +106,7 @@ export default function Sidebar({
       </section>
 
       <section>
-        <h2>Najwyższe natężenia</h2>
+        <h2>Najwyższe natężenia — {period}</h2>
         <ol className="top">
           {top.map(({ p, v }) => (
             <li key={p.id}
