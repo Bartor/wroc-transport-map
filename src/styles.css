@@ -153,3 +153,5 @@ select {
    under the data layers without competing with them. */
 .map.dark { background: #10131a; }
 .leaflet-shadow-pane { pointer-events: none; }
+.subhead { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--dim); margin: .9rem 0 .2rem; }

@@ -19,7 +19,7 @@ export default function App() {
   const [wholeDay, setWholeDay] = useState(false)   // expand peak-only counts
   const [people, setPeople] = useState(false)       // vehicles -> people
   const [occupancy, setOccupancy] = useState(null)  // set from meta on load
-  const [net, setNet] = useState({ on: false, daily: false, min: 3000 })
+  const [net, setNet] = useState({ on: false, mode: 'road', min: 3000 })
   const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
   const [selected, setSelected] = useState(null)
 

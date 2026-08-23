@@ -2,7 +2,10 @@
 // in memory (~1.2 MB total), so the map filters client-side.
 
 const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail', 'survey',
-  'network']
+  'network', 'network_modes']
+
+// Layers the ETL only writes when the model survived cross-validation.
+const OPTIONAL = ['network_pt', 'network_bike', 'network_ped']
 
 export async function loadAll() {
   const parts = await Promise.all(
@@ -12,6 +15,9 @@ export async function loadAll() {
     })),
   )
   const d = Object.fromEntries(FILES.map((f, i) => [f, parts[i]]))
+  const opt = await Promise.all(OPTIONAL.map((f) =>
+    fetch(`data/${f}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)))
+  OPTIONAL.forEach((f, i) => { d[f] = opt[i] })
   d.roadById = d.road.sections
   return d
 }
@@ -224,6 +230,14 @@ export function periodShare(meta, hours) {
   const win = MODEL_WINDOW.reduce((a, h) => a + p[h], 0)
   if (!win) return 1
   return hours.reduce((a, h) => a + (p[h] || 0), 0) / win
+}
+
+// What each estimation layer is measuring, and which file holds it.
+export const NET_MODES = {
+  road: { label: 'Samochody i inne pojazdy', file: 'network', unit: 'poj.' },
+  pt: { label: 'Pasażerowie autobusów i tramwajów', file: 'network_pt', unit: 'pasażerów' },
+  bike: { label: 'Rowerzyści', file: 'network_bike', unit: 'rowerzystów' },
+  ped: { label: 'Piesi', file: 'network_ped', unit: 'pieszych' },
 }
 
 export const MODEL_WINDOW = [6, 7, 8, 9, 15, 16, 17, 18]

@@ -6,7 +6,7 @@ import { BASEMAPS } from './basemaps'
 import {
   LAYERS, ROAD_METRICS, roadVolume, radius, fmt, sumHours, spread, sectionOf,
   parentOf, expand, toPeople, expansionOf, coverageGap, BASIS_LABEL, activeCats,
-  periodShare,
+  periodShare, NET_MODES,
 } from './data'
 
 const CENTRE = [51.1097, 17.0324]
@@ -114,9 +114,10 @@ export default function MapView({
           maxZoom={BASEMAPS[basemap].maxZoom || 19} maxNativeZoom={BASEMAPS[basemap].maxZoom || 19} />
       )}
 
-      {net.on && (
-        <NetworkLayer network={data.network} share={netShare} hours={hours}
-          minVolume={net.min} />
+      {net.on && data[NET_MODES[net.mode].file] && (
+        <NetworkLayer key={net.mode} network={data[NET_MODES[net.mode].file]}
+          share={netShare} hours={hours} minVolume={net.min}
+          unit={NET_MODES[net.mode].unit} />
       )}
 
       {visible.survey && (

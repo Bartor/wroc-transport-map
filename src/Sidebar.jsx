@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import {
   LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, HOUR_LABEL,
-  coverageGap, BASIS_LABEL, expand, toPeople, activeCats,
+  coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
 import { BASEMAPS } from './basemaps'
@@ -25,6 +25,10 @@ export default function Sidebar({
   // layers whose measurement window does not cover the selected period
   const gaps = ['pt', 'bike', 'ped', 'rail']
     .filter((k) => visible[k] && coverageGap(data.meta, k, hours))
+  const netMeta = data[NET_MODES[net.mode].file]?.meta
+  // modes whose model did not survive cross-validation, so no layer was written
+  const failed = Object.entries(data.network_modes || {})
+    .filter(([, m]) => m && !m.usable)
 
   // Top cross-sections for the current filter — the quick "where is it worst" list.
   const top = useMemo(() => {
@@ -146,18 +150,31 @@ export default function Sidebar({
       </section>
 
       <section>
-        <h2>Szacowana sieć drogowa</h2>
+        <h2>Model — cała sieć</h2>
         <label className="row">
           <input type="checkbox" checked={net.on}
             onChange={() => setNet({ ...net, on: !net.on })} />
-          <span>Pokaż model dla wszystkich ulic</span>
-          <b>{data.network.meta.edges}</b>
+          <span>Pokaż szacunek dla wszystkich ulic</span>
+          <b>{netMeta?.edges ?? '—'}</b>
         </label>
         {net.on && (
           <>
+            <select value={net.mode}
+              onChange={(e) => setNet({ ...net, mode: e.target.value })}>
+              {Object.entries(NET_MODES).map(([k, v]) => (
+                <option key={k} value={k} disabled={!data[v.file]}>
+                  {v.label}{data[v.file] ? '' : ' — brak modelu'}
+                </option>
+              ))}
+            </select>
             <label className="slider">
-              <span>Pokazuj ulice powyżej {fmt(net.min)} poj. w oknie 6–10 i 15–19</span>
-              <input type="range" min="0" max="20000" step="500" value={net.min}
+              <span>
+                Pokazuj powyżej {fmt(net.min)} {NET_MODES[net.mode].unit} w oknie
+                {' '}6–10 i 15–19
+              </span>
+              <input type="range" min="0"
+                max={net.mode === 'road' ? 20000 : 5000}
+                step={net.mode === 'road' ? 500 : 100} value={net.min}
                 onChange={(e) => setNet({ ...net, min: Number(e.target.value) })} />
             </label>
             <div className="legend">
@@ -167,23 +184,33 @@ export default function Sidebar({
                 </span>
               ))}
             </div>
+            {netMeta && (
+              <p className={netMeta.r2cv < 0.4 ? 'warn' : 'hint'}>
+                Sprawdzian krzyżowy na {netMeta.n} pomiarach:{' '}
+                <b>R² {netMeta.r2cv}</b>, mediana błędu{' '}
+                <b>{Math.round(netMeta.mapeCv * 100)}%</b>, dla 10% najgorszych
+                odcinków błąd sięga {Math.round(netMeta.p90ApeCv * 100)}%.
+                {netMeta.r2cv < 0.4 && ' Model słaby — traktuj wyłącznie jako wskazanie, gdzie jest dużo, a gdzie mało.'}
+              </p>
+            )}
           </>
         )}
         <p className="hint">
-          Skala podąża za wybranym okresem — model przewiduje okno 6–10 i
-          15–19, a inne okresy przeliczane są zmierzonym dobowym rozkładem
-          ruchu. Model, nie pomiar: wszystkie ulice sieci OSM wyliczone z {' '}
-          {data.network.meta.n} zmierzonych przekrojów: graf skierowany
-          ({fmt(data.network.meta.graphNodes)} węzłów,{' '}
-          {fmt(data.network.meta.graphEdges)} krawędzi), rozkład ruchu
-          najszybszymi trasami z {fmt(data.network.meta.origins)} źródeł, potem
-          regresja na log natężenia. Sprawdzian krzyżowy:{' '}
-          <b>R² {data.network.meta.r2cv}</b>, mediana błędu{' '}
-          <b>{Math.round(data.network.meta.mapeCv * 100)}%</b>, dla 10%
-          najgorszych ulic błąd sięga{' '}
-          {Math.round(data.network.meta.p90ApeCv * 100)}%. Traktuj jako rząd
-          wielkości.
+          Model, nie pomiar. Graf skierowany z OSM, rozkład ruchu najszybszymi
+          trasami ze źródeł w miejscach zamieszkania z próby ankietowej, potem
+          regresja na log natężenia. Skala podąża za wybranym okresem.
         </p>
+        {failed.length > 0 && (
+          <>
+            <h4 className="subhead">Czego nie da się oszacować</h4>
+            {failed.map(([k, m]) => (
+              <p key={k} className="hint">
+                <b>{NET_MODES[k].label}:</b> R² {m.r2cv} przy {m.n} pomiarach.
+                {' '}{m.reason}
+              </p>
+            ))}
+          </>
+        )}
       </section>
 
       <section>

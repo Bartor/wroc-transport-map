@@ -109,6 +109,21 @@ def haversine(a, b):
     return 2 * R * math.asin(math.sqrt(h))
 
 
+def apply_speeds(ways, speeds):
+    """Re-tag a way list for a mode that is not driving: per-class speed and no
+    oneways. Both the parent and the assignment workers call this, so the edge
+    ordering they produce is identical and edge ids stay comparable."""
+    if not speeds:
+        return ways
+    out = []
+    for w in ways:
+        v = speeds.get(w["hw"])
+        if v:
+            out.append({**w, "oneway": "no", "lanes": None, "maxspeed": v,
+                        "junction": None})
+    return out
+
+
 def build_graph(ways):
     """Contract each way into edges between junctions, keeping the geometry."""
     seen = collections.Counter()
@@ -142,7 +157,7 @@ def build_graph(ways):
             if length > 0:
                 edges.append({
                     "u": ns[start], "v": ns[i], "g": geom, "len": length,
-                    "wid": w.get("id"), "hw": w["hw"],
+                    "wid": w.get("id"), "hw": w["hw"], "cyc": w.get("cyc"),
                     "name": w.get("name"), "lanes": lanes,
                     "speed": speed, "fwd": fwd, "bwd": bwd,
                 })
@@ -480,13 +495,12 @@ def build(out_dir, road, points, survey):
 
 
 # ------------------------------------------------------------- parallel assign
-def _worker_init(cache_path):
+def _worker_init(cache_path, speeds):
     """Each worker rebuilds the graph from the cached Overpass dump; that is far
     cheaper than pickling a 26k-edge adjacency across process boundaries."""
     global _W
-    ways = json.load(open(cache_path, encoding="utf8"))
-    edges, adj, coord = build_graph(ways)
-    _W = (edges, adj, coord)
+    ways = apply_speeds(json.load(open(cache_path, encoding="utf8")), speeds)
+    _W = build_graph(ways)
 
 
 def _worker_chunk(args):
@@ -510,7 +524,8 @@ def _worker_chunk(args):
     return fwd, bwd
 
 
-def assign_parallel(edges, origins, pool, trips=45, seed=7, workers=None):
+def assign_parallel(edges, origins, pool, trips=45, seed=7, workers=None,
+                    cache=None, speeds=None):
     """Same all-or-nothing loading, spread over CPU cores.
 
     Shortest paths are pointer-chasing over an irregular graph - the wrong shape
@@ -518,7 +533,7 @@ def assign_parallel(edges, origins, pool, trips=45, seed=7, workers=None):
     """
     import concurrent.futures as cf
     workers = workers or max(1, (os.cpu_count() or 4) - 2)
-    cache_path = os.path.join(CACHE, "overpass_drivable2.json")
+    cache_path = cache or os.path.join(CACHE, "overpass_drivable2.json")
     n = max(1, len(origins) // (workers * 3))
     chunks = [(origins[i:i + n], pool, trips, seed + i)
               for i in range(0, len(origins), n)]
@@ -526,7 +541,7 @@ def assign_parallel(edges, origins, pool, trips=45, seed=7, workers=None):
     bwd = np.zeros(len(edges))
     done = 0
     with cf.ProcessPoolExecutor(workers, initializer=_worker_init,
-                                initargs=(cache_path,)) as ex:
+                                initargs=(cache_path, speeds)) as ex:
         for f, b in ex.map(_worker_chunk, chunks):
             fwd += f
             bwd += b

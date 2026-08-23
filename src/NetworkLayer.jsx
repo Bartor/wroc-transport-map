@@ -21,7 +21,7 @@ export const NETWORK_LEGEND = RAMP.slice(0, -1).map(([t, c], i) => ({
 // Thousands of polylines: SVG would choke, so this layer alone draws to canvas.
 const CANVAS = L.canvas({ padding: 0.4 })
 
-export default function NetworkLayer({ network, share, hours, minVolume, showMeasured }) {
+export default function NetworkLayer({ network, share, hours, minVolume, unit = 'poj.', showMeasured }) {
   // Filter on the model's own window value, not the scaled one, so the set of
   // drawn streets stays put when you change period - only the numbers move.
   const shown = useMemo(
@@ -47,12 +47,12 @@ export default function NetworkLayer({ network, share, hours, minVolume, showMea
               <b>{e.n || '(bez nazwy)'}</b><br />
               {e.m != null ? (
                 <>
-                  <span>pomiar: {fmt(Math.round(e.m * share))} poj.</span><br />
-                  <span className="period">model: {fmtEst(v)} poj.</span>
+                  <span>pomiar: {fmt(Math.round(e.m * share))} {unit}</span><br />
+                  <span className="period">model: {fmtEst(v)} {unit}</span>
                 </>
               ) : (
                 <>
-                  <span>szacunek: {fmtEst(v)} poj.</span><br />
+                  <span>szacunek: {fmtEst(v)} {unit}</span><br />
                   <span className="period">
                     prawdopodobnie {fmt(roundEst(e.lo * share))}–{fmt(roundEst(e.hi * share))}
                   </span>

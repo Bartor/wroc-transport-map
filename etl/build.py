@@ -673,6 +673,11 @@ def main(stages):
         stage_rail(geocode.overpass_stations())
     if "survey" in stages:
         stage_survey()
+    if "modes" in stages:
+        import modes
+        L = lambda f: json.load(open(os.path.join(OUT, f + ".json"), encoding="utf8"))
+        modes.build(OUT, L("road")["sections"], L("points"), L("survey"),
+                    L("bike"), L("ped"), L("pt"), VEH_CATS)
     if "network" in stages:
         import network
         network.build(OUT,
@@ -698,7 +703,7 @@ def main(stages):
 
 
 ALL = ["road", "points", "pt", "bike", "ped", "rail", "survey", "meta",
-       "network"]
+       "network", "modes"]
 
 if __name__ == "__main__":
     main(sys.argv[1:] or ALL)

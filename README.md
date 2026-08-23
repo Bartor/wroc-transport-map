@@ -122,6 +122,43 @@ Sprawdzono też rozkład z ograniczeniem przepustowości (przyrostowy, funkcja
 BPR): nie poprawił wyniku (R² 0,527 → 0,527), a kosztował pięciokrotnie dłuższe
 liczenie, więc został odrzucony.
 
+### Pozostałe środki transportu
+
+Ten sam aparat uruchomiono dla rowerów, pieszych i pasażerów. Każdy tryb
+dostaje sieć, z której faktycznie korzysta, i te obserwacje, które istnieją.
+Warstwa powstaje tylko wtedy, gdy model przejdzie walidację krzyżową
+(R² ≥ 0,2 przy min. 40 pomiarach):
+
+| Tryb | Pomiarów | R² (CV) | Mediana błędu | Warstwa |
+|---|---|---|---|---|
+| Samochody | 228 | 0,53 | 30% | tak |
+| Pasażerowie KZ | 215 | 0,24 | 66% | tak, ze ostrzeżeniem |
+| Rowerzyści | 116 | 0,04 | 44% | **nie** |
+| Piesi | 17 | 0,10 | 38% | **nie** |
+
+**Rowery.** Model zbudowano na sieci rowerowej (drogi rowerowe, ciągi pieszo-
+rowerowe, ulice bez tras dla samochodów) i uczono na 116 przekrojach, gdzie
+policzono cały korytarz — jezdnię i infrastrukturę obok niej. R² 0,04 oznacza,
+że model jest niewiele lepszy od zgadywania średniej. Wniosek nie jest
+techniczny, tylko merytoryczny: natężenie ruchu rowerowego zależy od tego, czy
+konkretna droga rowerowa istnieje i jest znośna, a nie od położenia odcinka
+w sieci. Rozkład najkrótszymi trasami tego nie widzi. Warstwa nie jest
+publikowana; w panelu bocznym pokazujemy sam wynik walidacji.
+
+**Piesi.** 17 punktów, wszystkie w promieniu ok. 500 m od Rynku. To za mało
+i zbyt skupione, żeby cokolwiek ekstrapolować na miasto — dla porządku model
+policzono metodą leave-one-out i wynik jest w interfejsie.
+
+**Pasażerowie.** Relacje tras z OSM dały liczbę linii autobusowych
+i tramwajowych na każdej krawędzi; to plus obciążenie z rozkładu i odległość
+od centrum tłumaczy 24% wariancji przy 215 pomiarach. Warstwa jest, ale
+w panelu opisana jako słaba — pokazuje raczej „gdzie dużo, gdzie mało" niż
+liczby.
+
+Odmowa opublikowania dwóch warstw jest tu wynikiem, nie brakiem. Mapa, która
+rysuje pewną kreskę na każdej ulicy przy R² 0,04, kłamałaby ładniej niż
+tabelka powyżej.
+
 ## Punkty a przekroje
 
 Numer w rodzaju `KW_08B` to **przekrój pomiarowy** wewnątrz **punktu
