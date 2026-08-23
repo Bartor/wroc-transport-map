@@ -3,6 +3,7 @@ import { loadAll, LAYERS, ROAD_METRICS, PRESETS, periodLabel } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
 import Details from './Details'
+import { DEFAULT_BASEMAP } from './basemaps'
 
 export default function App() {
   const [data, setData] = useState(null)
@@ -19,6 +20,7 @@ export default function App() {
   const [people, setPeople] = useState(false)       // vehicles -> people
   const [occupancy, setOccupancy] = useState(null)  // set from meta on load
   const [net, setNet] = useState({ on: false, daily: false, min: 3000 })
+  const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
@@ -47,13 +49,14 @@ export default function App() {
         wholeDay={wholeDay} setWholeDay={setWholeDay}
         people={people} setPeople={setPeople}
         occupancy={occupancy} setOccupancy={setOccupancy}
-        net={net} setNet={setNet}
+        net={net} setNet={setNet} basemap={basemap} setBasemap={setBasemap}
         onSelect={setSelected} selected={selected}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
         areas={areas} period={period} aggregate={aggregate}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
+        basemap={basemap}
         selected={selected} onSelect={setSelected}
       />
       {selected && (

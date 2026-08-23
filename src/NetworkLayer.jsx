@@ -1,17 +1,18 @@
 import { useMemo } from 'react'
 import { Polyline, Tooltip, LayerGroup } from 'react-leaflet'
 import L from 'leaflet'
-import { fmt } from './data'
+import { fmt, fmtEst, roundEst } from './data'
 
 // Estimated volume -> colour. Deliberately not the same palette as the measured
 // point layers, so a modelled number never looks like a counted one.
 const RAMP = [
-  [1000, '#3b4252'], [3000, '#2f6f7f'], [7000, '#3f9e5a'],
-  [14000, '#c9a227'], [25000, '#d9722b'], [Infinity, '#c1392b'],
+  [1000, '#3b82f6'], [3000, '#06b6d4'], [7000, '#22c55e'],
+  [14000, '#eab308'], [25000, '#f97316'], [Infinity, '#ef4444'],
 ]
 
 const colourFor = (v) => RAMP.find(([t]) => v < t)[1]
-const widthFor = (v) => Math.max(1, Math.min(9, 1 + Math.sqrt(v) / 45))
+// Wide enough to hit with a mouse; the canvas renderer hit-tests on weight.
+const widthFor = (v) => Math.max(3, Math.min(16, 2 + Math.sqrt(v) / 28))
 
 export const NETWORK_LEGEND = RAMP.slice(0, -1).map(([t, c], i) => ({
   color: c, label: i === 0 ? `< ${fmt(t)}` : `${fmt(RAMP[i - 1][0])}–${fmt(t)}`,
@@ -20,15 +21,17 @@ export const NETWORK_LEGEND = RAMP.slice(0, -1).map(([t, c], i) => ({
 // Thousands of polylines: SVG would choke, so this layer alone draws to canvas.
 const CANVAS = L.canvas({ padding: 0.4 })
 
-export default function NetworkLayer({ network, daily, minVolume, showMeasured }) {
+export default function NetworkLayer({ network, share, hours, minVolume, showMeasured }) {
+  // Filter on the model's own window value, not the scaled one, so the set of
+  // drawn streets stays put when you change period - only the numbers move.
   const shown = useMemo(
-    () => network.edges.filter((e) => (daily ? e.d : e.v) >= minVolume),
-    [network, daily, minVolume],
+    () => network.edges.filter((e) => e.v >= minVolume),
+    [network, minVolume],
   )
   return (
     <LayerGroup>
       {shown.map((e, i) => {
-        const v = daily ? e.d : e.v
+        const v = e.v * share
         return (
           <Polyline
             key={i}
@@ -44,22 +47,20 @@ export default function NetworkLayer({ network, daily, minVolume, showMeasured }
               <b>{e.n || '(bez nazwy)'}</b><br />
               {e.m != null ? (
                 <>
-                  <span>pomiar: {fmt(daily ? e.m * network.meta.dailyFactor : e.m)} poj.</span><br />
-                  <span className="period">model: {fmt(v)} poj.</span>
+                  <span>pomiar: {fmt(Math.round(e.m * share))} poj.</span><br />
+                  <span className="period">model: {fmtEst(v)} poj.</span>
                 </>
               ) : (
                 <>
-                  <span>szacunek: {fmt(v)} poj.</span><br />
+                  <span>szacunek: {fmtEst(v)} poj.</span><br />
                   <span className="period">
-                    zakres {fmt(daily ? e.lo * network.meta.dailyFactor : e.lo)}–
-                    {fmt(daily ? e.hi * network.meta.dailyFactor : e.hi)}
+                    prawdopodobnie {fmt(roundEst(e.lo * share))}–{fmt(roundEst(e.hi * share))}
                   </span>
                 </>
               )}
               <br />
               <span className="period">
-                {e.c}{e.ow ? ' · jednokierunkowa' : ''}
-                {daily ? ' · doba' : ' · 6–10 i 15–19'}
+                {e.c}{e.ow ? ' · jednokierunkowa' : ''} · {hours.length} godz.
               </span>
             </Tooltip>
           </Polyline>

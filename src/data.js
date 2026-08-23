@@ -198,7 +198,35 @@ export function radius(value, max, min = 3, cap = 22) {
 export const fmt = (n) =>
   n == null ? '—' : Math.round(n).toLocaleString('pl-PL')
 
+/**
+ * Estimates are printed at two significant figures. The model's median error is
+ * 30%, so a digit like the 7 in "6427" is noise pretending to be information.
+ */
+export function roundEst(n) {
+  if (!n || n < 100) return Math.round(n / 10) * 10
+  const mag = 10 ** (Math.floor(Math.log10(n)) - 1)
+  return Math.round(n / mag) * mag
+}
+
+export const fmtEst = (n) => `≈${fmt(roundEst(n))}`
+
 export const pct = (n) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`)
+
+/**
+ * The network model predicts the 6-10 + 15-19 window, because that is the only
+ * window every measured cross-section shares. To show any other period we scale
+ * by the measured city-wide motor-traffic shape from the 45 cross-sections that
+ * were counted round the clock.
+ */
+export function periodShare(meta, hours) {
+  const p = meta.profiles?.motor
+  if (!p) return 1
+  const win = MODEL_WINDOW.reduce((a, h) => a + p[h], 0)
+  if (!win) return 1
+  return hours.reduce((a, h) => a + (p[h] || 0), 0) / win
+}
+
+export const MODEL_WINDOW = [6, 7, 8, 9, 15, 16, 17, 18]
 
 export const HOUR_LABEL = (h) => `${String(h).padStart(2, '0')}:00`
 

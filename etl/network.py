@@ -49,7 +49,7 @@ log = lambda *a: print(*a, file=sys.stderr, flush=True)
 # --------------------------------------------------------------------- source
 def fetch():
     """Drivable ways with node ids, so shared ids give us the topology."""
-    path = os.path.join(CACHE, "overpass_drivable.json")
+    path = os.path.join(CACHE, "overpass_drivable2.json")
     if os.path.exists(path):
         return json.load(open(path, encoding="utf8"))
     box = geocode.BBOX
@@ -65,7 +65,7 @@ def fetch():
             continue
         t = el.get("tags", {})
         out.append({
-            "nodes": el["nodes"],
+            "id": el["id"], "nodes": el["nodes"],
             "g": [[round(p["lat"], 6), round(p["lon"], 6)] for p in g],
             "hw": t.get("highway"), "name": t.get("name"),
             "oneway": t.get("oneway"), "lanes": t.get("lanes"),
@@ -142,7 +142,8 @@ def build_graph(ways):
             if length > 0:
                 edges.append({
                     "u": ns[start], "v": ns[i], "g": geom, "len": length,
-                    "hw": w["hw"], "name": w.get("name"), "lanes": lanes,
+                    "wid": w.get("id"), "hw": w["hw"],
+                    "name": w.get("name"), "lanes": lanes,
                     "speed": speed, "fwd": fwd, "bwd": bwd,
                 })
             start = i
@@ -517,7 +518,7 @@ def assign_parallel(edges, origins, pool, trips=45, seed=7, workers=None):
     """
     import concurrent.futures as cf
     workers = workers or max(1, (os.cpu_count() or 4) - 2)
-    cache_path = os.path.join(CACHE, "overpass_drivable.json")
+    cache_path = os.path.join(CACHE, "overpass_drivable2.json")
     n = max(1, len(origins) // (workers * 3))
     chunks = [(origins[i:i + n], pool, trips, seed + i)
               for i in range(0, len(origins), n)]

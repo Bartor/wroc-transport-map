@@ -2,9 +2,11 @@ import { useMemo } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Tooltip, LayerGroup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import NetworkLayer from './NetworkLayer'
+import { BASEMAPS } from './basemaps'
 import {
   LAYERS, ROAD_METRICS, roadVolume, radius, fmt, sumHours, spread, sectionOf,
   parentOf, expand, toPeople, expansionOf, coverageGap, BASIS_LABEL, activeCats,
+  periodShare,
 } from './data'
 
 const CENTRE = [51.1097, 17.0324]
@@ -93,21 +95,28 @@ function mergeToPoints(kind, list) {
 
 export default function MapView({
   data, visible, hours, metric, areas, period, aggregate,
-  wholeDay, people, occupancy, net, selected, onSelect,
+  wholeDay, people, occupancy, net, basemap, selected, onSelect,
 }) {
   const markers = useMarkers(data, visible, hours, metric, areas, aggregate,
     wholeDay, people, occupancy)
+  // The model was fitted on the 8-hour common window; scale it to whatever
+  // period is selected using the measured city-wide daily shape.
+  const netShare = periodShare(data.meta, hours)
 
   return (
-    <MapContainer className="map" center={CENTRE} zoom={12}>
-      <TileLayer
-        url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-        maxZoom={19}
-      />
+    <MapContainer className={BASEMAPS[basemap].dark ? 'map dark' : 'map'}
+      center={CENTRE} zoom={12}>
+      <TileLayer key={basemap} url={BASEMAPS[basemap].url}
+        attribution={BASEMAPS[basemap].attribution}
+        maxZoom={BASEMAPS[basemap].maxZoom || 19} maxNativeZoom={BASEMAPS[basemap].maxZoom || 19} />
+      {BASEMAPS[basemap].labels && (
+        <TileLayer key={`${basemap}-labels`} url={BASEMAPS[basemap].labels} pane="shadowPane"
+          maxZoom={BASEMAPS[basemap].maxZoom || 19} maxNativeZoom={BASEMAPS[basemap].maxZoom || 19} />
+      )}
 
       {net.on && (
-        <NetworkLayer network={data.network} daily={net.daily} minVolume={net.min} />
+        <NetworkLayer network={data.network} share={netShare} hours={hours}
+          minVolume={net.min} />
       )}
 
       {visible.survey && (

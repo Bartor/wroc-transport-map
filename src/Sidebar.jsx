@@ -4,6 +4,7 @@ import {
   coverageGap, BASIS_LABEL, expand, toPeople, activeCats,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
+import { BASEMAPS } from './basemaps'
 
 const COUNTS = {
   road: (d) => d.points.length,
@@ -18,7 +19,7 @@ export default function Sidebar({
   data, visible, setVisible, preset, setPreset, hour, setHour,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, setPeople, occupancy, setOccupancy,
-  net, setNet, onSelect, selected,
+  net, setNet, basemap, setBasemap, onSelect, selected,
 }) {
   const catOrder = data.meta.vehCatOrder
   // layers whose measurement window does not cover the selected period
@@ -73,6 +74,15 @@ export default function Sidebar({
             <button className="link" onClick={() => setHour(null)}>wróć do okresu</button>
           )}
         </label>
+      </section>
+
+      <section>
+        <h2>Podkład</h2>
+        <select value={basemap} onChange={(e) => setBasemap(e.target.value)}>
+          {Object.entries(BASEMAPS).map(([k, v]) => (
+            <option key={k} value={k}>{v.label}</option>
+          ))}
+        </select>
       </section>
 
       <section>
@@ -145,13 +155,8 @@ export default function Sidebar({
         </label>
         {net.on && (
           <>
-            <label className="row">
-              <input type="checkbox" checked={net.daily}
-                onChange={() => setNet({ ...net, daily: !net.daily })} />
-              <span>Skala dobowa (×{data.network.meta.dailyFactor})</span>
-            </label>
             <label className="slider">
-              <span>Pokazuj powyżej {fmt(net.min)} poj.</span>
+              <span>Pokazuj ulice powyżej {fmt(net.min)} poj. w oknie 6–10 i 15–19</span>
               <input type="range" min="0" max="20000" step="500" value={net.min}
                 onChange={(e) => setNet({ ...net, min: Number(e.target.value) })} />
             </label>
@@ -165,7 +170,9 @@ export default function Sidebar({
           </>
         )}
         <p className="hint">
-          Model, nie pomiar. Wszystkie ulice sieci OSM wyliczone z {' '}
+          Skala podąża za wybranym okresem — model przewiduje okno 6–10 i
+          15–19, a inne okresy przeliczane są zmierzonym dobowym rozkładem
+          ruchu. Model, nie pomiar: wszystkie ulice sieci OSM wyliczone z {' '}
           {data.network.meta.n} zmierzonych przekrojów: graf skierowany
           ({fmt(data.network.meta.graphNodes)} węzłów,{' '}
           {fmt(data.network.meta.graphEdges)} krawędzi), rozkład ruchu

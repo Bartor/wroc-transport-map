@@ -148,3 +148,8 @@ select {
 .legend { display: flex; flex-wrap: wrap; gap: .3rem .6rem; margin: .5rem 0; font-size: .68rem; color: var(--dim); }
 .legend span { display: flex; align-items: center; gap: .25rem; }
 .legend i { width: 14px; height: 4px; border-radius: 2px; }
+
+/* CARTO's dark tiles are nearly black; lift them so streets stay legible
+   under the data layers without competing with them. */
+.map.dark { background: #10131a; }
+.leaflet-shadow-pane { pointer-events: none; }
