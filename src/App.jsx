@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { loadAll, LAYERS, ROAD_METRICS, PRESETS, periodLabel } from './data'
+import { loadAll, LAYERS, ROAD_METRICS, PRESETS, periodLabel, periodShare } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
 import Details from './Details'
@@ -21,6 +21,7 @@ export default function App() {
   const [occupancy, setOccupancy] = useState(null)  // set from meta on load
   const [net, setNet] = useState({ on: false, mode: 'road', min: 3000 })
   const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
+  const [sig, setSig] = useState({ on: false, filter: 'candidates' })
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
@@ -50,18 +51,20 @@ export default function App() {
         people={people} setPeople={setPeople}
         occupancy={occupancy} setOccupancy={setOccupancy}
         net={net} setNet={setNet} basemap={basemap} setBasemap={setBasemap}
+        sig={sig} setSig={setSig}
         onSelect={setSelected} selected={selected}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
         areas={areas} period={period} aggregate={aggregate}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
-        basemap={basemap}
+        basemap={basemap} sig={sig}
         selected={selected} onSelect={setSelected}
       />
       {selected && (
         <Details data={data} sel={selected} hours={hours} metric={metric}
           period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
+          share={periodShare(data.meta, hours)}
           onSelect={setSelected} onClose={() => setSelected(null)} />
       )}
     </div>

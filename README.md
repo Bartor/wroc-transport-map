@@ -175,6 +175,25 @@ skryptowe (WAF), a `opendata.cui.wroclaw.pl` przekierowuje. Działa
 `open-data.cui.wroclaw.pl`; `api.open-data...` ma niepełny łańcuch certyfikatów,
 przez co curl odmawia, a Python (magazyn certyfikatów systemu) działa.
 
+## Sygnalizacja świetlna
+
+Warstwa zbudowana pod konkretne pytanie: **które sygnalizacje obsługują tak
+mały ruch, że warto sprawdzić, czy są potrzebne.**
+
+1294 sygnalizatory z OSM grupują się w 520 obiektów: 351 skrzyżowań i 169
+samodzielnych przejść dla pieszych. Każdy dostaje modelowe natężenie na
+wlotach, liczbę kursów KZ z rozkładu jazdy i odległość do najbliższego punktu
+pomiaru ruchu pieszego lub rowerowego.
+
+Filtr „tylko ulice lokalne bez tramwaju" zawęża listę do **61 skrzyżowań**,
+gdzie wszystkie wloty to ulice klasy `residential`, `living_street`,
+`unclassified` lub `tertiary`, i nie jeździ tędy tramwaj. Lista jest posortowana
+od najmniejszego natężenia.
+
+To sito, nie rekomendacja. Natężenie jest modelem z medianą błędu 24%,
+a o wyłączeniu sygnalizacji decydują też widoczność, przejścia dla pieszych,
+priorytet tramwaju i historia zdarzeń — czego w tych danych nie ma.
+
 ## Punkty a przekroje
 
 Numer w rodzaju `KW_08B` to **przekrój pomiarowy** wewnątrz **punktu

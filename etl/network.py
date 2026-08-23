@@ -487,6 +487,8 @@ def build(out_dir, road, points, survey):
     lo, hi = np.exp(np.log(pred) - 1.28 * stats["sigma"]), \
         np.exp(np.log(pred) + 1.28 * stats["sigma"])
 
+    np.save(os.path.join(CACHE, "network_pred.npy"), pred)
+
     obs = {}
     for sid, m in matched.items():
         obs.setdefault(m["edge"], []).append(meas[sid]["v"])
@@ -606,11 +608,13 @@ def fetch_signal_kinds():
         return json.load(open(path, encoding="utf8"))
     q = ('[out:json][timeout:600];'
          'node["highway"~"^(traffic_signals|stop|give_way)$"](%f,%f,%f,%f);'
-         'out tags qt;' % geocode.BBOX)
+         'out qt;' % geocode.BBOX)
     log("querying overpass for signal kinds...")
     js = json.loads(geocode._get("https://overpass-api.de/api/interpreter",
                                  data=urllib.parse.urlencode({"data": q}).encode()))
-    out = {str(el["id"]): el.get("tags", {}).get("highway") for el in js.get("elements", [])}
+    out = {str(el["id"]): [el.get("tags", {}).get("highway"),
+                           round(el.get("lat", 0), 6), round(el.get("lon", 0), 6)]
+           for el in js.get("elements", [])}
     json.dump(out, open(path, "w", encoding="utf8"))
     log("  %d signal nodes" % len(out))
     return out

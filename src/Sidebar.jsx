@@ -4,6 +4,7 @@ import {
   coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
+import { SIGNAL_FILTERS } from './SignalsLayer'
 import { BASEMAPS } from './basemaps'
 
 const COUNTS = {
@@ -19,7 +20,7 @@ export default function Sidebar({
   data, visible, setVisible, preset, setPreset, hour, setHour,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, setPeople, occupancy, setOccupancy,
-  net, setNet, basemap, setBasemap, onSelect, selected,
+  net, setNet, basemap, setBasemap, sig, setSig, onSelect, selected,
 }) {
   const catOrder = data.meta.vehCatOrder
   // layers whose measurement window does not cover the selected period
@@ -144,6 +145,50 @@ export default function Sidebar({
           </p>
         )}
         <p className="hint">{data.meta.carOccupancy.note}</p>
+      </section>
+
+      <section>
+        <h2>Sygnalizacja świetlna</h2>
+        <label className="row">
+          <input type="checkbox" checked={sig.on}
+            onChange={() => setSig({ ...sig, on: !sig.on })} />
+          <span>Pokaż skrzyżowania z sygnalizacją</span>
+          <b>{data.signals?.meta.junctions ?? '—'}</b>
+        </label>
+        {sig.on && data.signals && (
+          <>
+            <select value={sig.filter}
+              onChange={(e) => setSig({ ...sig, filter: e.target.value })}>
+              {Object.entries(SIGNAL_FILTERS).map(([k, v]) => (
+                <option key={k} value={k}>{v.label}</option>
+              ))}
+            </select>
+            <ol className="top">
+              {data.signals.junctions
+                .filter(SIGNAL_FILTERS[sig.filter].test)
+                .slice(0, 12)
+                .map((s, i) => (
+                  <li key={i}
+                    onClick={() => onSelect({ kind: 'signal', id: `${s.lat},${s.lon}`, ref: s })}>
+                    <span>{s.streets.length ? s.streets.join(' × ') : 'bez nazwy'}</span>
+                    <em>
+                      {s.kind === 'crossing' ? 'przejście' : `${s.arms} wloty`}
+                      {s.tram ? ' · tramwaj' : ''}{s.runs ? ` · ${fmt(s.runs)} kursów` : ''}
+                    </em>
+                    <b>{fmt(s.v)}</b>
+                  </li>
+                ))}
+            </ol>
+            <p className="hint">
+              {data.signals.meta.signalNodes} sygnalizatorów w OSM tworzy{' '}
+              {data.signals.meta.junctions} skrzyżowań, w tym{' '}
+              {data.signals.meta.crossings} to samodzielne przejścia dla pieszych.
+              {' '}<b>{data.signals.meta.minorNoTram}</b> skrzyżowań łączy wyłącznie
+              ulice lokalne i nie obsługuje tramwaju.
+            </p>
+            <p className="warn">{data.signals.meta.note}</p>
+          </>
+        )}
       </section>
 
       <section>

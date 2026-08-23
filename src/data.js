@@ -4,7 +4,7 @@
 const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail', 'survey',
   'network', 'network_modes']
 
-const OPTIONAL = ['network_pt', 'network_service']
+const OPTIONAL = ['network_pt', 'network_service', 'signals']
 
 export async function loadAll() {
   const parts = await Promise.all(

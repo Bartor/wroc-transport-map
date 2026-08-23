@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Tooltip, LayerGroup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import NetworkLayer from './NetworkLayer'
+import SignalsLayer from './SignalsLayer'
 import { BASEMAPS } from './basemaps'
 import {
   LAYERS, ROAD_METRICS, roadVolume, radius, fmt, sumHours, spread, sectionOf,
@@ -95,7 +96,7 @@ function mergeToPoints(kind, list) {
 
 export default function MapView({
   data, visible, hours, metric, areas, period, aggregate,
-  wholeDay, people, occupancy, net, basemap, selected, onSelect,
+  wholeDay, people, occupancy, net, basemap, sig, selected, onSelect,
 }) {
   const markers = useMarkers(data, visible, hours, metric, areas, aggregate,
     wholeDay, people, occupancy)
@@ -119,6 +120,11 @@ export default function MapView({
           share={netShare} hours={hours} minVolume={net.min}
           unit={NET_MODES[net.mode].unit}
           measured={!!NET_MODES[net.mode].measured} />
+      )}
+
+      {sig?.on && data.signals && (
+        <SignalsLayer signals={data.signals} filter={sig.filter} share={netShare}
+          onSelect={onSelect} selected={selected} />
       )}
 
       {visible.survey && (

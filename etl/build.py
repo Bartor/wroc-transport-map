@@ -678,6 +678,9 @@ def main(stages):
         L = lambda f: json.load(open(os.path.join(OUT, f + ".json"), encoding="utf8"))
         modes.build(OUT, L("survey"), L("pt"))
         modes.build_service(OUT)
+    if "signals" in stages:
+        import signals
+        signals.build(OUT)
     if "network" in stages:
         import network
         network.build(OUT,
@@ -703,7 +706,7 @@ def main(stages):
 
 
 ALL = ["road", "points", "pt", "bike", "ped", "rail", "survey", "meta",
-       "network", "modes"]
+       "network", "modes", "signals"]
 
 if __name__ == "__main__":
     main(sys.argv[1:] or ALL)

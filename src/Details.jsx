@@ -3,7 +3,7 @@ import {
 } from 'recharts'
 import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
-  HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf,
+  HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
 } from './data'
 
 const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
@@ -87,14 +87,51 @@ const GEO_NOTE = {
   point: 'środek punktu pomiarowego',
 }
 
-export default function Details({ data, sel, hours, metric, period, onSelect, onClose }) {
+export default function Details({ data, sel, hours, metric, period, share, onSelect, onClose }) {
   const { kind, ref: p } = sel
-  const color = LAYERS[kind].color
+  const color = LAYERS[kind]?.color || '#f4a261'
   const catOrder = data.meta.vehCatOrder
 
   let body = null
 
-  if (p.aggregate) {
+  if (kind === 'signal') {
+    body = (
+      <>
+        <dl>
+          <dt>Rodzaj</dt>
+          <dd>{p.kind === 'crossing'
+            ? 'samodzielne przejście dla pieszych z sygnalizacją'
+            : `skrzyżowanie, ${p.arms} wloty`}</dd>
+          <dt>Ulice</dt><dd>{p.streets.join(', ') || '—'}</dd>
+          <dt>Klasa</dt><dd>{p.c}{p.minor ? ' · same ulice lokalne' : ''}</dd>
+          <dt>Sygnalizatorów</dt><dd>{p.n}</dd>
+          <dt>Ruch (model, {period})</dt>
+          <dd>{fmtEst(p.v * (share ?? 1))} poj.</dd>
+          <dt>Komunikacja zbiorowa</dt>
+          <dd>{p.runs ? `${fmt(p.runs)} kursów w oknie 6–10 i 15–19` : 'brak'}
+            {p.tram ? ' · w tym tramwaj' : ''}</dd>
+          {p.near && (
+            <>
+              <dt>Najbliższy pomiar</dt>
+              <dd>ruch {p.near.kind}: {p.near.id}, {fmt(p.near.total)} os.,
+                {' '}{p.near.dist} m stąd</dd>
+            </>
+          )}
+        </dl>
+        {p.minor && !p.tram && p.kind === 'junction' && (
+          <p className="warn">
+            Wszystkie wloty to ulice lokalne i nie jeździ tędy tramwaj — warto
+            sprawdzić, czy sygnalizacja jest tu potrzebna.
+          </p>
+        )}
+        <p className="hint">
+          Natężenie pochodzi z modelu (mediana błędu 24%), nie z pomiaru.
+          O możliwości wyłączenia sygnalizacji decydują też widoczność,
+          przejścia dla pieszych, priorytet tramwaju i historia zdarzeń.
+        </p>
+      </>
+    )
+  } else if (p.aggregate) {
     const profs = p.members.map((m) => profileFor(data, kind, m, metric))
     const total = addProfiles(profs)
     const bySection = Object.fromEntries(
@@ -246,8 +283,11 @@ export default function Details({ data, sel, hours, metric, period, onSelect, on
     <div className="details">
       <div className="dhead" style={{ borderColor: color }}>
         <div>
-          <span className="pill" style={{ background: color }}>{p.id}</span>
-          <h3>{p.name || p.stop || p.stations?.join(' / ')}</h3>
+          <span className="pill" style={{ background: color }}>
+            {kind === 'signal' ? (p.kind === 'crossing' ? 'przejście' : 'skrzyżowanie') : p.id}
+          </span>
+          <h3>{p.name || p.stop || p.stations?.join(' / ')
+            || p.streets?.join(' × ') || 'sygnalizacja'}</h3>
         </div>
         <button onClick={onClose}>×</button>
       </div>
