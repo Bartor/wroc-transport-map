@@ -49,7 +49,7 @@ log = lambda *a: print(*a, file=sys.stderr, flush=True)
 # --------------------------------------------------------------------- source
 def fetch():
     """Drivable ways with node ids, so shared ids give us the topology."""
-    path = os.path.join(CACHE, "overpass_drivable2.json")
+    path = os.path.join(CACHE, "overpass_drivable3.json")
     if os.path.exists(path):
         return json.load(open(path, encoding="utf8"))
     box = geocode.BBOX
@@ -70,6 +70,8 @@ def fetch():
             "hw": t.get("highway"), "name": t.get("name"),
             "oneway": t.get("oneway"), "lanes": t.get("lanes"),
             "maxspeed": t.get("maxspeed"), "junction": t.get("junction"),
+            "ref": t.get("ref"), "bridge": 1 if t.get("bridge") else 0,
+            "tunnel": 1 if t.get("tunnel") else 0,
         })
     json.dump(out, open(path, "w", encoding="utf8"))
     log("  %d ways cached" % len(out))
@@ -157,7 +159,10 @@ def build_graph(ways):
             if length > 0:
                 edges.append({
                     "u": ns[start], "v": ns[i], "g": geom, "len": length,
+                    "nodes": ns[start:i + 1],
                     "wid": w.get("id"), "hw": w["hw"], "cyc": w.get("cyc"),
+                    "ref": w.get("ref"), "bridge": w.get("bridge", 0),
+                    "tunnel": w.get("tunnel", 0),
                     "name": w.get("name"), "lanes": lanes,
                     "speed": speed, "fwd": fwd, "bwd": bwd,
                 })
@@ -368,18 +373,44 @@ CLASS_GROUP = {
 GROUPS = ["motorway", "trunk", "primary", "secondary", "tertiary", "other"]
 
 
-def features(edges, load):
-    """One row per edge: routing load, class, lanes, speed, distance to centre."""
-    X = np.zeros((len(edges), 4 + len(GROUPS)))
+def junction_degrees(adj):
+    """How many streets meet at each junction. Ablation on the 228 measured
+    cross-sections: this is the one OSM attribute that clearly helps, taking
+    R2cv from 0.527 to 0.625 and the median error from 30% to 24%. Signal
+    density, road numbers, bridges, corridor length and transit routes were all
+    tested and none of them survived - the shape of the junctions a street runs
+    between separates arterials from local roads better than its tags do.
+    """
+    return {n: len({v for v, _, _, _ in a}) for n, a in adj.items()}
+
+
+def features(edges, adj, load):
+    """One row per edge: routing load, road class, size, position, and the
+    junctions at either end - plus load x degree, because a heavily routed
+    street between big junctions carries far more than either term implies."""
+    deg = junction_degrees(adj)
+    X = np.zeros((len(edges), 8 + len(GROUPS)))
     for i, e in enumerate(edges):
         mid = e["g"][len(e["g"]) // 2]
         g = CLASS_GROUP.get(e["hw"], "other")
+        ll = math.log1p(load[i])
+        hi = math.log1p(max(deg.get(e["u"], 0), deg.get(e["v"], 0)))
+        lo = math.log1p(min(deg.get(e["u"], 0), deg.get(e["v"], 0)))
         X[i, 0] = 1.0
-        X[i, 1] = math.log1p(load[i])
+        X[i, 1] = ll
         X[i, 2] = math.log(max(1.0, e["lanes"]))
         X[i, 3] = math.log1p(haversine(mid, CENTRE) / 1000.0)
-        X[i, 4 + GROUPS.index(g)] = 1.0
+        X[i, 4] = hi
+        X[i, 5] = lo
+        X[i, 6] = ll * hi
+        X[i, 7] = ll * lo
+        X[i, 8 + GROUPS.index(g)] = 1.0
     return X
+
+
+FEATURE_NAMES = ["const", "logLoad", "logLanes", "logDistCentre",
+                 "maxJunctionDeg", "minJunctionDeg",
+                 "logLoad*maxDeg", "logLoad*minDeg"] + GROUPS
 
 
 def fit_cv(X, y, folds=5, seed=3):
@@ -445,7 +476,7 @@ def build(out_dir, road, points, survey):
     fwd, bwd = assign_parallel(edges, origins, pool)
     load = fwd + bwd
 
-    X = features(edges, load)
+    X = features(edges, adj, load)
     rows = sorted(matched.items())
     ridx = np.array([m["edge"] for _, m in rows])
     y = np.log(np.array([meas[sid]["v"] for sid, _ in rows], dtype=float))
@@ -483,8 +514,7 @@ def build(out_dir, road, points, survey):
         "dailyFactorFrom": nfull, "edges": len(out),
         "graphEdges": len(edges), "graphNodes": len(adj),
         "origins": len(origins), "unmatched": unmatched,
-        "coef": {k: round(float(v), 4) for k, v in zip(
-            ["const", "logLoad", "logLanes", "logDistCentre"] + GROUPS, beta)},
+        "coef": {k: round(float(v), 4) for k, v in zip(FEATURE_NAMES, beta)},
     })
     with open(os.path.join(out_dir, "network.json"), "w", encoding="utf8") as f:
         json.dump({"meta": meta, "edges": out}, f, ensure_ascii=False,
@@ -533,7 +563,7 @@ def assign_parallel(edges, origins, pool, trips=45, seed=7, workers=None,
     """
     import concurrent.futures as cf
     workers = workers or max(1, (os.cpu_count() or 4) - 2)
-    cache_path = cache or os.path.join(CACHE, "overpass_drivable2.json")
+    cache_path = cache or os.path.join(CACHE, "overpass_drivable3.json")
     n = max(1, len(origins) // (workers * 3))
     chunks = [(origins[i:i + n], pool, trips, seed + i)
               for i in range(0, len(origins), n)]
@@ -548,3 +578,39 @@ def assign_parallel(edges, origins, pool, trips=45, seed=7, workers=None,
             done += 1
             log("  assignment chunk %d/%d" % (done, len(chunks)))
     return fwd, bwd
+
+
+def fetch_signals():
+    """Traffic signals, stop and give-way nodes. Signal density separates an
+    arterial from a residential street better than the highway tag does."""
+    path = os.path.join(CACHE, "overpass_signals.json")
+    if os.path.exists(path):
+        return json.load(open(path, encoding="utf8"))
+    q = ('[out:json][timeout:600];'
+         'node["highway"~"^(traffic_signals|stop|give_way|crossing)$"](%f,%f,%f,%f);'
+         'out ids qt;' % geocode.BBOX)
+    log("querying overpass for junction control nodes...")
+    js = json.loads(geocode._get("https://overpass-api.de/api/interpreter",
+                                 data=urllib.parse.urlencode({"data": q}).encode()))
+    out = {}
+    for el in js.get("elements", []):
+        out[str(el["id"])] = 1
+    json.dump(out, open(path, "w", encoding="utf8"))
+    log("  %d control nodes" % len(out))
+    return out
+
+
+def fetch_signal_kinds():
+    path = os.path.join(CACHE, "overpass_signal_kinds.json")
+    if os.path.exists(path):
+        return json.load(open(path, encoding="utf8"))
+    q = ('[out:json][timeout:600];'
+         'node["highway"~"^(traffic_signals|stop|give_way)$"](%f,%f,%f,%f);'
+         'out tags qt;' % geocode.BBOX)
+    log("querying overpass for signal kinds...")
+    js = json.loads(geocode._get("https://overpass-api.de/api/interpreter",
+                                 data=urllib.parse.urlencode({"data": q}).encode()))
+    out = {str(el["id"]): el.get("tags", {}).get("highway") for el in js.get("elements", [])}
+    json.dump(out, open(path, "w", encoding="utf8"))
+    log("  %d signal nodes" % len(out))
+    return out

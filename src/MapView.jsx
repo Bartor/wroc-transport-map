@@ -117,7 +117,8 @@ export default function MapView({
       {net.on && data[NET_MODES[net.mode].file] && (
         <NetworkLayer key={net.mode} network={data[NET_MODES[net.mode].file]}
           share={netShare} hours={hours} minVolume={net.min}
-          unit={NET_MODES[net.mode].unit} />
+          unit={NET_MODES[net.mode].unit}
+          measured={!!NET_MODES[net.mode].measured} />
       )}
 
       {visible.survey && (

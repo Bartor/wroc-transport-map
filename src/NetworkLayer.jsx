@@ -21,7 +21,7 @@ export const NETWORK_LEGEND = RAMP.slice(0, -1).map(([t, c], i) => ({
 // Thousands of polylines: SVG would choke, so this layer alone draws to canvas.
 const CANVAS = L.canvas({ padding: 0.4 })
 
-export default function NetworkLayer({ network, share, hours, minVolume, unit = 'poj.', showMeasured }) {
+export default function NetworkLayer({ network, share, hours, minVolume, unit = 'poj.', measured = false, showMeasured }) {
   // Filter on the model's own window value, not the scaled one, so the set of
   // drawn streets stays put when you change period - only the numbers move.
   const shown = useMemo(
@@ -31,7 +31,7 @@ export default function NetworkLayer({ network, share, hours, minVolume, unit = 
   return (
     <LayerGroup>
       {shown.map((e, i) => {
-        const v = e.v * share
+        const v = measured ? e.v : e.v * share
         return (
           <Polyline
             key={i}
@@ -45,7 +45,15 @@ export default function NetworkLayer({ network, share, hours, minVolume, unit = 
           >
             <Tooltip sticky>
               <b>{e.n || '(bez nazwy)'}</b><br />
-              {e.m != null ? (
+              {measured ? (
+                <>
+                  <span>{fmt(e.v)} {unit} · 6–10 i 15–19</span><br />
+                  <span className="period">
+                    {e.tram ? `tramwaj ${e.tram}` : ''}{e.tram && e.bus ? ' · ' : ''}
+                    {e.bus ? `autobus ${e.bus}` : ''} · doba {fmt(e.day)}
+                  </span>
+                </>
+              ) : e.m != null ? (
                 <>
                   <span>pomiar: {fmt(Math.round(e.m * share))} {unit}</span><br />
                   <span className="period">model: {fmtEst(v)} {unit}</span>

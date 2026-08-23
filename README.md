@@ -124,40 +124,56 @@ liczenie, więc został odrzucony.
 
 ### Pozostałe środki transportu
 
-Ten sam aparat uruchomiono dla rowerów, pieszych i pasażerów. Każdy tryb
-dostaje sieć, z której faktycznie korzysta, i te obserwacje, które istnieją.
-Warstwa powstaje tylko wtedy, gdy model przejdzie walidację krzyżową
-(R² ≥ 0,2 przy min. 40 pomiarach):
-
 | Tryb | Pomiarów | R² (CV) | Mediana błędu | Warstwa |
 |---|---|---|---|---|
-| Samochody | 228 | 0,53 | 30% | tak |
-| Pasażerowie KZ | 215 | 0,24 | 66% | tak, ze ostrzeżeniem |
-| Rowerzyści | 116 | 0,04 | 44% | **nie** |
-| Piesi | 17 | 0,10 | 38% | **nie** |
+| Samochody | 228 | 0,63 | 24% | tak |
+| Pasażerowie KZ | 216 | 0,26 | 63% | tak, opisana jako słaba |
+| Rowerzyści | 116 | 0,04 | 44% | nie |
+| Piesi | 17 | 0,10 | 38% | nie |
 
-**Rowery.** Model zbudowano na sieci rowerowej (drogi rowerowe, ciągi pieszo-
-rowerowe, ulice bez tras dla samochodów) i uczono na 116 przekrojach, gdzie
-policzono cały korytarz — jezdnię i infrastrukturę obok niej. R² 0,04 oznacza,
-że model jest niewiele lepszy od zgadywania średniej. Wniosek nie jest
-techniczny, tylko merytoryczny: natężenie ruchu rowerowego zależy od tego, czy
-konkretna droga rowerowa istnieje i jest znośna, a nie od położenia odcinka
-w sieci. Rozkład najkrótszymi trasami tego nie widzi. Warstwa nie jest
-publikowana; w panelu bocznym pokazujemy sam wynik walidacji.
+Model samochodowy poprawiła jedna cecha z OSM: **liczba ulic zbiegających się
+na obu końcach odcinka**. Przetestowano też gęstość sygnalizacji, numery dróg,
+mosty, długość ciągu o tej samej nazwie i obecność linii KZ — żadna z nich nie
+przeszła walidacji. Ranga drogi wynika ze skrzyżowań, między którymi biegnie,
+lepiej niż z jej własnych tagów. Z interakcją `log(obciążenie) × stopień
+skrzyżowania` R² wzrosło z 0,53 do 0,63, a mediana błędu spadła z 30% do 24%.
 
-**Piesi.** 17 punktów, wszystkie w promieniu ok. 500 m od Rynku. To za mało
-i zbyt skupione, żeby cokolwiek ekstrapolować na miasto — dla porządku model
-policzono metodą leave-one-out i wynik jest w interfejsie.
+Rower i pieszy zostały odrzucone: ruch rowerowy zależy od tego, czy konkretna
+droga rowerowa istnieje i jest znośna, a nie od położenia w sieci; pieszych
+zmierzono w 17 punktach w promieniu pół kilometra od Rynku.
 
-**Pasażerowie.** Relacje tras z OSM dały liczbę linii autobusowych
-i tramwajowych na każdej krawędzi; to plus obciążenie z rozkładu i odległość
-od centrum tłumaczy 24% wariancji przy 215 pomiarach. Warstwa jest, ale
-w panelu opisana jako słaba — pokazuje raczej „gdzie dużo, gdzie mało" niż
-liczby.
+### Potoki pasażerskie — dlaczego słabe
 
-Odmowa opublikowania dwóch warstw jest tu wynikiem, nie brakiem. Mapa, która
-rysuje pewną kreskę na każdej ulicy przy R² 0,04, kłamałaby ładniej niż
-tabelka powyżej.
+Model pasażerski nie przekroczył R² 0,26 mimo sześciu prób: rozkładu ruchu po
+sieci samochodowej i po samej sieci KZ, gęstości zamieszkania z próby
+ankietowej, liczby przystanków, liczby linii i wariantów tras z OSM, wreszcie
+**rzeczywistej liczby kursów z rozkładu jazdy GTFS**. Nie pomogło też
+rozłożenie problemu na częstotliwość × napełnienie — samo napełnienie okazało
+się jeszcze mniej przewidywalne (R² 0,02–0,06, od 5 do 135 pasażerów na pojazd).
+
+Powód jest w danych, nie w metodzie: pomiar KBR dotyczy konkretnych słupków
+przystankowych i wybranych kierunków, a nie „wszystkich pojazdów na tej ulicy".
+Korelacja liczby kursów z GTFS ze zmierzoną liczbą pojazdów w punkcie wynosi
+0,39 w skali log — te dwie wielkości opisują co innego.
+
+### Rozkład jazdy z API miasta
+
+`etl/gtfs.py` pobiera aktualny rozkład (GTFS, CC0 1.0) z otwartych danych
+Wrocławia i nakłada go na graf ulic. Warstwa „Kursy autobusów i tramwajów"
+to **dane rozkładowe, nie model**: liczba kursów w typowy dzień roboczy na
+każdej ulicy, osobno tramwaj i autobus.
+
+Adapter odpytuje API o najnowszy plik, zamiast trzymać zaszyty link:
+
+```
+https://api.open-data.cui.wroclaw.pl/od2/6/  ->  {"pliki": [127, 125, ...]}
+https://open-data.cui.wroclaw.pl/hdb/download/127/  ->  GTFS zip
+```
+
+Uwaga na hosty: `www.wroclaw.pl/open-data` odpowiada 403 na każde zapytanie
+skryptowe (WAF), a `opendata.cui.wroclaw.pl` przekierowuje. Działa
+`open-data.cui.wroclaw.pl`; `api.open-data...` ma niepełny łańcuch certyfikatów,
+przez co curl odmawia, a Python (magazyn certyfikatów systemu) działa.
 
 ## Punkty a przekroje
 

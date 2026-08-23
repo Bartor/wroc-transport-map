@@ -676,8 +676,8 @@ def main(stages):
     if "modes" in stages:
         import modes
         L = lambda f: json.load(open(os.path.join(OUT, f + ".json"), encoding="utf8"))
-        modes.build(OUT, L("road")["sections"], L("points"), L("survey"),
-                    L("bike"), L("ped"), L("pt"), VEH_CATS)
+        modes.build(OUT, L("survey"), L("pt"))
+        modes.build_service(OUT)
     if "network" in stages:
         import network
         network.build(OUT,

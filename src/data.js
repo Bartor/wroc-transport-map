@@ -4,8 +4,7 @@
 const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail', 'survey',
   'network', 'network_modes']
 
-// Layers the ETL only writes when the model survived cross-validation.
-const OPTIONAL = ['network_pt', 'network_bike', 'network_ped']
+const OPTIONAL = ['network_pt', 'network_service']
 
 export async function loadAll() {
   const parts = await Promise.all(
@@ -236,8 +235,10 @@ export function periodShare(meta, hours) {
 export const NET_MODES = {
   road: { label: 'Samochody i inne pojazdy', file: 'network', unit: 'poj.' },
   pt: { label: 'Pasażerowie autobusów i tramwajów', file: 'network_pt', unit: 'pasażerów' },
-  bike: { label: 'Rowerzyści', file: 'network_bike', unit: 'rowerzystów' },
-  ped: { label: 'Piesi', file: 'network_ped', unit: 'pieszych' },
+  service: {
+    label: 'Kursy autobusów i tramwajów (rozkład)', file: 'network_service',
+    unit: 'kursów', measured: true,
+  },
 }
 
 export const MODEL_WINDOW = [6, 7, 8, 9, 15, 16, 17, 18]

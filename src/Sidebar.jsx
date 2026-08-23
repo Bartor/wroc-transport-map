@@ -26,9 +26,6 @@ export default function Sidebar({
   const gaps = ['pt', 'bike', 'ped', 'rail']
     .filter((k) => visible[k] && coverageGap(data.meta, k, hours))
   const netMeta = data[NET_MODES[net.mode].file]?.meta
-  // modes whose model did not survive cross-validation, so no layer was written
-  const failed = Object.entries(data.network_modes || {})
-    .filter(([, m]) => m && !m.usable)
 
   // Top cross-sections for the current filter — the quick "where is it worst" list.
   const top = useMemo(() => {
@@ -184,7 +181,13 @@ export default function Sidebar({
                 </span>
               ))}
             </div>
-            {netMeta && (
+            {netMeta?.measured && (
+              <p className="hint">
+                <b>Dane rozkładowe, nie model.</b> {netMeta.note} Źródło:{' '}
+                {netMeta.source}.
+              </p>
+            )}
+            {netMeta && !netMeta.measured && (
               <p className={netMeta.r2cv < 0.4 ? 'warn' : 'hint'}>
                 Sprawdzian krzyżowy na {netMeta.n} pomiarach:{' '}
                 <b>R² {netMeta.r2cv}</b>, mediana błędu{' '}
@@ -198,18 +201,12 @@ export default function Sidebar({
         <p className="hint">
           Model, nie pomiar. Graf skierowany z OSM, rozkład ruchu najszybszymi
           trasami ze źródeł w miejscach zamieszkania z próby ankietowej, potem
-          regresja na log natężenia. Skala podąża za wybranym okresem.
+          regresja na log natężenia, z liczbą ulic zbiegających się na obu
+          końcach odcinka jako miarą rangi drogi. Skala podąża za wybranym
+          okresem.
         </p>
-        {failed.length > 0 && (
-          <>
-            <h4 className="subhead">Czego nie da się oszacować</h4>
-            {failed.map(([k, m]) => (
-              <p key={k} className="hint">
-                <b>{NET_MODES[k].label}:</b> R² {m.r2cv} przy {m.n} pomiarach.
-                {' '}{m.reason}
-              </p>
-            ))}
-          </>
+        {netMeta?.ceiling && (
+          <p className="hint">{netMeta.ceiling}</p>
         )}
       </section>
 
