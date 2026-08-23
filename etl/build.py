@@ -520,6 +520,110 @@ def stage_survey():
     return out
 
 
+# --------------------------------------------------- measurement windows / expansion
+# Only the road counts run all day. Passengers, cyclists and pedestrians were
+# counted in the peaks only, so their "daily" totals are not comparable with the
+# road ones unless they are expanded. The factors below come from the parts of
+# the survey that DO cover a long day, and each one records how solid it is.
+WINDOWS = {
+    "road": list(range(24)),
+    "pt": [5, 6, 7, 8, 14, 15, 16, 17],
+    "bike": [6, 7, 8, 9, 15, 16, 17, 18],
+    "ped": [6, 7, 8, 9, 15, 16, 17, 18],
+    "rail": [6, 7, 8, 9, 14, 15, 16, 17, 18],
+}
+
+
+def _profiles(road, meta_cats):
+    """Daily shapes taken from the cross-sections measured over a long day."""
+    ci = {c: i for i, c in enumerate(VEH_CATS)}
+    motor = [0] * 24
+    ptveh = [0] * 24
+    nonmotor = [0] * 24
+    nfull = 0
+    for s in road.values():
+        tot = [0] * 24
+        for d in s["dirs"].values():
+            for h in range(24):
+                tot[h] += sum(d["h"][h])
+        if all(v > 0 for v in tot):                 # measured round the clock
+            nfull += 1
+            for d in s["dirs"].values():
+                for h in range(24):
+                    for c in ("c", "d", "e", "f", "g", "h", "i", "l"):
+                        motor[h] += d["h"][h][ci[c]]
+                    ptveh[h] += d["h"][h][ci["j"]] + d["h"][h][ci["k"]]
+    noff = 0
+    for s in road.values():
+        if "off" not in s:
+            continue
+        noff += 1
+        for rows in s["off"].values():
+            for h in range(24):
+                nonmotor[h] += sum(rows[h])
+    return motor, ptveh, nonmotor, nfull, noff
+
+
+def _factor(profile, window):
+    w = sum(profile[h] for h in window)
+    return round(sum(profile) / w, 3) if w else None
+
+
+def stage_expansion(road, points):
+    motor, ptveh, nonmotor, nfull, noff = _profiles(road, None)
+    exp = {
+        "road": {
+            "factor": 1.0, "basis": "measured",
+            "note": "Ruch drogowy liczono przez całą dobę lub 5:00–21:00 — "
+                    "wartości dobowe są mierzone, nie szacowane.",
+        },
+        "pt": {
+            "factor": _factor(ptveh, WINDOWS["pt"]), "basis": "assumed",
+            "note": "Pasażerów liczono tylko w szczytach. Współczynnik pochodzi "
+                    "z dobowego rozkładu LICZBY autobusów i tramwajów na %d "
+                    "przekrojach mierzonych 24h — zakłada, że napełnienie poza "
+                    "szczytem jest takie jak w szczycie, więc zawyża." % nfull,
+        },
+        "bike": {
+            "factor": _factor(nonmotor, WINDOWS["bike"]), "basis": "derived",
+            "note": "Rowerzystów liczono tylko w szczytach. Współczynnik "
+                    "pochodzi z rzeczywistych całodziennych (5:00–21:00) "
+                    "pomiarów ruchu rowerowego na infrastrukturze rowerowej "
+                    "przy %d przekrojach drogowych." % noff,
+        },
+        "rail": {
+            "factor": _factor(ptveh, WINDOWS["rail"]), "basis": "assumed",
+            "note": "Jak dla autobusów i tramwajów — rozkład dobowy liczby "
+                    "kursów, nie pasażerów.",
+        },
+    }
+    exp["ped"] = {
+        "factor": exp["bike"]["factor"], "basis": "assumed",
+        "note": "Pieszych liczono tylko w szczytach, a w całym KBR nie ma "
+                "całodziennego pomiaru pieszych. Użyto rozkładu ruchu "
+                "rowerowego jako przybliżenia — piesi w centrum mają płaski "
+                "rozkład popołudniowy, więc to raczej zaniża.",
+    }
+    return {
+        "windows": WINDOWS,
+        "expansion": exp,
+        "profiles": {"motor": motor, "ptVehicles": ptveh, "nonMotor": nonmotor},
+        "fullDaySections": nfull, "offCarriagewaySections": noff,
+    }
+
+
+# Nothing in the delivered files states how many people travel in a car; 6.1 is
+# a transit fleet matrix. Until the household-survey annex is added this is an
+# assumption the user can change in the interface.
+CAR_OCCUPANCY = {
+    "default": 1.3, "min": 1.0, "max": 2.0,
+    "note": "Załączniki 3.x–7.1 nie zawierają napełnienia samochodów osobowych "
+            "— 6.1 dotyczy taboru komunikacji zbiorowej. Domyślne 1,3 os./poj. "
+            "to typowa wartość dla podróży miejskich; podmień ją, gdy dojdzie "
+            "załącznik z wynikami badań ankietowych gospodarstw domowych.",
+}
+
+
 # ---------------------------------------------------------------------- driver
 def read_cat_labels():
     out = {}
@@ -569,7 +673,14 @@ def main(stages):
         stage_rail(geocode.overpass_stations())
     if "survey" in stages:
         stage_survey()
+    if "network" in stages:
+        import network
+        network.build(OUT,
+                      json.load(open(os.path.join(OUT, "road.json"), encoding="utf8"))["sections"],
+                      json.load(open(os.path.join(OUT, "points.json"), encoding="utf8")),
+                      json.load(open(os.path.join(OUT, "survey.json"), encoding="utf8")))
     if "meta" in stages:
+        road = json.load(open(os.path.join(OUT, "road.json"), encoding="utf8"))
         write("meta.json", {
             "generated": datetime.date.today().isoformat(),
             "source": "Kompleksowe Badania Ruchu Wrocław 2024",
@@ -580,11 +691,14 @@ def main(stages):
             "bikePlace": BIKE_PLACE, "bikeMode": BIKE_MODE, "bikeUser": BIKE_USER,
             "pedMobility": PED_MOB, "pedMobility2": PED_MOB2, "sex": SEX,
             "areas": sorted({c["area"] for c in cat}),
+            "carOccupancy": CAR_OCCUPANCY,
+            **stage_expansion(road["sections"], cat),
         })
     log("done")
 
 
-ALL = ["road", "points", "pt", "bike", "ped", "rail", "survey", "meta"]
+ALL = ["road", "points", "pt", "bike", "ped", "rail", "survey", "meta",
+       "network"]
 
 if __name__ == "__main__":
     main(sys.argv[1:] or ALL)

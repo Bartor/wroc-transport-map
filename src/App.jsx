@@ -15,10 +15,17 @@ export default function App() {
   const [metric, setMetric] = useState('all')
   const [areas, setAreas] = useState(null) // null = all
   const [aggregate, setAggregate] = useState(false)
+  const [wholeDay, setWholeDay] = useState(false)   // expand peak-only counts
+  const [people, setPeople] = useState(false)       // vehicles -> people
+  const [occupancy, setOccupancy] = useState(null)  // set from meta on load
+  const [net, setNet] = useState({ on: false, daily: false, min: 3000 })
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
-    loadAll().then(setData).catch((e) => setError(e.message))
+    loadAll().then((d) => {
+      setOccupancy(d.meta.carOccupancy.default)
+      setData(d)
+    }).catch((e) => setError(e.message))
   }, [])
 
   const hours = useMemo(
@@ -37,16 +44,22 @@ export default function App() {
         preset={preset} setPreset={setPreset} hour={hour} setHour={setHour}
         metric={metric} setMetric={setMetric} areas={areas} setAreas={setAreas}
         hours={hours} period={period} aggregate={aggregate} setAggregate={setAggregate}
+        wholeDay={wholeDay} setWholeDay={setWholeDay}
+        people={people} setPeople={setPeople}
+        occupancy={occupancy} setOccupancy={setOccupancy}
+        net={net} setNet={setNet}
         onSelect={setSelected} selected={selected}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
         areas={areas} period={period} aggregate={aggregate}
+        wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         selected={selected} onSelect={setSelected}
       />
       {selected && (
         <Details data={data} sel={selected} hours={hours} metric={metric}
-          period={period} onSelect={setSelected} onClose={() => setSelected(null)} />
+          period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
+          onSelect={setSelected} onClose={() => setSelected(null)} />
       )}
     </div>
   )

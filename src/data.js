@@ -1,7 +1,8 @@
 // Loading and reshaping of the ETL output. Everything is small enough to keep
 // in memory (~1.2 MB total), so the map filters client-side.
 
-const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail', 'survey']
+const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail', 'survey',
+  'network']
 
 export async function loadAll() {
   const parts = await Promise.all(
@@ -146,6 +147,47 @@ export function spread(markers, metres = 20) {
   }
   return markers
 }
+
+// Only the road counts ran all day. Passengers, cyclists and pedestrians were
+// counted in the peaks only, so a "whole day" total for them is a peak total
+// wearing the wrong label unless it is expanded.
+export const coverage = (meta, kind) => meta.windows?.[kind] || null
+
+export function coverageGap(meta, kind, hours) {
+  const w = coverage(meta, kind)
+  if (!w) return null
+  const missing = hours.filter((h) => !w.includes(h))
+  return missing.length ? { missing, measured: hours.length - missing.length } : null
+}
+
+export const expansionOf = (meta, kind) => meta.expansion?.[kind] || null
+
+/** Scale a peak-only count up to a whole day, when the user asks for it. */
+export function expand(meta, kind, value, on) {
+  const e = expansionOf(meta, kind)
+  if (!on || !e || !e.factor) return value
+  return value * e.factor
+}
+
+export const BASIS_LABEL = {
+  measured: 'pomiar',
+  derived: 'wyliczone z danych KBR',
+  assumed: 'założenie',
+}
+
+// The road survey counts vehicles. Converting to people is only meaningful for
+// cars: lorry and van occupancy is not surveyed, and bus and tram passengers are
+// counted directly in the transit layer, so folding them in would double count.
+export const CAR_CATS = ['d']
+
+export function toPeople(value, kind, occupancy, on) {
+  if (!on) return value
+  return kind === 'road' ? value * occupancy : value
+}
+
+/** Which vehicle categories the road layer should count right now. */
+export const activeCats = (metric, people) =>
+  (people ? CAR_CATS : ROAD_METRICS[metric].cats)
 
 /** Marker radius: sqrt so area, not radius, tracks the volume. */
 export function radius(value, max, min = 3, cap = 22) {

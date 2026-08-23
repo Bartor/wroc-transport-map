@@ -1,21 +1,22 @@
 import { useMemo } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Tooltip, LayerGroup } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import NetworkLayer from './NetworkLayer'
 import {
   LAYERS, ROAD_METRICS, roadVolume, radius, fmt, sumHours, spread, sectionOf,
-  parentOf,
+  parentOf, expand, toPeople, expansionOf, coverageGap, BASIS_LABEL, activeCats,
 } from './data'
 
 const CENTRE = [51.1097, 17.0324]
 
 /** One entry per drawn marker: position, size input, and what to select on click. */
-function useMarkers(data, visible, hours, metric, areas, aggregate) {
+function useMarkers(data, visible, hours, metric, areas, aggregate, wholeDay, people, occupancy) {
   return useMemo(() => {
     const catOrder = data.meta.vehCatOrder
     const out = {}
 
     if (visible.road) {
-      const cats = ROAD_METRICS[metric].cats
+      const cats = activeCats(metric, people)
       out.road = data.points
         .filter((p) => p.lat && (!areas || areas.includes(p.area)))
         .map((p) => ({
@@ -53,11 +54,15 @@ function useMarkers(data, visible, hours, metric, areas, aggregate) {
       }))
     }
     for (const k of Object.keys(out)) {
+      for (const m of out[k]) {
+        m.raw = m.value
+        m.value = toPeople(expand(data.meta, k, m.value, wholeDay), k, occupancy, people)
+      }
       if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k])
       spread(out[k])
     }
     return out
-  }, [data, visible, hours, metric, areas, aggregate])
+  }, [data, visible, hours, metric, areas, aggregate, wholeDay, people, occupancy])
 }
 
 /** One marker per measurement point: its cross-sections are separate approaches
@@ -87,9 +92,11 @@ function mergeToPoints(kind, list) {
 }
 
 export default function MapView({
-  data, visible, hours, metric, areas, period, aggregate, selected, onSelect,
+  data, visible, hours, metric, areas, period, aggregate,
+  wholeDay, people, occupancy, net, selected, onSelect,
 }) {
-  const markers = useMarkers(data, visible, hours, metric, areas, aggregate)
+  const markers = useMarkers(data, visible, hours, metric, areas, aggregate,
+    wholeDay, people, occupancy)
 
   return (
     <MapContainer className="map" center={CENTRE} zoom={12}>
@@ -98,6 +105,10 @@ export default function MapView({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         maxZoom={19}
       />
+
+      {net.on && (
+        <NetworkLayer network={data.network} daily={net.daily} minVolume={net.min} />
+      )}
 
       {visible.survey && (
         <LayerGroup>
@@ -131,8 +142,23 @@ export default function MapView({
                 >
                   <Tooltip>
                     <b>{m.title}</b><br />
-                    {fmt(m.value)} {LAYERS[kind].unit}
+                    {fmt(m.value)}{' '}
+                    {people && kind === 'road' ? 'osób w samochodach' : LAYERS[kind].unit}
                     <span className="period"> · {period}</span>
+                    {wholeDay && expansionOf(data.meta, kind)?.factor > 1 && (
+                      <><br /><span className="period">
+                        oszacowanie doby (×{expansionOf(data.meta, kind).factor},{' '}
+                        {BASIS_LABEL[expansionOf(data.meta, kind).basis]}) —
+                        zmierzono {fmt(m.raw)}
+                      </span></>
+                    )}
+                    {!wholeDay && coverageGap(data.meta, kind, hours) && (
+                      <><br /><span className="warn">
+                        pomiar tylko w szczytach — brak danych dla
+                        {' '}{coverageGap(data.meta, kind, hours).missing.length} z
+                        {' '}{hours.length} godzin okresu
+                      </span></>
+                    )}
                     {m.sub && <><br /><span className="period">{m.sub}</span></>}
                     {m.shifted && (
                       <><br /><span className="period">

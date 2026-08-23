@@ -46,6 +46,82 @@ komunikacja zbiorowa albo rowery i UTO na jezdni.
 Kliknięcie znacznika otwiera panel z profilem dobowym, podziałem na kierunki
 i strukturą rodzajową.
 
+## Okna pomiarowe — dane NIE są porównywalne wprost
+
+To najważniejsze zastrzeżenie do całego zestawu:
+
+| Warstwa | Godziny pomiaru | Współczynnik doby | Podstawa |
+|---|---|---|---|
+| Ruch drogowy | 24 h albo 5:00–21:00 | — | pomiar |
+| Ruch rowerowy | 6–10 i 15–19 | ×1,634 | wyliczone z KBR |
+| Ruch pieszy | 6–10 i 15–19 | ×1,634 | założenie |
+| Autobusy i tramwaje | 5–9 i 14–18 | ×1,935 | założenie |
+| Pociągi | 6–10 i 14–19 | ×1,777 | założenie |
+
+Bez przeliczenia „cała doba” dla rowerzystów, pieszych i pasażerów to w
+rzeczywistości suma ośmiu godzin szczytu — czyli liczba nieporównywalna
+z całodobowym ruchem drogowym. Aplikacja to sygnalizuje: ostrzeżeniem w panelu
+bocznym, adnotacją w dymku znacznika i wyszarzeniem niemierzonych godzin.
+
+Przełącznik „Szacuj całą dobę" mnoży pomiary szczytowe przez współczynniki
+wyliczone z tych fragmentów badania, które trwały cały dzień:
+
+* **rower — wyliczone z danych.** 75 przekrojów drogowych ma równoległy pomiar
+  ruchu rowerowego na infrastrukturze rowerowej w godzinach 5:00–21:00. To
+  prawdziwy dobowy rozkład ruchu rowerowego z tego samego badania.
+* **autobusy, tramwaje, pociągi — założenie.** Wykorzystano dobowy rozkład
+  LICZBY kursów (kategorie „j" i „k" na 45 przekrojach mierzonych 24 h).
+  Zakłada, że napełnienie poza szczytem jest takie jak w szczycie — więc
+  zawyża, prawdopodobnie o kilkanaście procent.
+* **pieszy — założenie.** W całym KBR nie ma całodziennego pomiaru pieszych.
+  Użyto rozkładu rowerowego. Ruch pieszy w centrum ma płaskie, popołudniowo-
+  wieczorne maksimum, więc ten współczynnik raczej zaniża.
+
+Każdy współczynnik jest w interfejsie opisany etykietą `pomiar` /
+`wyliczone z danych KBR` / `założenie`.
+
+## Pojazdy a ludzie
+
+Pomiary drogowe liczą pojazdy, nie osoby. Przełącznik „Przeliczaj samochody na
+osoby" mnoży **wyłącznie samochody osobowe** (kategoria `d`) przez napełnienie
+ustawiane suwakiem, domyślnie 1,3 os./poj.
+
+**To jest założenie, nie dana z KBR.** W dostarczonych załącznikach nie ma
+napełnienia samochodów osobowych — Zał. 6.1 dotyczy taboru komunikacji
+zbiorowej. Realną wartość zawiera raport z badań ankietowych gospodarstw
+domowych; po dołożeniu tego pliku wystarczy podmienić `CAR_OCCUPANCY` w
+`etl/build.py`.
+
+Dostawczych i ciężarowych celowo nie przeliczamy (KBR nie bada ich napełnienia),
+a pasażerów autobusów i tramwajów liczy osobno warstwa komunikacji zbiorowej —
+doliczanie ich tutaj byłoby podwójnym liczeniem.
+
+## Warstwa szacunkowa — cała sieć drogowa
+
+244 przekroje to kordony i ringi, nie sieć. Warstwa „Szacowana sieć drogowa"
+uzupełnia resztę modelem:
+
+1. **Graf skierowany** z OSM: 22 325 węzłów, 26 419 krawędzi. Węzłami są
+   skrzyżowania (geometria pomiędzy nimi jest zwinięta w krawędź), kierunkowość
+   bierze pod uwagę `oneway`, ronda i domyślną jednokierunkowość autostrad.
+2. **Rozkład ruchu** metodą najszybszej trasy. Źródła to 1174 adresy z próby
+   ankietowej — czyli faktyczny rozkład miejsc zamieszkania — plus punkty
+   kordonowe ważone zmierzonym na nich natężeniem. Cele losowane z zanikiem
+   odległości względem Rynku.
+3. **Regresja** log natężenia na: log obciążenia z rozkładu, klasę drogi, liczbę
+   pasów i odległość od centrum, dopasowana na 228 przekrojach, które udało się
+   przypiąć do krawędzi grafu (16 punktów kordonu obszaru leży poza pobranym
+   fragmentem sieci).
+
+**Jakość: R² 0,53 w walidacji krzyżowej, mediana błędu 30%, a dla 10%
+najgorszych ulic błąd sięga 90%.** To rząd wielkości, nie pomiar. Ulice,
+w których stoi przekrój pomiarowy, pokazują w dymku obie liczby — zmierzoną
+i modelową — żeby było widać, jak model kłamie w znanym punkcie.
+
+Sprawdzono też rozkład z ograniczeniem przepustowości (przyrostowy, funkcja
+BPR): nie poprawił wyniku (R² 0,527 → 0,527), a kosztował pięciokrotnie dłuższe
+liczenie, więc został odrzucony.
+
 ## Punkty a przekroje
 
 Numer w rodzaju `KW_08B` to **przekrój pomiarowy** wewnątrz **punktu

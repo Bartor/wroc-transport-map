@@ -133,3 +133,18 @@ select {
   background: #1c1f26; border-radius: 4px; font-size: .7rem;
 }
 .sec span { overflow: hidden; text-overflow: ellipsis; }
+
+.warn { color: #e8b04b; font-size: .74rem; line-height: 1.5; margin: .3rem 0 .5rem; }
+.leaflet-tooltip .warn { display: inline; }
+
+.factors div { display: flex; align-items: center; gap: .4rem; font-size: .74rem; padding: .15rem 0; }
+.factors span { flex: 1; color: var(--dim); }
+.factors b { font-weight: 600; }
+.basis { font-style: normal; font-size: .62rem; padding: .05rem .3rem; border-radius: 3px; }
+.basis.measured { background: #24503a; color: #9fe0b8; }
+.basis.derived { background: #2b3f5e; color: #a8c6ef; }
+.basis.assumed { background: #5e442b; color: #efc9a8; }
+
+.legend { display: flex; flex-wrap: wrap; gap: .3rem .6rem; margin: .5rem 0; font-size: .68rem; color: var(--dim); }
+.legend span { display: flex; align-items: center; gap: .25rem; }
+.legend i { width: 14px; height: 4px; border-radius: 2px; }
