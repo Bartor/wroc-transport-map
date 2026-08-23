@@ -1,0 +1,9 @@
+{
+  "_comment": "Hand-placed coordinates for points the geocoder cannot resolve from the source descriptions. [lat, lon]. Edit and re-run `npm run etl` to correct a marker.",
+  "RR_13": [51.13375, 16.98053],
+  "RR_21A": [51.08790, 16.99930],
+  "RR_21B": [51.08790, 16.99930],
+  "RR_26": [51.07450, 17.01700],
+  "RR_27": [51.07850, 17.03350],
+  "RR_32A": [51.12760, 17.06263]
+}
