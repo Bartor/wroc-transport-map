@@ -155,3 +155,56 @@ select {
 .leaflet-shadow-pane { pointer-events: none; }
 .subhead { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
   color: var(--dim); margin: .9rem 0 .2rem; }
+
+/* --------------------------------------------------------- search & folding */
+.search { position: sticky; top: 0; z-index: 2; background: var(--panel);
+  padding-bottom: .6rem; margin-bottom: .2rem; }
+.search input { width: 100%; background: #262a34; color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; padding: .42rem .6rem; font-size: .82rem; }
+.search input::placeholder { color: var(--dim); }
+.search-results { list-style: none; margin: .3rem 0 0; padding: 0;
+  max-height: 260px; overflow-y: auto; }
+.search-results li { display: flex; align-items: center; gap: .4rem;
+  padding: .3rem .4rem; border-radius: 5px; cursor: pointer; font-size: .78rem; }
+.search-results li:hover, .search-results li:focus { background: #262a34; outline: none; }
+.search-results em { margin-left: auto; color: var(--dim); font-style: normal;
+  font-size: .68rem; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.collapse-head { display: flex; justify-content: space-between; align-items: center;
+  width: 100%; background: none; border: 0; padding: 0; cursor: pointer; color: inherit; }
+.collapse-head h2 { margin: 0; }
+.chevron { color: var(--dim); font-size: .7rem; transition: transform .15s; }
+.chevron.open { transform: rotate(180deg); }
+.collapse-body { margin-top: .55rem; }
+
+/* ------------------------------------------------------------- map legend */
+.map-wrap { position: relative; flex: 1; height: 100%; }
+.map-wrap .map { position: absolute; inset: 0; }
+.map-legend { position: absolute; left: 12px; bottom: 26px; z-index: 500;
+  background: rgba(28, 31, 38, .92); border: 1px solid var(--line); border-radius: 8px;
+  padding: .5rem .7rem; display: flex; flex-direction: column; gap: .25rem;
+  font-size: .7rem; color: var(--dim); max-width: 260px; }
+.map-legend span { display: flex; align-items: center; gap: .35rem; }
+.map-legend i { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+.map-legend i.line { width: 14px; height: 4px; border-radius: 2px; }
+.legend-note { color: #6b7280; font-style: italic; }
+
+/* Leaflet tooltips are white, where the sidebar's amber fails contrast badly. */
+.leaflet-tooltip .warn { color: #8a5a12; }
+.leaflet-tooltip .period { color: #55606f; }
+
+/* At 1280px a fixed 380px panel leaves the map under half the width; float it
+   over the map instead of squeezing the thing you are trying to look at. */
+@media (max-width: 1500px) {
+  .details { position: absolute; right: 0; top: 0; bottom: 0; z-index: 800;
+    box-shadow: -8px 0 24px rgba(0, 0, 0, .45); }
+  .app { position: relative; }
+}
+
+/* The ranked list was 1071px of the sidebar's scroll on its own. One line per
+   field, and scroll inside the list rather than the whole panel. */
+.top { max-height: 320px; overflow-y: auto; }
+.top li span, .top li em {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
+.top li { grid-template-columns: minmax(0, 1fr) auto; }

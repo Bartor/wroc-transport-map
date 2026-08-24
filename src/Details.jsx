@@ -4,6 +4,7 @@ import {
 import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
+  activeCats, expand, toPeople, expansionOf, BASIS_LABEL,
 } from './data'
 
 const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
@@ -87,10 +88,22 @@ const GEO_NOTE = {
   point: 'środek punktu pomiarowego',
 }
 
-export default function Details({ data, sel, hours, metric, period, share, onSelect, onClose }) {
+export default function Details({
+  data, sel, hours, metric, period, share, wholeDay, people, occupancy,
+  onSelect, onClose,
+}) {
   const { kind, ref: p } = sel
   const color = LAYERS[kind]?.color || '#f4a261'
   const catOrder = data.meta.vehCatOrder
+
+  // The map applies the whole-day expansion and the vehicles-to-people
+  // conversion before drawing. This panel has to apply exactly the same pair,
+  // or the number here contradicts the marker that was clicked to open it.
+  const shown = (v, k = kind) =>
+    toPeople(expand(data.meta, k, v, wholeDay), k, occupancy, people)
+  const shape = (arr, k = kind) => arr.map((v) => shown(v, k))
+  const exp = expansionOf(data.meta, kind)
+  const scaled = wholeDay && exp?.factor > 1
 
   let body = null
 
@@ -170,19 +183,23 @@ export default function Details({ data, sel, hours, metric, period, share, onSel
     )
   } else if (kind === 'road') {
     const sec = data.roadById[p.id]
-    const cats = ROAD_METRICS[metric].cats
-    const prof = roadProfile(sec, { cats }, catOrder)
+    const cats = activeCats(metric, people)
+    const prof = shape(roadProfile(sec, { cats }, catOrder))
+    const keep = cats
+      ? cats.map((c) => catOrder.indexOf(c)).filter((i) => i >= 0)
+      : catOrder.map((_, i) => i)
     const byCat = {}
     const byDir = {}
     if (sec) {
       for (const [d, dd] of Object.entries(sec.dirs)) {
-        byDir[d.replace('>', ' → ')] = hours.reduce((a, h) => a + dd.h[h].reduce((x, y) => x + y, 0), 0)
+        byDir[d.replace('>', ' → ')] = shown(
+          hours.reduce((a, h) => a + keep.reduce((x, i) => x + dd.h[h][i], 0), 0))
         for (let h = 0; h < 24; h++) {
           if (!hours.includes(h)) continue
-          dd.h[h].forEach((v, i) => {
+          for (const i of keep) {
             const label = data.meta.vehCats[catOrder[i]] || catOrder[i]
-            byCat[label] = (byCat[label] || 0) + v
-          })
+            byCat[label] = (byCat[label] || 0) + shown(dd.h[h][i])
+          }
         }
       }
     }
@@ -205,11 +222,15 @@ export default function Details({ data, sel, hours, metric, period, share, onSel
           <dt>Odcinek</dt><dd>{p.segment}</dd>
           <dt>Miejsce pomiaru</dt><dd>{p.where}</dd>
           <dt>Data</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd>
-          <dt>Suma dobowa</dt><dd>{fmt(p.total)} pojazdów</dd>
+          <dt>Suma dobowa</dt>
+          <dd>{fmt(p.total)} pojazdów — pomiar, wszystkie kategorie</dd>
         </dl>
-        <h4>Profil dobowy — {ROAD_METRICS[metric].label.toLowerCase()}</h4>
+        <h4>
+          Profil dobowy — {people ? 'osoby w samochodach osobowych'
+            : ROAD_METRICS[metric].label.toLowerCase()}
+        </h4>
         <Profile values={prof} hours={hours} color={color} />
-        <Breakdown title={`Kierunki — ${period}, wszystkie pojazdy`} obj={byDir} />
+        <Breakdown title={`Kierunki — ${period}`} obj={byDir} />
         <Breakdown title={`Kategorie pojazdów — ${period}`} obj={byCat} />
         <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
       </>
@@ -221,11 +242,12 @@ export default function Details({ data, sel, hours, metric, period, share, onSel
           <dt>Odcinek</dt><dd>{p.segment}</dd>
           {p.where?.length ? <><dt>Miejsce</dt><dd>{p.where.join('; ')}</dd></> : null}
           {p.date ? <><dt>Pomiar</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd></> : null}
-          <dt>Łącznie</dt><dd>{fmt(p.total)}</dd>
-          <dt>W okresie {period}</dt><dd>{fmt(sumHours(p.byHour, hours))}</dd>
+          <dt>Łącznie</dt><dd>{fmt(p.total)} — pomiar</dd>
+          <dt>W okresie {period}</dt>
+          <dd>{fmt(shown(sumHours(p.byHour, hours)))}</dd>
         </dl>
         <h4>Profil dobowy</h4>
-        <Profile values={p.byHour} hours={hours} color={color} />
+        <Profile values={shape(p.byHour)} hours={hours} color={color} />
         <Breakdown title="Kierunki" obj={p.byDir} />
         <Breakdown title="Płeć" obj={p.bySex} />
         {kind === 'bike' && <Breakdown title="Gdzie jadą" obj={p.byPlace} />}
@@ -251,7 +273,7 @@ export default function Details({ data, sel, hours, metric, period, share, onSel
           {p.boarded ? <><dt>Wsiadło / wysiadło</dt><dd>{fmt(p.boarded)} / {fmt(p.alighted)}</dd></> : null}
         </dl>
         <h4>Profil dobowy — pasażerowie</h4>
-        <Profile values={prof} hours={hours} color={color} />
+        <Profile values={shape(prof)} hours={hours} color={color} />
         <Breakdown title="Trakcja (liczba pojazdów)" obj={p.byTraction} />
         <Breakdown title="Linie (pasażerowie)" obj={p.byLine} />
         <Breakdown title="Kierunki (pasażerowie)" obj={p.byDir} />
@@ -271,7 +293,7 @@ export default function Details({ data, sel, hours, metric, period, share, onSel
           <dd>{Object.entries(p.pax).map(([d, v]) => `${d}: ${fmt(v)}`).join(' · ')}</dd>
         </dl>
         <h4>Profil dobowy — pasażerowie</h4>
-        <Profile values={prof} hours={hours} color={color} />
+        <Profile values={shape(prof)} hours={hours} color={color} />
         <Breakdown title="Kierunek" obj={p.pax} />
         <Breakdown title="Miejsca w pociągach" obj={p.seats} />
         <Breakdown title="Przewoźnicy (kursy)" obj={p.carriers} />
@@ -295,6 +317,12 @@ export default function Details({ data, sel, hours, metric, period, share, onSel
         {body}
         {!p.aggregate && (
           <Sections data={data} kind={kind} p={p} onSelect={onSelect} />
+        )}
+        {scaled && (
+          <p className="warn">
+            Wartości przeliczone na całą dobę (×{exp.factor},{' '}
+            {BASIS_LABEL[exp.basis]}). Pomiar obejmował tylko szczyty.
+          </p>
         )}
         {p.geo && GEO_NOTE[p.geo] && <p className="geo">📍 {GEO_NOTE[p.geo]}</p>}
       </div>

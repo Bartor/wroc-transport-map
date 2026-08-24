@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { loadAll, LAYERS, ROAD_METRICS, PRESETS, periodLabel, periodShare } from './data'
+import {
+  loadAll, LAYERS, ROAD_METRICS, PRESETS, periodLabel, periodShare, buildMarkers,
+} from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
 import Details from './Details'
@@ -37,6 +39,15 @@ export default function App() {
   )
   const period = periodLabel(preset, hour)
 
+  // One marker list for the map and the sidebar, so a click in either always
+  // refers to the same object.
+  const markers = useMemo(
+    () => (data ? buildMarkers(data, {
+      visible, hours, metric, areas, aggregate, wholeDay, people, occupancy,
+    }) : {}),
+    [data, visible, hours, metric, areas, aggregate, wholeDay, people, occupancy],
+  )
+
   if (error) return <div className="fatal">{error}</div>
   if (!data) return <div className="fatal">Wczytywanie danych…</div>
 
@@ -52,13 +63,13 @@ export default function App() {
         occupancy={occupancy} setOccupancy={setOccupancy}
         net={net} setNet={setNet} basemap={basemap} setBasemap={setBasemap}
         sig={sig} setSig={setSig}
-        onSelect={setSelected} selected={selected}
+        markers={markers} onSelect={setSelected} selected={selected}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
         areas={areas} period={period} aggregate={aggregate}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
-        basemap={basemap} sig={sig}
+        basemap={basemap} sig={sig} markers={markers}
         selected={selected} onSelect={setSelected}
       />
       {selected && (

@@ -250,3 +250,102 @@ export function periodLabel(preset, hour) {
   if (hour != null) return `${HOUR_LABEL(hour)}–${HOUR_LABEL((hour + 1) % 24)}`
   return PRESETS[preset].label.toLowerCase()
 }
+
+/** One marker per drawn point: position, the value that sizes it, and what to
+ *  select on click.
+ *
+ *  Built here rather than inside MapView because the sidebar's ranked list has
+ *  to select the very same objects. When it built its own list from data.points
+ *  while the map was showing aggregated points, the ids disagreed and clicking
+ *  a row highlighted nothing.
+ */
+export function buildMarkers(data, {
+  visible, hours, metric, areas, aggregate, wholeDay, people, occupancy,
+}) {
+  const catOrder = data.meta.vehCatOrder
+  const out = {}
+
+  if (visible.road) {
+    const cats = activeCats(metric, people)
+    out.road = data.points
+      .filter((p) => p.lat && (!areas || areas.includes(p.area)))
+      .map((p) => ({
+        id: p.id, lat: p.lat, lon: p.lon, kind: 'road', ref: p,
+        value: roadVolume(data.roadById[p.id], { cats, hours }, catOrder),
+        title: `${p.id} · ${p.name}`, sub: sectionOf('road', p),
+      }))
+  }
+  if (visible.pt) {
+    out.pt = data.pt.filter((p) => p.lat).map((p) => ({
+      id: p.id, lat: p.lat, lon: p.lon, kind: 'pt', ref: p,
+      value: Object.values(p.byHour).reduce((a, arr) => a + sumHours(arr, hours), 0),
+      title: `${p.id} · ${p.stop || p.name}`, sub: sectionOf('pt', p),
+    }))
+  }
+  if (visible.bike) {
+    out.bike = data.bike.filter((p) => p.lat).map((p) => ({
+      id: p.id, lat: p.lat, lon: p.lon, kind: 'bike', ref: p,
+      value: sumHours(p.byHour, hours),
+      title: `${p.id} · ${p.name}`, sub: sectionOf('bike', p),
+    }))
+  }
+  if (visible.ped) {
+    out.ped = data.ped.filter((p) => p.lat).map((p) => ({
+      id: p.id, lat: p.lat, lon: p.lon, kind: 'ped', ref: p,
+      value: sumHours(p.byHour, hours),
+      title: `${p.id} · ${p.short || p.name}`, sub: sectionOf('ped', p),
+    }))
+  }
+  if (visible.rail) {
+    out.rail = data.rail.filter((p) => p.lat).map((p) => ({
+      id: p.id, lat: p.lat, lon: p.lon, kind: 'rail', ref: p,
+      value: Object.values(p.byHour).reduce((a, arr) => a + sumHours(arr, hours), 0),
+      title: `${p.id} · ${p.stations.join(' / ')}`,
+    }))
+  }
+  for (const k of Object.keys(out)) {
+    for (const m of out[k]) {
+      m.raw = m.value
+      m.value = toPeople(expand(data.meta, k, m.value, wholeDay), k, occupancy, people)
+    }
+    if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k])
+    spread(out[k])
+  }
+  return out
+}
+
+/** One marker per measurement point: its cross-sections are separate approaches
+ *  of the same place, so their counts add up rather than overlap. */
+function mergeToPoints(kind, list) {
+  const by = new Map()
+  for (const m of list) {
+    const key = parentOf(kind, m.ref)
+    if (!by.has(key)) by.set(key, [])
+    by.get(key).push(m)
+  }
+  return [...by.entries()].map(([key, ms]) => {
+    if (ms.length === 1) return ms[0]
+    return {
+      id: key, kind,
+      lat: ms.reduce((a, m) => a + m.lat, 0) / ms.length,
+      lon: ms.reduce((a, m) => a + m.lon, 0) / ms.length,
+      value: ms.reduce((a, m) => a + m.value, 0),
+      raw: ms.reduce((a, m) => a + m.raw, 0),
+      title: `${key} · ${ms[0].ref.name || ms[0].ref.stop || ''}`,
+      sub: `suma ${ms.length} przekrojów: ${ms.map((m) => m.id.slice(-1)).join(', ')}`,
+      ref: {
+        aggregate: true, id: key, members: ms.map((m) => m.ref),
+        name: ms[0].ref.name || ms[0].ref.stop || '',
+      },
+    }
+  })
+}
+
+/** Flat lookup so the map can find a selected marker without rescanning. */
+export const markerIndex = (markers) => {
+  const idx = {}
+  for (const [kind, list] of Object.entries(markers)) {
+    for (const m of list) idx[`${kind}:${m.id}`] = m
+  }
+  return idx
+}

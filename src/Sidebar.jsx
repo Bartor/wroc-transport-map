@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import {
   LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, HOUR_LABEL,
   coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES,
@@ -16,11 +16,78 @@ const COUNTS = {
   survey: (d) => d.survey.length,
 }
 
+
+/** Finding one street is the commonest action, so it stays pinned at the top
+ *  rather than behind a scroll through ten sections. */
+function Search({ data, onSelect }) {
+  const [q, setQ] = useState('')
+  const results = useMemo(() => {
+    const needle = q.trim().toLowerCase()
+    if (needle.length < 2) return []
+    const hit = (p) => [p.name, p.segment, p.stop, p.short, p.loc, p.id]
+      .some((f) => (f || '').toLowerCase().includes(needle))
+    const out = []
+    const add = (rows, kind, label, sub) => {
+      for (const p of rows) {
+        if (p.lat && hit(p)) out.push({ kind, id: p.id, ref: p, label: label(p), sub: sub(p) })
+      }
+    }
+    add(data.points, 'road', (p) => p.name, (p) => p.segment)
+    add(data.bike, 'bike', (p) => p.name, (p) => p.segment)
+    add(data.ped, 'ped', (p) => p.short || p.name, (p) => p.segment)
+    add(data.pt, 'pt', (p) => p.stop || p.name, (p) => p.loc)
+    return out.slice(0, 20)
+  }, [q, data])
+
+  return (
+    <div className="search">
+      <input type="text" value={q} aria-label="Szukaj punktu pomiarowego"
+        placeholder="Szukaj ulicy, przystanku, numeru…"
+        onChange={(e) => setQ(e.target.value)} />
+      {results.length > 0 && (
+        <ul className="search-results">
+          {results.map((r) => (
+            <li key={`${r.kind}:${r.id}`} role="button" tabIndex={0}
+              onClick={() => { onSelect({ kind: r.kind, id: r.id, ref: r.ref }); setQ('') }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onSelect({ kind: r.kind, id: r.id, ref: r.ref })
+                  setQ('')
+                }
+              }}>
+              <i className="swatch" style={{ background: LAYERS[r.kind].color }} />
+              <span>{r.label}</span><em>{r.sub}</em>
+            </li>
+          ))}
+        </ul>
+      )}
+      {q.trim().length >= 2 && !results.length && (
+        <p className="hint">Brak dopasowań.</p>
+      )}
+    </div>
+  )
+}
+
+function Collapsible({ title, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen)
+  return (
+    <section>
+      <button className="collapse-head" aria-expanded={open}
+        onClick={() => setOpen(!open)}>
+        <h2>{title}</h2>
+        <span className={open ? 'chevron open' : 'chevron'}>▾</span>
+      </button>
+      {open && <div className="collapse-body">{children}</div>}
+    </section>
+  )
+}
+
 export default function Sidebar({
   data, visible, setVisible, preset, setPreset, hour, setHour,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, setPeople, occupancy, setOccupancy,
-  net, setNet, basemap, setBasemap, sig, setSig, onSelect, selected,
+  net, setNet, basemap, setBasemap, sig, setSig, markers, onSelect, selected,
 }) {
   const catOrder = data.meta.vehCatOrder
   // layers whose measurement window does not cover the selected period
@@ -28,15 +95,14 @@ export default function Sidebar({
     .filter((k) => visible[k] && coverageGap(data.meta, k, hours))
   const netMeta = data[NET_MODES[net.mode].file]?.meta
 
-  // Top cross-sections for the current filter — the quick "where is it worst" list.
-  const top = useMemo(() => {
-    const cats = activeCats(metric, people)
-    return data.points
-      .filter((p) => p.lat && (!areas || areas.includes(p.area)))
-      .map((p) => ({ p, v: toPeople(roadVolume(data.roadById[p.id], { cats, hours }, catOrder), 'road', occupancy, people) }))
-      .sort((a, b) => b.v - a.v)
-      .slice(0, 12)
-  }, [data, metric, hours, areas, catOrder, people, occupancy])
+  // Top cross-sections for the current filter. These are the map's own marker
+  // objects, so selecting one always highlights the matching dot - including in
+  // aggregate mode, where this list used to carry cross-section ids the map no
+  // longer had.
+  const top = useMemo(
+    () => [...(markers.road || [])].sort((a, b) => b.value - a.value).slice(0, 12),
+    [markers],
+  )
 
   const totals = useMemo(() => {
     const cats = activeCats(metric, people)
@@ -60,6 +126,8 @@ export default function Sidebar({
         <p className="sub">Pomiary ruchu — przeglądarka map</p>
       </header>
 
+      <Search data={data} onSelect={onSelect} />
+
       <section>
         <h2>Okres</h2>
         <div className="chips">
@@ -78,17 +146,16 @@ export default function Sidebar({
         </label>
       </section>
 
-      <section>
-        <h2>Podkład</h2>
-        <select value={basemap} onChange={(e) => setBasemap(e.target.value)}>
+      <Collapsible title="Podkład">
+        <select value={basemap} aria-label="Podkład mapy"
+          onChange={(e) => setBasemap(e.target.value)}>
           {Object.entries(BASEMAPS).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
-      </section>
+      </Collapsible>
 
-      <section>
-        <h2>Porównywalność danych</h2>
+      <Collapsible title="Porównywalność danych">
         {gaps.length > 0 && !wholeDay && (
           <p className="warn">
             W wybranym okresie {gaps.map((g) => LAYERS[g].label.toLowerCase()).join(', ')}
@@ -119,10 +186,9 @@ export default function Sidebar({
           5–9 i 14–18), więc bez przeliczenia ich „doba” to w rzeczywistości
           8 godzin.
         </p>
-      </section>
+      </Collapsible>
 
-      <section>
-        <h2>Pojazdy czy ludzie</h2>
+      <Collapsible title="Pojazdy czy ludzie">
         <label className="row">
           <input type="checkbox" checked={people}
             onChange={() => setPeople(!people)} />
@@ -145,7 +211,7 @@ export default function Sidebar({
           </p>
         )}
         <p className="hint">{data.meta.carOccupancy.note}</p>
-      </section>
+      </Collapsible>
 
       <section>
         <h2>Sygnalizacja świetlna</h2>
@@ -157,7 +223,7 @@ export default function Sidebar({
         </label>
         {sig.on && data.signals && (
           <>
-            <select value={sig.filter}
+            <select value={sig.filter} aria-label="Filtr sygnalizacji"
               onChange={(e) => setSig({ ...sig, filter: e.target.value })}>
               {Object.entries(SIGNAL_FILTERS).map(([k, v]) => (
                 <option key={k} value={k}>{v.label}</option>
@@ -168,8 +234,14 @@ export default function Sidebar({
                 .filter(SIGNAL_FILTERS[sig.filter].test)
                 .slice(0, 12)
                 .map((s, i) => (
-                  <li key={i}
-                    onClick={() => onSelect({ kind: 'signal', id: `${s.lat},${s.lon}`, ref: s })}>
+                  <li key={i} role="button" tabIndex={0}
+                    onClick={() => onSelect({ kind: 'signal', id: `${s.lat},${s.lon}`, ref: s })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onSelect({ kind: 'signal', id: `${s.lat},${s.lon}`, ref: s })
+                      }
+                    }}>
                     <span>{s.streets.length ? s.streets.join(' × ') : 'bez nazwy'}</span>
                     <em>
                       {s.kind === 'crossing' ? 'przejście' : `${s.arms} wloty`}
@@ -201,7 +273,7 @@ export default function Sidebar({
         </label>
         {net.on && (
           <>
-            <select value={net.mode}
+            <select value={net.mode} aria-label="Co modelować"
               onChange={(e) => setNet({ ...net, mode: e.target.value })}>
               {Object.entries(NET_MODES).map(([k, v]) => (
                 <option key={k} value={k} disabled={!data[v.file]}>
@@ -255,8 +327,7 @@ export default function Sidebar({
         )}
       </section>
 
-      <section>
-        <h2>Punkty i przekroje</h2>
+      <Collapsible title="Punkty i przekroje">
         <label className="row">
           <input type="checkbox" checked={aggregate}
             onChange={() => setAggregate(!aggregate)} />
@@ -267,7 +338,7 @@ export default function Sidebar({
           wlot, jezdnia lub strona ulicy w tym samym miejscu. Włącz, żeby
           zobaczyć ruch całego punktu zamiast pojedynczego wlotu.
         </p>
-      </section>
+      </Collapsible>
 
       <section>
         <h2>Warstwy</h2>
@@ -282,13 +353,14 @@ export default function Sidebar({
         ))}
       </section>
 
-      <section>
-        <h2>Ruch drogowy — co liczyć</h2>
-        <select value={metric} onChange={(e) => setMetric(e.target.value)}>
+      <Collapsible title="Ruch drogowy — co liczyć">
+        <select value={metric} aria-label="Ruch drogowy — co liczyć"
+          onChange={(e) => setMetric(e.target.value)}>
           {Object.entries(ROAD_METRICS).map(([k, v]) => (
             <option key={k} value={k}>{v.label}</option>
           ))}
         </select>
+        <p className="hint">Poniższe obszary filtrują wyłącznie warstwę ruchu drogowego.</p>
         <div className="chips tight">
           {data.meta.areas.map((a) => {
             const on = !areas || areas.includes(a)
@@ -302,7 +374,7 @@ export default function Sidebar({
             )
           })}
         </div>
-      </section>
+      </Collapsible>
 
       <section className="totals">
         <h2>Suma — {period}</h2>
@@ -315,13 +387,19 @@ export default function Sidebar({
       <section>
         <h2>Najwyższe natężenia — {period}</h2>
         <ol className="top">
-          {top.map(({ p, v }) => (
-            <li key={p.id}
-              className={selected?.id === p.id ? 'on' : ''}
-              onClick={() => onSelect({ kind: 'road', id: p.id, ref: p })}>
-              <span>{p.name}</span>
-              <em>{p.segment}</em>
-              <b>{fmt(v)}</b>
+          {top.map((m) => (
+            <li key={m.id} role="button" tabIndex={0}
+              className={selected?.id === m.id ? 'on' : ''}
+              onClick={() => onSelect({ kind: 'road', id: m.id, ref: m.ref })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onSelect({ kind: 'road', id: m.id, ref: m.ref })
+                }
+              }}>
+              <span>{m.title}</span>
+              <em>{m.sub}</em>
+              <b>{fmt(m.value)}</b>
             </li>
           ))}
         </ol>
