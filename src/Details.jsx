@@ -1,10 +1,12 @@
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
+  PieChart, Pie,
 } from 'recharts'
 import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
-  activeCats, expand, toPeople, expansionOf, BASIS_LABEL,
+  activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
+  HOUR_LABEL as HL,
 } from './data'
 
 const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
@@ -88,11 +90,103 @@ const GEO_NOTE = {
   point: 'środek punktu pomiarowego',
 }
 
+/** Modal split of a node, in people, with the vehicles it came from. */
+function ModalSplit({ node, data, occupancy }) {
+  const { split } = node
+  const total = splitTotal(split)
+  const rows = split.slices.filter((s) => s.persons > 0 || s.vehicles > 0)
+  const hrs = [...split.hours].sort((a, b) => a - b)
+  const span = hrs.length
+    ? `${hrs.length} godz. (${HL(hrs[0])}–${HL((hrs.at(-1) + 1) % 24)})`
+    : 'brak'
+  const occ = data.transitOcc
+  return (
+    <div className="split">
+      <h4>Podział modalny — osoby</h4>
+      {!total ? (
+        <p className="hint">
+          Brak danych w wybranym okresie
+          {split.basis === 'transit' ? ' — pasażerów liczono tylko 5–9 i 14–18.' : '.'}
+        </p>
+      ) : (
+        <>
+          <div className="split-body">
+            <PieChart width={128} height={128}>
+              <Pie data={rows.map((s) => ({ name: s.label, v: s.persons }))} dataKey="v"
+                innerRadius={30} outerRadius={60} stroke="#1c1f26" isAnimationActive={false}>
+                {rows.map((s) => <Cell key={s.key} fill={s.color} />)}
+              </Pie>
+            </PieChart>
+            <table className="split-table">
+              <thead>
+                <tr><th /><th>{split.basis === 'transit' ? '' : 'pojazdy'}</th><th>osoby</th><th>%</th></tr>
+              </thead>
+              <tbody>
+                {[...rows].sort((a, b) => b.persons - a.persons).map((s) => (
+                  <tr key={s.key}>
+                    <td><i style={{ background: s.color }} />{s.label}</td>
+                    <td>{s.vehicles == null ? '' : fmt(s.vehicles)}</td>
+                    <td>{s.est ? fmtEst(s.persons) : fmt(s.persons)}</td>
+                    <td>{Math.round((100 * s.persons) / total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="hint">Liczone dla {span}.</p>
+        </>
+      )}
+      <ul className="split-notes">
+        {split.basis === 'measured' && (
+          <li>
+            Autobusy i tramwaje: pojazdy policzone na przekrojach drogowych ×
+            napełnienie zmierzone w punkcie KZ <b>{node.pair.title}</b>{' '}
+            ({node.pair.dist} m stąd): autobus {split.load.bus.toFixed(1)}
+            {split.local.bus ? '' : ' (średnia miejska)'}, tramwaj{' '}
+            {split.load.tram.toFixed(1)}{split.local.tram ? '' : ' (średnia miejska)'}{' '}
+            os./poj. Tylko godziny objęte oboma pomiarami. Surowej liczby
+            pasażerów z punktu KZ nie dodajemy, bo obejmuje on inne słupki
+            i wloty niż przekroje drogowe.
+          </li>
+        )}
+        {split.basis === 'estimate' && (
+          <li>
+            Autobusy i tramwaje: brak punktu pomiaru KZ w promieniu 150 m, więc
+            liczba pojazdów × średnie napełnienie z pomiarów KBR (autobus{' '}
+            {occ.bus.toFixed(1)}, tramwaj {occ.tram.toFixed(1)} os./poj.) — szacunek.
+          </li>
+        )}
+        {split.basis !== 'transit' && (
+          <>
+            <li>
+              Samochody osobowe × {occupancy.toFixed(2)} os./poj. — założenie
+              (suwak w „Pojazdy czy ludzie").
+            </li>
+            <li>
+              Dostawcze, ciężarowe, motocykle i mikrobusy liczone tylko
+              z kierowcą — dolne oszacowanie.
+            </li>
+            <li>Bez pieszych — KBR nie liczył ich na przekrojach drogowych.</li>
+          </>
+        )}
+        {split.basis === 'transit' && (
+          <li>
+            Węzeł bez przekroju drogowego w promieniu 150 m — widać tylko podział
+            między autobus i tramwaj.
+          </li>
+        )}
+      </ul>
+    </div>
+  )
+}
+
 export default function Details({
   data, sel, hours, metric, period, share, wholeDay, people, occupancy,
-  onSelect, onClose,
+  markers, onSelect, onClose,
 }) {
   const { kind, ref: p } = sel
+  // The drawn node carries the modal split and its transit partner, if any.
+  const node = markers ? markerIndex(markers)[`${kind}:${sel.id}`] : null
   const color = LAYERS[kind]?.color || '#f4a261'
   const catOrder = data.meta.vehCatOrder
 
@@ -145,7 +239,7 @@ export default function Details({
       </>
     )
   } else if (p.aggregate) {
-    const profs = p.members.map((m) => profileFor(data, kind, m, metric))
+    const profs = p.members.map((m) => shape(profileFor(data, kind, m, metric, people)))
     const total = addProfiles(profs)
     const bySection = Object.fromEntries(
       p.members.map((m, i) => [
@@ -160,10 +254,18 @@ export default function Details({
           <dt>Suma w okresie {period}</dt><dd>{fmt(sumHours(total, hours))}</dd>
           <dt>Suma dobowa</dt><dd>{fmt(total.reduce((a, b) => a + b, 0))}</dd>
         </dl>
-        <p className="hint">
-          Punkt pomiarowy widziany jako całość — przekroje A, B, C to osobne
-          wloty tego samego miejsca, więc ich pomiary się sumują.
-        </p>
+        {p.repeatsStreet ? (
+          <p className="warn">
+            Przekroje leżą na tej samej ulicy po obu stronach skrzyżowania, więc
+            pojazd jadący na wprost jest liczony dwa razy. Suma zawyża ruch przez
+            węzeł; udziały (%) w podziale modalnym pozostają porównywalne.
+          </p>
+        ) : (
+          <p className="hint">
+            Punkt pomiarowy widziany jako całość. Przekroje to różne ulice
+            przecinające linię pomiaru, więc ich suma to cały ruch przez tę linię.
+          </p>
+        )}
         <h4>Profil dobowy — cały punkt</h4>
         <Profile values={total} hours={hours} color={color} />
         <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
@@ -314,6 +416,7 @@ export default function Details({
         <button onClick={onClose}>×</button>
       </div>
       <div className="dbody">
+        {node?.split && <ModalSplit node={node} data={data} occupancy={occupancy} />}
         {body}
         {!p.aggregate && (
           <Sections data={data} kind={kind} p={p} onSelect={onSelect} />

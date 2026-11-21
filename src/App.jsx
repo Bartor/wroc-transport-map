@@ -24,6 +24,8 @@ export default function App() {
   const [net, setNet] = useState({ on: false, mode: 'road', min: 3000 })
   const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
   const [sig, setSig] = useState({ on: false, filter: 'candidates' })
+  // map labels: 'hover' (tooltip only), 'num' or 'pct' (always visible)
+  const [labels, setLabels] = useState({ mode: 'hover', declutter: true })
   const [selected, setSelected] = useState(null)
 
   useEffect(() => {
@@ -62,20 +64,20 @@ export default function App() {
         people={people} setPeople={setPeople}
         occupancy={occupancy} setOccupancy={setOccupancy}
         net={net} setNet={setNet} basemap={basemap} setBasemap={setBasemap}
-        sig={sig} setSig={setSig}
+        sig={sig} setSig={setSig} labels={labels} setLabels={setLabels}
         markers={markers} onSelect={setSelected} selected={selected}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
         areas={areas} period={period} aggregate={aggregate}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
-        basemap={basemap} sig={sig} markers={markers}
+        basemap={basemap} sig={sig} markers={markers} labels={labels}
         selected={selected} onSelect={setSelected}
       />
       {selected && (
         <Details data={data} sel={selected} hours={hours} metric={metric}
           period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
-          share={periodShare(data.meta, hours)}
+          share={periodShare(data.meta, hours)} markers={markers}
           onSelect={setSelected} onClose={() => setSelected(null)} />
       )}
     </div>

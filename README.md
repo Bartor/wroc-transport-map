@@ -209,6 +209,47 @@ Pomiary przekrojów są rozłączne, więc się sumują. Znaczniki leżące dok�
 na sobie są rozsuwane na mały okrąg (~20 m), a przełącznik „Sumuj przekroje do
 punktu pomiarowego" scala je w jeden znacznik z sumą całego punktu.
 
+## Podział modalny w węzłach
+
+Po włączeniu „Sumuj przekroje do punktu pomiarowego" każdy węzeł drogowy jest
+rysowany jako wykres kołowy podziału modalnego **w osobach**, bo o to chodzi
+w pytaniu o podział modalny — nie o pojazdy.
+
+Węzeł drogowy i punkt pomiaru komunikacji zbiorowej leżące do **150 m** od
+siebie łączą się w jeden znacznik (33 pary). Do tej odległości pary to to samo
+skrzyżowanie (Arkady ↔ Świdnicka 16 m, Dworzec Główny ↔ Kołłątaja 78 m,
+pl. Grunwaldzki 127 m); dalej zaczynają się łączyć różne ulice.
+
+Jak liczone są poszczególne kawałki:
+
+| Tryb | Skąd |
+|---|---|
+| Samochody osobowe | pojazdy z przekrojów × napełnienie z suwaka — założenie |
+| Autobusy, tramwaje | pojazdy z przekrojów × napełnienie zmierzone w sparowanym punkcie KZ; bez pary — średnia miejska z pomiarów KBR (autobus 30,6, tramwaj 62,4 os./poj.) |
+| Rowery i hulajnogi | policzeni na jezdni i obok niej — pomiar |
+| Dostawcze, ciężarowe, motocykle, mikrobusy | tylko kierowca — dolne oszacowanie |
+| Piesi | brak — nie liczono ich na przekrojach drogowych |
+
+Dwie rzeczy, które łatwo zrobić źle:
+
+* **Nie dodajemy surowej liczby pasażerów z punktu KZ.** Oba badania obejmują
+  inne słupki i wloty — na Dworcu Głównym punkt KZ ma 8 przekrojów na trzech
+  ulicach, a węzeł drogowy 4 przekroje. Strumień definiują przekroje drogowe
+  (liczą autobusy i tramwaje jako pojazdy), a punkt KZ dostarcza tylko tego,
+  jak bardzo te pojazdy są zapełnione.
+* **Tylko godziny wspólne.** Pasażerów liczono 5–9 i 14–18, ruch drogowy całą
+  dobę. Para jest liczona wyłącznie dla godzin objętych oboma pomiarami
+  w wybranym okresie, a dymek i panel podają, które to godziny.
+
+W 10 z 53 węzłów wieloprzekrojowych przekroje leżą na tej samej ulicy po obu
+stronach skrzyżowania (np. PR_01 Kazimierza Wielkiego). Tam pojazd jadący na
+wprost jest liczony dwa razy: suma zawyża ruch przez węzeł, udziały pozostają
+porównywalne. Dymek i panel to sygnalizują.
+
+Etykiety na mapie można włączyć na stałe — jako liczby (#) albo udziały (%).
+Przy oddaleniu nakładające się etykiety są ukrywane, większe węzły mają
+pierwszeństwo; można to wyłączyć.
+
 ## Uwaga o położeniu punktów
 
 Tylko wykaz przekrojów drogowych (Zał. 3.3) zawiera współrzędne. Punkty

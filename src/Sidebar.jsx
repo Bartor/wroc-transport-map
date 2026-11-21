@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, HOUR_LABEL,
-  coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES,
+  coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES, resolveTarget,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
 import { SIGNAL_FILTERS } from './SignalsLayer'
@@ -19,7 +19,7 @@ const COUNTS = {
 
 /** Finding one street is the commonest action, so it stays pinned at the top
  *  rather than behind a scroll through ten sections. */
-function Search({ data, onSelect }) {
+function Search({ data, markers, onSelect }) {
   const [q, setQ] = useState('')
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -48,11 +48,11 @@ function Search({ data, onSelect }) {
         <ul className="search-results">
           {results.map((r) => (
             <li key={`${r.kind}:${r.id}`} role="button" tabIndex={0}
-              onClick={() => { onSelect({ kind: r.kind, id: r.id, ref: r.ref }); setQ('') }}
+              onClick={() => { onSelect(resolveTarget(markers, r.kind, r.ref)); setQ('') }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  onSelect({ kind: r.kind, id: r.id, ref: r.ref })
+                  onSelect(resolveTarget(markers, r.kind, r.ref))
                   setQ('')
                 }
               }}>
@@ -87,7 +87,8 @@ export default function Sidebar({
   data, visible, setVisible, preset, setPreset, hour, setHour,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, setPeople, occupancy, setOccupancy,
-  net, setNet, basemap, setBasemap, sig, setSig, markers, onSelect, selected,
+  net, setNet, basemap, setBasemap, sig, setSig, labels, setLabels,
+  markers, onSelect, selected,
 }) {
   const catOrder = data.meta.vehCatOrder
   // layers whose measurement window does not cover the selected period
@@ -126,7 +127,7 @@ export default function Sidebar({
         <p className="sub">Pomiary ruchu — przeglądarka map</p>
       </header>
 
-      <Search data={data} onSelect={onSelect} />
+      <Search data={data} markers={markers} onSelect={onSelect} />
 
       <section>
         <h2>Okres</h2>
@@ -194,7 +195,7 @@ export default function Sidebar({
             onChange={() => setPeople(!people)} />
           <span>Przeliczaj samochody na osoby</span>
         </label>
-        {people && (
+        {(people || aggregate) && (
           <label className="slider">
             <span>Napełnienie samochodu: {occupancy?.toFixed(2)} os./poj.</span>
             <input type="range" min={data.meta.carOccupancy.min * 100}
@@ -336,7 +337,15 @@ export default function Sidebar({
         <p className="hint">
           Litera w numerze (KW_08<b>A</b>, KW_08<b>B</b>) to przekrój — osobny
           wlot, jezdnia lub strona ulicy w tym samym miejscu. Włącz, żeby
-          zobaczyć ruch całego punktu zamiast pojedynczego wlotu.
+          zobaczyć ruch całego punktu zamiast pojedynczego wlotu. W 10 węzłach
+          przekroje leżą po obu stronach jednego skrzyżowania — tam suma liczy
+          jadących na wprost podwójnie, co sygnalizuje ostrzeżenie w dymku.
+        </p>
+        <p className="hint">
+          W tym trybie węzły drogowe są rysowane jako wykres kołowy podziału
+          modalnego w osobach. Węzeł drogowy i punkt pomiaru komunikacji
+          zbiorowej leżące do 150 m od siebie łączą się w jeden — wtedy
+          pasażerowie autobusów i tramwajów są zmierzeni, a nie szacowani.
         </p>
       </Collapsible>
 
@@ -351,6 +360,37 @@ export default function Sidebar({
             <b>{COUNTS[k](data)}</b>
           </label>
         ))}
+        <label className="field">
+          <span>Etykiety na mapie</span>
+          <select value={labels.mode} aria-label="Etykiety na mapie"
+            onChange={(e) => setLabels({ ...labels, mode: e.target.value })}>
+            <option value="hover">Tylko po najechaniu</option>
+            <option value="num">Zawsze — liczby (#)</option>
+            <option value="pct">Zawsze — udziały (%)</option>
+          </select>
+        </label>
+        {labels.mode !== 'hover' && (
+          <label className="row">
+            <input type="checkbox" checked={labels.declutter}
+              onChange={() => setLabels({ ...labels, declutter: !labels.declutter })} />
+            <span>Ukrywaj nakładające się etykiety</span>
+          </label>
+        )}
+        {labels.mode === 'pct' && !aggregate && (
+          <p className="hint">
+            Udziały opisują podział modalny, który liczony jest dla całych
+            węzłów.{' '}
+            <button className="link" onClick={() => setAggregate(true)}>
+              Włącz sumowanie przekrojów
+            </button>
+          </p>
+        )}
+        {labels.mode !== 'hover' && labels.declutter && (
+          <p className="hint">
+            Przy oddaleniu część etykiet jest ukryta, żeby się nie nakładały —
+            przybliż mapę, aby zobaczyć więcej.
+          </p>
+        )}
       </section>
 
       <Collapsible title="Ruch drogowy — co liczyć">

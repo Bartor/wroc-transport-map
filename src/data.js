@@ -18,6 +18,7 @@ export async function loadAll() {
     fetch(`data/${f}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)))
   OPTIONAL.forEach((f, i) => { d[f] = opt[i] })
   d.roadById = d.road.sections
+  d.transitOcc = transitOccupancy(d.pt)
   return d
 }
 
@@ -90,9 +91,9 @@ export const sumHours = (profile, hours) => hours.reduce((a, h) => a + (profile[
 
 /** 24-value hourly profile for any layer, so points and cross-sections can be
  *  summed the same way. */
-export function profileFor(data, kind, p, metric) {
+export function profileFor(data, kind, p, metric, people = false) {
   if (kind === 'road') {
-    return roadProfile(data.roadById[p.id], { cats: ROAD_METRICS[metric].cats },
+    return roadProfile(data.roadById[p.id], { cats: activeCats(metric, people) },
       data.meta.vehCatOrder)
   }
   if (kind === 'pt' || kind === 'rail') {
@@ -264,8 +265,12 @@ export function buildMarkers(data, {
 }) {
   const catOrder = data.meta.vehCatOrder
   const out = {}
+  // In node mode a road pie takes its bus and tram passengers from the transit
+  // node next to it, so the transit nodes are needed even when that layer is
+  // hidden - otherwise the same pie would change composition with a checkbox.
+  const want = aggregate && visible.road ? { ...visible, pt: true } : visible
 
-  if (visible.road) {
+  if (want.road) {
     const cats = activeCats(metric, people)
     out.road = data.points
       .filter((p) => p.lat && (!areas || areas.includes(p.area)))
@@ -275,28 +280,28 @@ export function buildMarkers(data, {
         title: `${p.id} · ${p.name}`, sub: sectionOf('road', p),
       }))
   }
-  if (visible.pt) {
+  if (want.pt) {
     out.pt = data.pt.filter((p) => p.lat).map((p) => ({
       id: p.id, lat: p.lat, lon: p.lon, kind: 'pt', ref: p,
       value: Object.values(p.byHour).reduce((a, arr) => a + sumHours(arr, hours), 0),
       title: `${p.id} · ${p.stop || p.name}`, sub: sectionOf('pt', p),
     }))
   }
-  if (visible.bike) {
+  if (want.bike) {
     out.bike = data.bike.filter((p) => p.lat).map((p) => ({
       id: p.id, lat: p.lat, lon: p.lon, kind: 'bike', ref: p,
       value: sumHours(p.byHour, hours),
       title: `${p.id} · ${p.name}`, sub: sectionOf('bike', p),
     }))
   }
-  if (visible.ped) {
+  if (want.ped) {
     out.ped = data.ped.filter((p) => p.lat).map((p) => ({
       id: p.id, lat: p.lat, lon: p.lon, kind: 'ped', ref: p,
       value: sumHours(p.byHour, hours),
       title: `${p.id} · ${p.short || p.name}`, sub: sectionOf('ped', p),
     }))
   }
-  if (visible.rail) {
+  if (want.rail) {
     out.rail = data.rail.filter((p) => p.lat).map((p) => ({
       id: p.id, lat: p.lat, lon: p.lon, kind: 'rail', ref: p,
       value: Object.values(p.byHour).reduce((a, arr) => a + sumHours(arr, hours), 0),
@@ -309,8 +314,14 @@ export function buildMarkers(data, {
       m.value = toPeople(expand(data.meta, k, m.value, wholeDay), k, occupancy, people)
     }
     if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k])
-    spread(out[k])
   }
+  if (aggregate) {
+    attachSplits(data, out, {
+      hours, occupancy: occupancy ?? data.meta.carOccupancy.default, pair: !!visible.road,
+    })
+  }
+  if (!visible.pt) delete out.pt
+  for (const k of Object.keys(out)) spread(out[k])
   return out
 }
 
@@ -336,9 +347,34 @@ function mergeToPoints(kind, list) {
       ref: {
         aggregate: true, id: key, members: ms.map((m) => m.ref),
         name: ms[0].ref.name || ms[0].ref.stop || '',
+        // Usually a node's sections are different streets crossing a survey
+        // line, and their sum is the traffic across it. In 10 nodes they are
+        // the same street either side of a junction, where a vehicle going
+        // straight on is counted on both - the sum overstates, shares do not.
+        repeatsStreet: kind === 'road'
+          && new Set(ms.map((m) => m.ref.name)).size < ms.length,
       },
     }
   })
+}
+
+/** The drawn marker that contains a given point.
+ *
+ *  Search works on raw records, but in node mode the map draws nodes: R1_06A is
+ *  inside R1_06, and a transit node paired with a road node is inside that
+ *  road's pie. Selecting the raw id would highlight nothing and lose the split.
+ */
+export function resolveTarget(markers, kind, ref) {
+  const list = markers[kind] || []
+  const m = list.find((x) => x.id === ref.id)
+    || list.find((x) => x.ref.aggregate && x.ref.members.some((r) => r.id === ref.id))
+  if (m) return { kind, id: m.id, ref: m.ref }
+  if (kind === 'pt') {
+    const host = (markers.road || []).find((x) => x.pair
+      && (x.pair.id === ref.id || x.pair.id === ref.point))
+    if (host) return { kind: 'road', id: host.id, ref: host.ref }
+  }
+  return { kind, id: ref.id, ref }
 }
 
 /** Flat lookup so the map can find a selected marker without rescanning. */
@@ -349,3 +385,196 @@ export const markerIndex = (markers) => {
   }
   return idx
 }
+
+// ------------------------------------------------------------- modal split
+// What moves through a node, in people. The road survey counts vehicles by
+// category; people are what the modal-split question is about.
+export const MODES = [
+  { key: 'car', label: 'Samochody osobowe', color: '#e4572e', cats: ['d'] },
+  { key: 'goods', label: 'Dostawcze i ciężarowe', color: '#b07a4f', cats: ['e', 'f', 'g', 'h'] },
+  { key: 'bus', label: 'Autobusy', color: '#2e86ab', cats: ['j'] },
+  { key: 'tram', label: 'Tramwaje', color: '#4cc9f0', cats: ['k'] },
+  { key: 'bike', label: 'Rowery i hulajnogi', color: '#3fa34d',
+    cats: ['a1', 'a2', 'b1', 'b2'], off: ['a3', 'a4', 'b3', 'b4'] },
+  { key: 'other', label: 'Inne (motocykle, mikrobusy)', color: '#8d99ae', cats: ['c', 'i', 'l'] },
+]
+const MODE = Object.fromEntries(MODES.map((m) => [m.key, m]))
+
+// Road and transit nodes are numbered independently, so they are paired by
+// distance. Up to 150 m the pairs are the same junction (Arkady/Swidnicka 16 m,
+// Dworzec/Kollataja 78 m, pl. Grunwaldzki 127 m); past it they start matching
+// a different street.
+export const PAIR_RADIUS = 150
+
+/** Measured passengers per vehicle, by mode, from the transit survey (6.4). */
+function transitOccupancy(pt) {
+  const pax = { bus: 0, tram: 0 }
+  const veh = { bus: 0, tram: 0 }
+  for (const p of pt) {
+    for (const [t, arr] of Object.entries(p.byHour || {})) {
+      pax[t === 'tramwaj' ? 'tram' : 'bus'] += arr.reduce((a, b) => a + b, 0)
+    }
+    for (const [t, arr] of Object.entries(p.vehByHour || {})) {
+      veh[t === 'tramwaj' ? 'tram' : 'bus'] += arr.reduce((a, b) => a + b, 0)
+    }
+  }
+  return { bus: pax.bus / Math.max(1, veh.bus), tram: pax.tram / Math.max(1, veh.tram) }
+}
+
+export function metres(a, b) {
+  const R = 6371000
+  const p1 = (a.lat * Math.PI) / 180
+  const p2 = (b.lat * Math.PI) / 180
+  const dl = ((b.lon - a.lon) * Math.PI) / 180
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dl / 2) ** 2
+  return 2 * R * Math.asin(Math.sqrt(h))
+}
+
+const membersOf = (m) => (m.ref.aggregate ? m.ref.members : [m.ref])
+
+function roadCounts(data, ids, hours) {
+  const ci = Object.fromEntries(data.meta.vehCatOrder.map((c, i) => [c, i]))
+  const oi = Object.fromEntries(data.meta.offCatOrder.map((c, i) => [c, i]))
+  const v = Object.fromEntries(MODES.map((m) => [m.key, 0]))
+  for (const id of ids) {
+    const s = data.roadById[id]
+    if (!s) continue
+    for (const dd of Object.values(s.dirs)) {
+      for (const h of hours) {
+        const row = dd.h[h]
+        if (!row) continue
+        for (const m of MODES) for (const c of m.cats) v[m.key] += row[ci[c]] || 0
+      }
+    }
+    for (const rows of Object.values(s.off || {})) {
+      for (const h of hours) {
+        const row = rows[h]
+        if (!row) continue
+        for (const c of MODE.bike.off) v.bike += row[oi[c]] || 0
+      }
+    }
+  }
+  return v
+}
+
+const roadHasHour = (data, ids, h) => ids.some((id) => {
+  const s = data.roadById[id]
+  return s && Object.values(s.dirs).some((dd) => (dd.h[h] || []).some((x) => x > 0))
+})
+
+function transitSum(refs, hours, field) {
+  const out = { bus: 0, tram: 0 }
+  for (const r of refs) {
+    for (const [t, arr] of Object.entries(r[field] || {})) {
+      out[t === 'tramwaj' ? 'tram' : 'bus'] += hours.reduce((a, h) => a + (arr[h] || 0), 0)
+    }
+  }
+  return out
+}
+const transitPax = (refs, hours) => transitSum(refs, hours, 'byHour')
+const transitVeh = (refs, hours) => transitSum(refs, hours, 'vehByHour')
+
+/**
+ * Modal split at a node, in people.
+ *
+ * Cars use the occupancy slider (an assumption). Buses and trams are the
+ * vehicles counted on the road cross-sections, times the load per vehicle
+ * measured at the paired transit node - or the city-wide measured average
+ * where there is no partner.
+ *
+ * Adding the partner's raw passenger count instead would be wrong: the two
+ * surveys cover different stop poles and approaches. Dworzec Glowny's transit
+ * node spans 8 stop sections across three streets while the road node next to
+ * it has 4 cross-sections, so raw passengers put trams at 48% of everyone. The
+ * road sections define the stream; the transit node only supplies how full
+ * the vehicles in it are. Vans,
+ * lorries, motorbikes and minibuses count their driver only - a lower bound,
+ * since their occupancy was never surveyed. Pedestrians are absent: the road
+ * survey did not count them.
+ *
+ * A paired split uses only the hours both surveys covered. The transit survey
+ * ran 5-9 and 14-18; mixing it with an all-day car count would overstate cars.
+ */
+export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
+  const ptWin = data.meta.windows?.pt || []
+  const occ = data.transitOcc
+  const mk = (key, vehicles, persons, est) => ({ ...MODE[key], vehicles, persons, est })
+
+  if (!roadIds.length) {
+    const hrs = hours.filter((h) => ptWin.includes(h))
+    const pax = transitPax(ptRefs, hrs)
+    return {
+      basis: 'transit', hours: hrs,
+      slices: [mk('bus', null, pax.bus, false), mk('tram', null, pax.tram, false)],
+    }
+  }
+
+  let hrs = hours
+  let measured = false
+  if (ptRefs?.length) {
+    const common = hours.filter((h) => ptWin.includes(h) && roadHasHour(data, roadIds, h))
+    if (common.length) { hrs = common; measured = true }
+  }
+  const v = roadCounts(data, roadIds, hrs)
+  // Local load per vehicle where the partner saw that mode, else city average.
+  const load = { ...occ }
+  const local = { bus: false, tram: false }
+  if (measured) {
+    const pax = transitPax(ptRefs, hrs)
+    const veh = transitVeh(ptRefs, hrs)
+    for (const k of ['bus', 'tram']) {
+      if (veh[k] > 0) { load[k] = pax[k] / veh[k]; local[k] = true }
+    }
+  }
+  return {
+    basis: measured ? 'measured' : 'estimate', hours: hrs, load, local,
+    slices: [
+      mk('car', v.car, v.car * occupancy, true),
+      mk('goods', v.goods, v.goods, true),
+      mk('bus', v.bus, v.bus * load.bus, !local.bus),
+      mk('tram', v.tram, v.tram * load.tram, !local.tram),
+      mk('bike', v.bike, v.bike, false),
+      mk('other', v.other, v.other, true),
+    ],
+  }
+}
+
+/** Pair road and transit nodes, give every node its split, and drop transit
+ *  nodes that now live inside a road pie. */
+function attachSplits(data, out, { hours, occupancy, pair }) {
+  const road = out.road || []
+  const pt = out.pt || []
+  const partner = new Map()
+  const used = new Set()
+  if (pair) {
+    const cand = []
+    for (const r of road) {
+      for (const p of pt) {
+        const d = metres(r, p)
+        if (d <= PAIR_RADIUS) cand.push([d, r, p])
+      }
+    }
+    cand.sort((x, y) => x[0] - y[0])
+    for (const [d, r, p] of cand) {            // nearest first, one partner each
+      if (partner.has(r) || used.has(p)) continue
+      partner.set(r, { m: p, d })
+      used.add(p)
+    }
+  }
+  for (const r of road) {
+    const pr = partner.get(r)
+    r.split = nodeSplit(data, {
+      roadIds: membersOf(r).map((x) => x.id),
+      ptRefs: pr ? membersOf(pr.m) : null, hours, occupancy,
+    })
+    if (pr) r.pair = { id: pr.m.id, title: pr.m.title, dist: Math.round(pr.d) }
+  }
+  for (const p of pt) {
+    if (!used.has(p)) {
+      p.split = nodeSplit(data, { roadIds: [], ptRefs: membersOf(p), hours, occupancy })
+    }
+  }
+  if (out.pt) out.pt = pt.filter((p) => !used.has(p))
+}
+
+export const splitTotal = (split) => split.slices.reduce((a, s) => a + s.persons, 0)
