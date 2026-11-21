@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
 import {
-  LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, HOUR_LABEL,
+  LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, sameRange,
   coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES, resolveTarget,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
 import { SIGNAL_FILTERS } from './SignalsLayer'
 import { BASEMAPS } from './basemaps'
+import HourRange from './HourRange'
 
 const COUNTS = {
   road: (d) => d.points.length,
@@ -171,7 +172,7 @@ function Search({ data, markers, onSelect }) {
 // ----------------------------------------------------------------------- sidebar
 
 export default function Sidebar({
-  data, visible, setVisible, preset, setPreset, hour, setHour,
+  data, visible, setVisible, range, setRange,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, setPeople, occupancy, setOccupancy,
   net, setNet, basemap, setBasemap, sig, setSig, labels, setLabels,
@@ -221,29 +222,19 @@ export default function Sidebar({
       <Panel title="Okres" help={(
         <p>
           Wszystkie liczby na mapie to sumy z wybranego okresu, nie wartości
-          na godzinę. Suwak wybiera jedną godzinę zamiast okresu.
+          na godzinę. Przyciski to gotowe okresy; suwak ustawia dowolny —
+          przeciągnij uchwyty albo kliknij pasek. Początek za końcem oznacza
+          okres przez północ.
         </p>
       )}>
         <div className="chips">
           {Object.entries(PRESETS).map(([k, v]) => (
             <button key={k} type="button"
-              className={hour == null && preset === k ? 'chip on' : 'chip'}
-              onClick={() => { setPreset(k); setHour(null) }}>{v.label}</button>
+              className={sameRange(range, v.range) ? 'chip on' : 'chip'}
+              onClick={() => setRange(v.range)}>{v.label}</button>
           ))}
         </div>
-        <label className="slider">
-          <span>
-            {hour == null ? 'Albo jedna godzina' : `Godzina ${HOUR_LABEL(hour)}`}
-            {hour != null && (
-              <button type="button" className="link" onClick={() => setHour(null)}>
-                wróć do okresu
-              </button>
-            )}
-          </span>
-          <Range min="0" max="23" value={hour ?? 8} idle={hour == null}
-            ticks={[0, 6, 12, 18, 23]} aria-label="Jedna godzina"
-            onChange={(e) => setHour(Number(e.target.value))} />
-        </label>
+        <HourRange data={data} visible={visible} range={range} setRange={setRange} />
       </Panel>
 
       <Panel title="Co pokazać">

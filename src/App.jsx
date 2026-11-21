@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  loadAll, LAYERS, ROAD_METRICS, PRESETS, periodLabel, periodShare, buildMarkers,
+  loadAll, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, hoursOf, periodShare, buildMarkers,
 } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
@@ -14,8 +14,7 @@ export default function App() {
   const [visible, setVisible] = useState({
     road: true, pt: true, bike: false, ped: false, rail: false, survey: false,
   })
-  const [preset, setPreset] = useState('am')
-  const [hour, setHour] = useState(null) // single hour overrides the preset
+  const [range, setRange] = useState(PRESETS.am.range) // [from, to) hours, may wrap
   const [metric, setMetric] = useState('all')
   const [areas, setAreas] = useState(null) // null = all
   const [aggregate, setAggregate] = useState(true)     // nodes as modal-split pies
@@ -37,10 +36,10 @@ export default function App() {
   }, [])
 
   const hours = useMemo(
-    () => (hour == null ? PRESETS[preset].hours : [hour]),
-    [preset, hour],
+    () => hoursOf(range),
+    [range],
   )
-  const period = periodLabel(preset, hour)
+  const period = rangeLabel(range)
 
   // One marker list for the map and the sidebar, so a click in either always
   // refers to the same object.
@@ -58,7 +57,7 @@ export default function App() {
     <div className="app">
       <Sidebar
         data={data} visible={visible} setVisible={setVisible}
-        preset={preset} setPreset={setPreset} hour={hour} setHour={setHour}
+        range={range} setRange={setRange}
         metric={metric} setMetric={setMetric} areas={areas} setAreas={setAreas}
         hours={hours} period={period} aggregate={aggregate} setAggregate={setAggregate}
         wholeDay={wholeDay} setWholeDay={setWholeDay}

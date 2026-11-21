@@ -460,3 +460,38 @@ select {
   content: ''; position: absolute; left: 50%; top: -5px; width: 1px; height: 4px;
   background: #4a5263;
 }
+
+/* ------------------------------------------------------ hour range control */
+.hour-range { margin-top: .8rem; }
+.hr-head { font-size: .84rem; color: #c3c9d4; margin-bottom: .45rem; font-variant-numeric: tabular-nums; }
+.hr-body { padding: 0 9px; }               /* room for the thumbs at 0 and 24 */
+.hr-track {
+  position: relative; height: 6px; border-radius: 999px; background: #343a47;
+  cursor: pointer; touch-action: none; margin: 8px 0;
+}
+.hr-track::before {                        /* bigger hit area than the 6px bar */
+  content: ''; position: absolute; left: -9px; right: -9px; top: -9px; bottom: -9px;
+}
+.hr-fill { position: absolute; top: 0; bottom: 0; background: #4a6ea9; border-radius: 999px; }
+.hr-thumb {
+  position: absolute; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  border-radius: 50%; background: #fff; border: 3px solid #4a6ea9;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .55); cursor: grab; touch-action: none;
+  transition: transform .1s, box-shadow .1s; z-index: 1;
+}
+.hr-thumb:hover { transform: scale(1.12); }
+.hr-thumb:active { cursor: grabbing; }
+.hr-thumb:focus-visible { outline: none; box-shadow: 0 0 0 4px rgba(122, 162, 227, .45); }
+
+/* measurement-coverage bands, one per visible layer */
+.hr-bands { margin-top: 10px; display: flex; flex-direction: column; gap: 3px; }
+.hr-band { position: relative; height: 5px; border-radius: 2px; background: #23272f; }
+.hr-band i { position: absolute; top: 0; bottom: 0; opacity: .35; }
+.hr-band i.in { opacity: 1; }              /* inside the selected range */
+
+.hr-ticks { position: relative; height: 1rem; margin-top: 5px; }
+.hr-ticks span {
+  position: absolute; transform: translateX(-50%);
+  font-size: .66rem; color: #6b7385; font-variant-numeric: tabular-nums;
+}
+.hr-legend { margin: .35rem 0 0; font-size: .7rem; color: #6b7385; line-height: 1.4; }

@@ -21,6 +21,7 @@ export async function loadAll() {
   OPTIONAL.forEach((f, i) => { d[f] = opt[i] })
   d.roadById = d.road.sections
   d.transitOcc = transitOccupancy(d.pt)
+  d.roadCoverage = roadCoverage(d.road)
   return d
 }
 
@@ -35,14 +36,34 @@ export const LAYERS = {
   survey: { label: 'Adresy z próby ankietowej', color: '#8d99ae', unit: 'adresów' },
 }
 
-const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i)
-
+// A period is a range of hour boundaries [from, to), 0..24. from > to wraps
+// over midnight. The presets are just named ranges on the same control.
 export const PRESETS = {
-  day: { label: 'Cała doba', hours: ALL_HOURS },
-  am: { label: 'Szczyt poranny 7–9', hours: [7, 8] },
-  pm: { label: 'Szczyt popołudniowy 15–17', hours: [15, 16] },
-  midday: { label: 'Międzyszczyt 10–14', hours: [10, 11, 12, 13] },
-  night: { label: 'Noc 22–5', hours: [22, 23, 0, 1, 2, 3, 4, 5] },
+  day: { label: 'Cała doba', range: [0, 24] },
+  am: { label: 'Szczyt poranny 7–9', range: [7, 9] },
+  pm: { label: 'Szczyt popołudniowy 15–17', range: [15, 17] },
+  midday: { label: 'Międzyszczyt 10–14', range: [10, 14] },
+  night: { label: 'Noc 22–6', range: [22, 6] },
+}
+
+export function hoursOf([from, to]) {
+  const out = []
+  if (from < to) for (let h = from; h < to; h++) out.push(h)
+  else {
+    for (let h = from; h < 24; h++) out.push(h)
+    for (let h = 0; h < to; h++) out.push(h)
+  }
+  return out
+}
+
+export const sameRange = (a, b) => a[0] === b[0] && a[1] === b[1]
+
+/** Road counts per hour: the share of cross-sections with any count. Most ran
+ *  5-21, some round the clock, so night hours rest on a fifth of the sites. */
+function roadCoverage(road) {
+  const secs = Object.values(road.sections)
+  return Array.from({ length: 24 }, (_, h) => secs.filter((s) =>
+    Object.values(s.dirs).some((d) => (d.h[h] || []).some((v) => v > 0))).length / secs.length)
 }
 
 // Road metric = which vehicle categories to count.
@@ -249,9 +270,11 @@ export const MODEL_WINDOW = [6, 7, 8, 9, 15, 16, 17, 18]
 export const HOUR_LABEL = (h) => `${String(h).padStart(2, '0')}:00`
 
 /** What the numbers on the map are summed over, for labelling. */
-export function periodLabel(preset, hour) {
-  if (hour != null) return `${HOUR_LABEL(hour)}–${HOUR_LABEL((hour + 1) % 24)}`
-  return PRESETS[preset].label.toLowerCase()
+export function rangeLabel(range) {
+  const named = Object.values(PRESETS).find((p) => sameRange(p.range, range))
+  if (named) return named.label.toLowerCase()
+  const end = range[1] === 24 ? '24:00' : HOUR_LABEL(range[1])
+  return `${HOUR_LABEL(range[0])}–${end}`
 }
 
 /** One marker per drawn point: position, the value that sizes it, and what to
