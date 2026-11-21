@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- A node pie: tram, bus and car shares, in the map's own colours. -->
+  <rect width="64" height="64" rx="14" fill="#14161a"/>
+  <path d="M32 32 L32 9 A23 23 0 0 1 32 55 Z" fill="#4cc9f0"/>
+  <path d="M32 32 L32 55 A23 23 0 0 1 10.13 24.89 Z" fill="#2e86ab"/>
+  <path d="M32 32 L10.13 24.89 A23 23 0 0 1 32 9 Z" fill="#e4572e"/>
+  <g stroke="#14161a" stroke-width="2" stroke-linecap="round">
+    <line x1="32" y1="32" x2="32" y2="9"/>
+    <line x1="32" y1="32" x2="32" y2="55"/>
+    <line x1="32" y1="32" x2="10.13" y2="24.89"/>
+  </g>
+</svg>
