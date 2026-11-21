@@ -513,13 +513,15 @@ export default function Details({
     period,
     accent: split ? '#e4572e' : color,
     split, pair: node?.pair, repeats: !!p.repeatsStreet,
-    occupancy, occupancyDefault: data.meta.carOccupancy.default, occ: data.transitOcc,
+    occupancy, occupancyDefault: data.meta.carOccupancy.default,
+    occupancyQuote: data.meta.carOccupancy.value, occ: data.transitOcc,
     big: cardBig,
     profile: cardProfile ? { values: cardProfile, hours, color } : null,
     notes: cardNotes,
     source: split
       ? (split.basis === 'transit' ? SOURCE_TEXT.pt
-        : `${KBR}: zał. 3.3 (ruch drogowy) i zał. 6.4 (potoki pasażerskie).`)
+        : `${KBR}: zał. 3.3 (ruch drogowy), zał. 6.4 (potoki pasażerskie), `
+          + 'zał. 2.2 do Raportu II (napełnienie samochodów) — bip.um.wroc.pl.')
       : SOURCE_TEXT[kind] || KBR,
   }
 

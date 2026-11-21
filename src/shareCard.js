@@ -74,10 +74,15 @@ export function splitNotes(spec) {
     n.push('Tylko pasażerowie autobusów i tramwajów — w pobliżu brak przekroju drogowego.')
   }
   if (split.basis !== 'transit') {
-    const occSource = Math.abs(occupancy - occupancyDefault) < 1e-9
-      ? 'KBR 2024, badanie ankietowe (zał. 2.2)'
-      : 'wartość ustawiona ręcznie'
-    n.push(`Samochody osobowe × ${occupancy.toFixed(2)} os./poj. — ${occSource}. Dostawcze, `
+    // The occupancy is a cited number, so the card carries the citation: a
+    // picture pasted elsewhere loses the app's "?" explanations.
+    const cited = Math.abs(occupancy - occupancyDefault) < 1e-9
+    const occSource = cited
+      ? `KBR Wrocław 2024 podaje średnio ${spec.occupancyQuote || '1,207'} os. w samochodzie `
+        + '(„Średnia liczba osób w samochodzie”, zał. 2.2 do Raportu II; podróże, w których '
+        + 'respondenci byli kierowcami samochodu, dni robocze)'
+      : `wartość ustawiona ręcznie; KBR Wrocław 2024 podaje ${spec.occupancyQuote || '1,207'}`
+    n.push(`Samochody osobowe × ${occupancy.toFixed(2).replace('.', ',')} os./poj. — ${occSource}. Dostawcze, `
       + 'ciężarowe, motocykle i mikrobusy: tylko kierowca. Bez pieszych — nie liczono ich '
       + 'na przekrojach drogowych.')
   }

@@ -92,6 +92,31 @@ function Field({ label, help, children }) {
   )
 }
 
+/** A styled range input. The filled part of the track is drawn from --pct,
+ *  since only Firefox can style a range's progress natively. `idle` greys it
+ *  out for a control that is present but not currently in effect. */
+function Range({ value, min, max, idle, ticks, ...rest }) {
+  const lo = Number(min)
+  const hi = Number(max)
+  const pct = hi > lo ? ((Number(value) - lo) / (hi - lo)) * 100 : 0
+  return (
+    <div className={idle ? 'range-wrap idle' : 'range-wrap'}>
+      <input type="range" className="range" value={value} min={min} max={max}
+        style={{ '--pct': `${pct}%` }} {...rest} />
+      {ticks && (
+        <div className="range-ticks" aria-hidden="true">
+          {ticks.map((t) => (
+            // thumb centres travel between 9px and (width - 9px)
+            <span key={t} style={{ left: `calc(9px + (100% - 18px) * ${(t - lo) / (hi - lo)})` }}>
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const activate = (fn) => ({
   role: 'button',
   tabIndex: 0,
@@ -215,7 +240,8 @@ export default function Sidebar({
               </button>
             )}
           </span>
-          <input type="range" min="0" max="23" value={hour ?? 8}
+          <Range min="0" max="23" value={hour ?? 8} idle={hour == null}
+            ticks={[0, 6, 12, 18, 23]} aria-label="Jedna godzina"
             onChange={(e) => setHour(Number(e.target.value))} />
         </label>
       </Panel>
@@ -404,9 +430,10 @@ export default function Sidebar({
               <span>
                 Pokazuj powyżej {fmt(net.min)} {NET_MODES[net.mode].unit} w oknie 6–10 i 15–19
               </span>
-              <input type="range" min="0"
+              <Range min="0"
                 max={net.mode === 'road' ? 20000 : 5000}
                 step={net.mode === 'road' ? 500 : 100} value={net.min}
+                aria-label="Próg wyświetlania odcinków"
                 onChange={(e) => setNet({ ...net, min: Number(e.target.value) })} />
             </label>
             <div className="legend">
@@ -428,9 +455,9 @@ export default function Sidebar({
       <Panel title="Ustawienia zaawansowane" collapsible defaultOpen={false}>
         <Field label={`Napełnienie samochodu: ${occupancy?.toFixed(2)} os./poj.`}
           help={<p>{data.meta.carOccupancy.note}</p>}>
-          <input type="range" min={data.meta.carOccupancy.min * 100}
+          <Range min={data.meta.carOccupancy.min * 100}
             max={data.meta.carOccupancy.max * 100} step="5"
-            value={(occupancy ?? data.meta.carOccupancy.default) * 100}
+            value={Math.round((occupancy ?? data.meta.carOccupancy.default) * 100)}
             aria-label="Napełnienie samochodu"
             onChange={(e) => setOccupancy(Number(e.target.value) / 100)} />
           {/* The default is a cited number, so the citation sits with it. */}

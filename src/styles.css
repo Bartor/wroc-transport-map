@@ -418,3 +418,45 @@ select {
 .cite figcaption { margin-top: .35rem; font-size: .72rem; line-height: 1.45; color: var(--dim); }
 .cite a { color: #7aa2e3; }
 .cite .cite-where { color: #6b7385; font-size: .68rem; }
+
+/* ------------------------------------------------------------------ sliders */
+.range-wrap { position: relative; padding: .5rem 0 .2rem; }
+.range-wrap:has(.range-ticks) { padding-bottom: 1.15rem; }
+.sidebar input.range {
+  -webkit-appearance: none; appearance: none; display: block;
+  width: 100%; height: 6px; margin: 0; border-radius: 999px; cursor: pointer;
+  background: linear-gradient(to right, #4a6ea9 0 var(--pct), #343a47 var(--pct) 100%);
+}
+.sidebar input.range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 3px solid #4a6ea9;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .55);
+  transition: transform .1s, box-shadow .1s;
+}
+.sidebar input.range::-moz-range-thumb {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #fff; border: 3px solid #4a6ea9;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .55);
+}
+.sidebar input.range::-moz-range-track { background: transparent; height: 6px; }
+.sidebar input.range:hover::-webkit-slider-thumb { transform: scale(1.12); }
+.sidebar input.range:active::-webkit-slider-thumb { cursor: grabbing; }
+.sidebar input.range:focus-visible { outline: none; }
+.sidebar input.range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(122, 162, 227, .4); }
+.sidebar input.range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(122, 162, 227, .4); }
+
+/* present but not in effect: no fill, hollow thumb */
+.range-wrap.idle input.range { background: #343a47; }
+.range-wrap.idle input.range::-webkit-slider-thumb { background: #1c1f26; border-color: #6b7385; }
+.range-wrap.idle input.range::-moz-range-thumb { background: #1c1f26; border-color: #6b7385; }
+
+.range-ticks { position: absolute; left: 0; right: 0; bottom: 0; height: 1rem; }
+.range-ticks span {
+  position: absolute; transform: translateX(-50%);
+  font-size: .66rem; color: #6b7385; font-variant-numeric: tabular-nums;
+}
+.range-ticks span::before {
+  content: ''; position: absolute; left: 50%; top: -5px; width: 1px; height: 4px;
+  background: #4a5263;
+}
