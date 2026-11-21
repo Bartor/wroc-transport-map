@@ -9,7 +9,9 @@ import {
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
   HOUR_LABEL as HL, coverageGap,
 } from './data'
-import { copyCard, downloadCard } from './shareCard'
+import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
+
+const SHARE_FILES = canShareImage()
 
 const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
 
@@ -127,8 +129,19 @@ function ShareButtons({ spec }) {
   const download = async () => {
     try { await downloadCard(spec); settle('saved') } catch { settle('error') }
   }
+  const share = async () => {
+    try {
+      const r = await shareCard(spec)
+      if (r === 'shared') settle('shared')
+    } catch { settle('error') }
+  }
   return (
     <div className="share">
+      {SHARE_FILES && (
+        <button type="button" className="share-btn primary" onClick={share}>
+          {state === 'shared' ? 'Udostępniono ✓' : 'Udostępnij'}
+        </button>
+      )}
       <button type="button" className="share-btn" onClick={copy} disabled={state === 'busy'}>
         {state === 'copied' ? 'Skopiowano ✓' : state === 'busy' ? 'Kopiuję…' : 'Kopiuj obraz'}
       </button>

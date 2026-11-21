@@ -31,11 +31,20 @@ function FlyToSelection({ selected, index }) {
     // down with it. Nothing to fly to on an invisible map anyway.
     const size = map.getSize()
     if (!size.x || !size.y) return
-    if (map.getBounds().pad(-0.15).contains([m.lat, m.lon])) return
+    // On phones the details sheet covers the bottom of the map, so aim for
+    // the middle of the strip above it.
+    const cover = isPhone() ? document.querySelector('.details')?.offsetHeight || 0 : 0
+    const at = map.latLngToContainerPoint([m.lat, m.lon])
+    const padX = size.x * 0.15
+    const padY = (size.y - cover) * 0.15
+    if (at.x > padX && at.x < size.x - padX
+      && at.y > padY && at.y < size.y - cover - padY) return
+    const zoom = Math.max(map.getZoom(), 15)
+    const center = map.unproject(map.project([m.lat, m.lon], zoom).add([0, cover / 2]), zoom)
     try {
-      map.flyTo([m.lat, m.lon], Math.max(map.getZoom(), 15), { duration: 0.6 })
+      map.flyTo(center, zoom, { duration: 0.6 })
     } catch {
-      map.setView([m.lat, m.lon], Math.max(map.getZoom(), 15))
+      map.setView(center, zoom)
     }
   }, [selected, index, map])
   return null
@@ -90,11 +99,25 @@ function NodeLabels({ entries, declutter }) {
 
 /** Colour key for whatever is currently drawn. Size encodes volume, which a
  *  colour swatch cannot show, so that is stated in words. */
+const isPhone = () => typeof window !== 'undefined'
+  && window.matchMedia('(max-width: 760px)').matches
+
 function MapLegend({ visible, net, sig, pies }) {
+  // collapsible; on a phone it starts folded, since it would cover the map
+  const [open, setOpen] = useState(() => !isPhone())
   const layers = Object.entries(LAYERS).filter(([k]) => visible[k] && k !== 'survey')
   if (!layers.length && !net.on && !sig?.on) return null
+  if (!open) {
+    return (
+      <button type="button" className="map-legend legend-closed" onClick={() => setOpen(true)}>
+        Legenda
+      </button>
+    )
+  }
   return (
     <div className="map-legend">
+      <button type="button" className="legend-close" aria-label="Zwiń legendę"
+        onClick={() => setOpen(false)}>×</button>
       {pies ? (
         <>
           <b>Podział modalny węzła (osoby)</b>

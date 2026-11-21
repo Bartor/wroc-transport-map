@@ -285,6 +285,29 @@ export async function downloadCard(spec) {
   setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
 
+/** Whether the system share sheet accepts image files - true on most phones,
+ *  where it is the natural way to post a picture to a messenger. */
+export function canShareImage() {
+  try {
+    const probe = new File([new Blob()], 'probe.png', { type: 'image/png' })
+    return !!(navigator.canShare && navigator.canShare({ files: [probe] }))
+  } catch {
+    return false
+  }
+}
+
+export async function shareCard(spec) {
+  const blob = await renderCard(spec)
+  const file = new File([blob], cardFilename(spec), { type: 'image/png' })
+  try {
+    await navigator.share({ files: [file], title: spec.title, text: `KBR Wrocław 2024 — ${spec.title}` })
+    return 'shared'
+  } catch (e) {
+    if (e?.name === 'AbortError') return 'cancelled'   // user closed the sheet
+    throw e
+  }
+}
+
 /** Copies the card as an image. Falls back to a download where the browser
  *  will not put images on the clipboard. */
 export async function copyCard(spec) {

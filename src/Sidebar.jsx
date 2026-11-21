@@ -176,7 +176,7 @@ export default function Sidebar({
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, setPeople, occupancy, setOccupancy,
   net, setNet, basemap, setBasemap, sig, setSig, labels, setLabels,
-  markers, onSelect, selected,
+  markers, onSelect, selected, sheetOpen, setSheetOpen,
 }) {
   const catOrder = data.meta.vehCatOrder
   // layers whose measurement window does not cover the selected period
@@ -210,8 +210,20 @@ export default function Sidebar({
     : []
 
   return (
-    <aside className="sidebar">
+    <aside className={sheetOpen ? 'sidebar open' : 'sidebar'}>
+      {/* On phones the header is the sheet's handle; on desktop the button is
+          hidden and the header is just a title. */}
       <header>
+        <button type="button" className="sheet-handle" aria-expanded={sheetOpen}
+          aria-label={sheetOpen ? 'Zwiń panel' : 'Rozwiń panel ustawień i wyników'}
+          onClick={() => setSheetOpen(!sheetOpen)}>
+          <span className="grip" />
+          <span className="sheet-title">
+            <b>KBR Wrocław 2024</b>
+            <em>{sheetOpen ? 'Zwiń' : `${period} · ustawienia i wyniki`}</em>
+          </span>
+          <span className={sheetOpen ? 'chevron open' : 'chevron'}>▴</span>
+        </button>
         <h1>KBR Wrocław 2024</h1>
         <p className="sub">Pomiary ruchu — przeglądarka map</p>
       </header>
@@ -235,6 +247,17 @@ export default function Sidebar({
           ))}
         </div>
         <HourRange data={data} visible={visible} range={range} setRange={setRange} />
+        {/* sits by the slider: moving it is what fixes the gap */}
+        {gaps.length > 0 && !wholeDay && (
+          <p className="warn">
+            {gaps.map((g) => LAYERS[g].label).join(', ')}: pomiar tylko
+            w szczytach — wybrany okres wychodzi poza paski pomiaru, więc sumy
+            nie są porównywalne z ruchem drogowym.{' '}
+            <button type="button" className="link" onClick={() => setWholeDay(true)}>
+              Szacuj całą dobę
+            </button>
+          </p>
+        )}
       </Panel>
 
       <Panel title="Co pokazać">
@@ -243,17 +266,6 @@ export default function Sidebar({
             count={COUNTS[k](data)}
             onChange={() => setVisible({ ...visible, [k]: !visible[k] })} />
         ))}
-
-        {gaps.length > 0 && !wholeDay && (
-          <p className="warn">
-            {gaps.map((g) => LAYERS[g].label).join(', ')}: pomiar tylko
-            w szczytach, więc w tym okresie sumy nie są porównywalne z ruchem
-            drogowym.{' '}
-            <button type="button" className="link" onClick={() => setWholeDay(true)}>
-              Szacuj całą dobę
-            </button>
-          </p>
-        )}
 
         <div className="divider" />
 

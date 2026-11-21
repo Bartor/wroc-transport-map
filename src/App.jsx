@@ -27,6 +27,15 @@ export default function App() {
   // map labels: 'hover' (tooltip only), 'num' or 'pct' (always visible)
   const [labels, setLabels] = useState({ mode: 'hover', declutter: true })
   const [selected, setSelected] = useState(null)
+  // On phones the sidebar is a bottom sheet; this is whether it is pulled up.
+  const [sheetOpen, setSheetOpen] = useState(false)
+
+  // Picking a point opens its own sheet, so the settings sheet gets out of the
+  // way - two stacked sheets would leave no map to look at.
+  const select = (s) => {
+    setSelected(s)
+    if (s) setSheetOpen(false)
+  }
 
   useEffect(() => {
     loadAll().then((d) => {
@@ -65,14 +74,15 @@ export default function App() {
         occupancy={occupancy} setOccupancy={setOccupancy}
         net={net} setNet={setNet} basemap={basemap} setBasemap={setBasemap}
         sig={sig} setSig={setSig} labels={labels} setLabels={setLabels}
-        markers={markers} onSelect={setSelected} selected={selected}
+        markers={markers} onSelect={select} selected={selected}
+        sheetOpen={sheetOpen} setSheetOpen={setSheetOpen}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
         areas={areas} period={period} aggregate={aggregate}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
-        selected={selected} onSelect={setSelected}
+        selected={selected} onSelect={select}
       />
       {selected && (
         <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`}
@@ -80,7 +90,7 @@ export default function App() {
           <Details data={data} sel={selected} hours={hours} metric={metric}
             period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
             share={periodShare(data.meta, hours)} markers={markers}
-            onSelect={setSelected} onClose={() => setSelected(null)} />
+            onSelect={select} onClose={() => setSelected(null)} />
         </ErrorBoundary>
       )}
     </div>
