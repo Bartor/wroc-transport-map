@@ -5,6 +5,7 @@ import {
 import MapView from './MapView'
 import Sidebar from './Sidebar'
 import Details from './Details'
+import ErrorBoundary from './ErrorBoundary'
 import { DEFAULT_BASEMAP } from './basemaps'
 
 export default function App() {
@@ -75,10 +76,13 @@ export default function App() {
         selected={selected} onSelect={setSelected}
       />
       {selected && (
-        <Details data={data} sel={selected} hours={hours} metric={metric}
-          period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
-          share={periodShare(data.meta, hours)} markers={markers}
-          onSelect={setSelected} onClose={() => setSelected(null)} />
+        <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`}
+          onClose={() => setSelected(null)}>
+          <Details data={data} sel={selected} hours={hours} metric={metric}
+            period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
+            share={periodShare(data.meta, hours)} markers={markers}
+            onSelect={setSelected} onClose={() => setSelected(null)} />
+        </ErrorBoundary>
       )}
     </div>
   )

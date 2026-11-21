@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
   PieChart, Pie,
@@ -6,8 +7,9 @@ import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
-  HOUR_LABEL as HL,
+  HOUR_LABEL as HL, coverageGap,
 } from './data'
+import { copyCard, downloadCard } from './shareCard'
 
 const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
 
@@ -88,6 +90,55 @@ const GEO_NOTE = {
   stations: 'środek ciężkości stacji kordonu',
   section: 'współrzędne z wykazu przekrojów',
   point: 'środek punktu pomiarowego',
+}
+
+const KICKER = {
+  road: 'Punkt pomiaru ruchu drogowego',
+  pt: 'Punkt pomiaru potoków pasażerskich',
+  bike: 'Punkt pomiaru ruchu rowerowego',
+  ped: 'Punkt pomiaru ruchu pieszego',
+  rail: 'Kordon kolejowy',
+  signal: 'Sygnalizacja świetlna',
+}
+
+const KBR = 'Kompleksowe Badania Ruchu Wrocław 2024'
+const SOURCE_TEXT = {
+  road: `${KBR}, zał. 3.3 — pomiary ruchu drogowego.`,
+  pt: `${KBR}, zał. 6.4 — pomiary potoków pasażerskich w autobusach i tramwajach.`,
+  bike: `${KBR}, zał. 3.4 — pomiary ruchu rowerowego.`,
+  ped: `${KBR}, zał. 3.5 — pomiary ruchu pieszego.`,
+  rail: `${KBR}, zał. 7.1 — potoki pasażerskie w pociągach.`,
+  signal: 'OpenStreetMap (sygnalizacja), rozkład jazdy GTFS Wrocławia, model '
+    + `natężenia ruchu na podstawie ${KBR}.`,
+}
+
+/** Copy the point as a picture, with a download for browsers that will not
+ *  put images on the clipboard. */
+function ShareButtons({ spec }) {
+  const [state, setState] = useState(null)
+  const settle = (s) => {
+    setState(s)
+    setTimeout(() => setState(null), 2800)
+  }
+  const copy = async () => {
+    setState('busy')
+    try { settle(await copyCard(spec)) } catch { settle('error') }
+  }
+  const download = async () => {
+    try { await downloadCard(spec); settle('saved') } catch { settle('error') }
+  }
+  return (
+    <div className="share">
+      <button type="button" className="share-btn" onClick={copy} disabled={state === 'busy'}>
+        {state === 'copied' ? 'Skopiowano ✓' : state === 'busy' ? 'Kopiuję…' : 'Kopiuj obraz'}
+      </button>
+      <button type="button" className="share-btn icon" onClick={download}
+        title="Pobierz jako PNG" aria-label="Pobierz jako PNG">⬇</button>
+      {state === 'downloaded' && <span className="share-msg">schowek niedostępny — pobrano plik</span>}
+      {state === 'saved' && <span className="share-msg">pobrano plik</span>}
+      {state === 'error' && <span className="share-msg err">nie udało się</span>}
+    </div>
+  )
 }
 
 /** Modal split of a node, in people, with the vehicles it came from. */
@@ -180,6 +231,13 @@ function ModalSplit({ node, data, occupancy }) {
   )
 }
 
+/** Unit for a layer's headline number; the road one depends on toggles, so
+ *  Details wraps it in `unit()`. */
+function unitOf(kind) {
+  return { road: 'pojazdów', pt: 'pasażerów', bike: 'rowerzystów', ped: 'pieszych',
+    rail: 'pasażerów' }[kind] || ''
+}
+
 export default function Details({
   data, sel, hours, metric, period, share, wholeDay, people, occupancy,
   markers, onSelect, onClose,
@@ -198,10 +256,27 @@ export default function Details({
   const shape = (arr, k = kind) => arr.map((v) => shown(v, k))
   const exp = expansionOf(data.meta, kind)
   const scaled = wholeDay && exp?.factor > 1
+  const unit = (k) => (k === 'road'
+    ? (people ? 'osób w samochodach osobowych' : `pojazdów — ${ROAD_METRICS[metric].label.toLowerCase()}`)
+    : unitOf(k))
 
   let body = null
+  // what the shareable picture shows when there is no modal split
+  let cardBig = null
+  let cardProfile = null
+  const cardNotes = []
 
   if (kind === 'signal') {
+    cardBig = { value: fmtEst(p.v * (share ?? 1)), unit: 'pojazdów na wlotach — szacunek z modelu' }
+    cardNotes.push(
+      `${p.kind === 'crossing' ? 'Samodzielne przejście dla pieszych z sygnalizacją'
+        : `Skrzyżowanie, ${p.arms} wloty`}; ulice: ${p.streets.join(', ') || '—'}.`,
+      p.runs ? `Komunikacja zbiorowa: ${fmt(p.runs)} kursów w oknie 6–10 i 15–19`
+        + `${p.tram ? ', w tym tramwaj' : ''}.` : 'Brak komunikacji zbiorowej.',
+      'Natężenie pochodzi z modelu (mediana błędu 24%), nie z pomiaru. O wyłączeniu '
+        + 'sygnalizacji decydują też widoczność, przejścia dla pieszych, priorytet '
+        + 'tramwaju i historia zdarzeń.',
+    )
     body = (
       <>
         <dl>
@@ -241,6 +316,12 @@ export default function Details({
   } else if (p.aggregate) {
     const profs = p.members.map((m) => shape(profileFor(data, kind, m, metric, people)))
     const total = addProfiles(profs)
+    cardBig = { value: fmt(sumHours(total, hours)), unit: unit(kind) }
+    cardProfile = total
+    if (p.repeatsStreet) {
+      cardNotes.push('Przekroje leżą po obu stronach jednego skrzyżowania, więc jadący '
+        + 'na wprost są liczeni dwa razy — suma zawyża ruch przez węzeł.')
+    }
     const bySection = Object.fromEntries(
       p.members.map((m, i) => [
         `${sectionLetter(m.id) || m.id} — ${sectionOf(kind, m) || m.name}`,
@@ -287,6 +368,8 @@ export default function Details({
     const sec = data.roadById[p.id]
     const cats = activeCats(metric, people)
     const prof = shape(roadProfile(sec, { cats }, catOrder))
+    cardBig = { value: fmt(sumHours(prof, hours)), unit: unit('road') }
+    cardProfile = prof
     const keep = cats
       ? cats.map((c) => catOrder.indexOf(c)).filter((i) => i >= 0)
       : catOrder.map((_, i) => i)
@@ -338,6 +421,9 @@ export default function Details({
       </>
     )
   } else if (kind === 'bike' || kind === 'ped') {
+    cardBig = { value: fmt(shown(sumHours(p.byHour, hours))), unit: unit(kind) }
+    cardProfile = shape(p.byHour)
+    if (GEO_NOTE[p.geo]) cardNotes.push(`Położenie: ${GEO_NOTE[p.geo]}.`)
     body = (
       <>
         <dl>
@@ -363,6 +449,8 @@ export default function Details({
   } else if (kind === 'pt') {
     const prof = new Array(24).fill(0)
     Object.values(p.byHour).forEach((arr) => arr.forEach((v, h) => { prof[h] += v }))
+    cardBig = { value: fmt(sumHours(shape(prof), hours)), unit: unit('pt') }
+    cardProfile = shape(prof)
     body = (
       <>
         <dl>
@@ -385,6 +473,8 @@ export default function Details({
   } else if (kind === 'rail') {
     const prof = new Array(24).fill(0)
     Object.values(p.byHour).forEach((arr) => arr.forEach((v, h) => { prof[h] += v }))
+    cardBig = { value: fmt(sumHours(shape(prof), hours)), unit: unit('rail') }
+    cardProfile = shape(prof)
     body = (
       <>
         <dl>
@@ -403,15 +493,41 @@ export default function Details({
     )
   }
 
+  const pill = kind === 'signal' ? (p.kind === 'crossing' ? 'przejście' : 'skrzyżowanie') : p.id
+  const title = p.name || p.stop || p.stations?.join(' / ')
+    || p.streets?.join(' × ') || 'sygnalizacja'
+  if (scaled) {
+    cardNotes.push(`Wartości przeliczone na całą dobę (×${exp.factor}, `
+      + `${BASIS_LABEL[exp.basis]}) — pomiar obejmował tylko szczyty.`)
+  } else if (!node?.split && coverageGap(data.meta, kind, hours)) {
+    cardNotes.push('Pomiar tylko w szczytach — część godzin wybranego okresu nie była mierzona.')
+  }
+  const split = node?.split && splitTotal(node.split) > 0 ? node.split : null
+  const spec = {
+    id: pill,
+    kicker: `${split ? 'Węzeł pomiarowy' : KICKER[kind] || 'Punkt'} · ${pill}`,
+    title,
+    subtitle: node?.sub || p.segment || p.loc || '',
+    period,
+    accent: split ? '#e4572e' : color,
+    split, pair: node?.pair, repeats: !!p.repeatsStreet,
+    occupancy, occ: data.transitOcc,
+    big: cardBig,
+    profile: cardProfile ? { values: cardProfile, hours, color } : null,
+    notes: cardNotes,
+    source: split
+      ? (split.basis === 'transit' ? SOURCE_TEXT.pt
+        : `${KBR}: zał. 3.3 (ruch drogowy) i zał. 6.4 (potoki pasażerskie).`)
+      : SOURCE_TEXT[kind] || KBR,
+  }
+
   return (
     <div className="details">
       <div className="dhead" style={{ borderColor: color }}>
         <div>
-          <span className="pill" style={{ background: color }}>
-            {kind === 'signal' ? (p.kind === 'crossing' ? 'przejście' : 'skrzyżowanie') : p.id}
-          </span>
-          <h3>{p.name || p.stop || p.stations?.join(' / ')
-            || p.streets?.join(' × ') || 'sygnalizacja'}</h3>
+          <span className="pill" style={{ background: color }}>{pill}</span>
+          <h3>{title}</h3>
+          <ShareButtons spec={spec} />
         </div>
         <button onClick={onClose}>×</button>
       </div>
