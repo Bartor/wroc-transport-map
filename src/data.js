@@ -26,11 +26,11 @@ export async function loadAll() {
 // never a rate, so the period is spelled out next to it instead.
 export const LAYERS = {
   road: { label: 'Ruch drogowy', color: '#e4572e', unit: 'poj.' },
-  pt: { label: 'Potoki w autobusach i tramwajach', color: '#2e86ab', unit: 'pasażerów' },
+  pt: { label: 'Autobusy i tramwaje', color: '#2e86ab', unit: 'pasażerów' },
   bike: { label: 'Ruch rowerowy', color: '#3fa34d', unit: 'rowerzystów' },
   ped: { label: 'Ruch pieszy', color: '#b5179e', unit: 'pieszych' },
-  rail: { label: 'Potoki w pociągach (kordon)', color: '#7048e8', unit: 'pasażerów' },
-  survey: { label: 'Próba badania ankietowego', color: '#8d99ae', unit: 'adresów' },
+  rail: { label: 'Pociągi (kordon miasta)', color: '#7048e8', unit: 'pasażerów' },
+  survey: { label: 'Adresy z próby ankietowej', color: '#8d99ae', unit: 'adresów' },
 }
 
 const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i)

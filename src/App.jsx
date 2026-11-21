@@ -11,15 +11,15 @@ export default function App() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
   const [visible, setVisible] = useState({
-    road: true, pt: false, bike: true, ped: true, rail: false, survey: false,
+    road: true, pt: true, bike: false, ped: false, rail: false, survey: false,
   })
   const [preset, setPreset] = useState('am')
   const [hour, setHour] = useState(null) // single hour overrides the preset
   const [metric, setMetric] = useState('all')
   const [areas, setAreas] = useState(null) // null = all
-  const [aggregate, setAggregate] = useState(false)
+  const [aggregate, setAggregate] = useState(true)     // nodes as modal-split pies
   const [wholeDay, setWholeDay] = useState(false)   // expand peak-only counts
-  const [people, setPeople] = useState(false)       // vehicles -> people
+  const [people, setPeople] = useState(true)        // people, not vehicles
   const [occupancy, setOccupancy] = useState(null)  // set from meta on load
   const [net, setNet] = useState({ on: false, mode: 'road', min: 3000 })
   const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)

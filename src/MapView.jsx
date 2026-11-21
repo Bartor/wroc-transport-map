@@ -110,7 +110,9 @@ function MapLegend({ visible, net, sig, pies }) {
       {net.on && NETWORK_LEGEND.map((l) => (
         <span key={l.label}><i className="line" style={{ background: l.color }} />{l.label}</span>
       ))}
-      <span className="legend-note">wielkość znacznika = natężenie</span>
+      <span className="legend-note">
+        {pies ? 'wielkość koła = liczba osób w węźle' : 'wielkość znacznika = natężenie'}
+      </span>
     </div>
   )
 }
@@ -153,12 +155,20 @@ export default function MapView({
   const netShare = periodShare(data.meta, hours)
 
   // Radius per marker, needed both to draw it and to offset its label.
+  // A pie shows everyone passing the node, so it is sized by everyone - not by
+  // the road layer's own value, which in people mode is car occupants only and
+  // made transit-heavy nodes look small. Road and transit pies share one scale
+  // because both are in people.
   const radii = useMemo(() => {
     const r = {}
+    const pieMax = Math.max(1, ...Object.values(markers).flat()
+      .filter((m) => m.split).map((m) => splitTotal(m.split)))
     for (const [kind, list] of Object.entries(markers)) {
       const max = Math.max(1, ...list.map((m) => m.value))
       for (const m of list) {
-        r[`${kind}:${m.id}`] = m.split ? radius(m.value, max, 7, 26) : radius(m.value, max)
+        r[`${kind}:${m.id}`] = m.split
+          ? radius(splitTotal(m.split), pieMax, 5, 18)
+          : radius(m.value, max)
       }
     }
     return r
