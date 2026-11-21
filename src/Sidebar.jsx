@@ -52,15 +52,20 @@ function Panel({ title, help, collapsible = false, defaultOpen = true, badge, ch
   )
 }
 
-/** A checkbox row with its own optional "?" explanation. */
+/** A checkbox row with its own optional "?" explanation.
+ *
+ *  A layer (it has a colour) is a checkbox filled with that colour, which
+ *  doubles as its legend swatch; a setting is drawn as a switch. Telling the two
+ *  apart at a glance matters more than it seems: both used to look identical. */
 function Option({ checked, onChange, label, swatch, count, help, children }) {
   const [showHelp, setShowHelp] = useState(false)
   return (
     <div className="opt">
       <div className="opt-row">
         <label className="row">
-          <input type="checkbox" checked={checked} onChange={onChange} />
-          {swatch && <i className="swatch" style={{ background: swatch }} />}
+          <input type="checkbox" checked={checked} onChange={onChange}
+            className={swatch ? 'check' : 'switch'}
+            style={swatch ? { '--c': swatch } : undefined} />
           <span>{label}</span>
           {count != null && <b>{count}</b>}
         </label>
