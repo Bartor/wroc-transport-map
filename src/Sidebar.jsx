@@ -13,7 +13,7 @@ const COUNTS = {
   bike: (d) => d.bike.length,
   ped: (d) => d.ped.length,
   rail: (d) => d.rail.length,
-  survey: (d) => d.survey.length,
+  survey: (d) => d.survey?.length ?? 0,
 }
 
 // ---------------------------------------------------------------- building blocks
@@ -216,7 +216,7 @@ export default function Sidebar({
       </Panel>
 
       <Panel title="Co pokazać">
-        {Object.entries(LAYERS).map(([k, v]) => (
+        {Object.entries(LAYERS).filter(([k]) => k !== 'survey' || data.survey).map(([k, v]) => (
           <Option key={k} checked={!!visible[k]} label={v.label} swatch={v.color}
             count={COUNTS[k](data)}
             onChange={() => setVisible({ ...visible, [k]: !visible[k] })} />

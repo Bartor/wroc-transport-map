@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "etl": "python etl/build.py"
+    "etl": "python etl/build.py",
+    "build:public": "vite build --mode public",
+    "preview:public": "vite build --mode public && vite preview",
+    "deploy": "vite build --mode public && gh-pages -d dist --nojekyll"
   },
   "dependencies": {
     "leaflet": "^1.9.4",
@@ -18,6 +21,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
+    "gh-pages": "^6.3.0",
     "vite": "^6.0.7"
   }
 }

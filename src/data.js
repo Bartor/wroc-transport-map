@@ -1,10 +1,12 @@
 // Loading and reshaping of the ETL output. Everything is small enough to keep
 // in memory (~1.2 MB total), so the map filters client-side.
 
-const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail', 'survey',
+const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail',
   'network', 'network_modes']
 
-const OPTIONAL = ['network_pt', 'network_service', 'signals']
+// survey.json is absent from the public build (household addresses), so it is
+// optional like the model layers that only exist when they validated.
+const OPTIONAL = ['network_pt', 'network_service', 'signals', 'survey']
 
 export async function loadAll() {
   const parts = await Promise.all(

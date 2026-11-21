@@ -222,7 +222,7 @@ export default function MapView({
             onSelect={onSelect} selected={selected} />
         )}
 
-        {visible.survey && (
+        {visible.survey && data.survey && (
           <LayerGroup>
             {data.survey.map((s, i) => (
               <CircleMarker key={i} center={[s.lat, s.lon]} radius={2.5}
