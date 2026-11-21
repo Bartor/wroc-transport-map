@@ -167,7 +167,7 @@ export default function MapView({
       const max = Math.max(1, ...list.map((m) => m.value))
       for (const m of list) {
         r[`${kind}:${m.id}`] = m.split
-          ? radius(splitTotal(m.split), pieMax, 5, 18)
+          ? radius(splitTotal(m.split), pieMax, 7, 24)
           : radius(m.value, max)
       }
     }
