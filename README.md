@@ -84,13 +84,25 @@ Każdy współczynnik jest w interfejsie opisany etykietą `pomiar` /
 
 Pomiary drogowe liczą pojazdy, nie osoby. Przełącznik „Przeliczaj samochody na
 osoby" mnoży **wyłącznie samochody osobowe** (kategoria `d`) przez napełnienie
-ustawiane suwakiem, domyślnie 1,3 os./poj.
+ustawiane suwakiem, domyślnie **1,2 os./poj.**
 
-**To jest założenie, nie dana z KBR.** W dostarczonych załącznikach nie ma
-napełnienia samochodów osobowych — Zał. 6.1 dotyczy taboru komunikacji
-zbiorowej. Realną wartość zawiera raport z badań ankietowych gospodarstw
-domowych; po dołożeniu tego pliku wystarczy podmienić `CAR_OCCUPANCY` w
-`etl/build.py`.
+Źródło: KBR Wrocław 2024, „Załącznik 2.2 wyniki badań ankietowych
+w gospodarstwach domowych" do Raportu II, arkusz „Podział zadań
+przewozowych", tabela „Średnia liczba osób w samochodzie ogółem oraz według
+motywacji podróży": **Wrocław 1,207** (4396 podróży, w których ankietowany
+był kierowcą; dni robocze). Pliki: strona KBR 2024 w BIP —
+https://bip.um.wroc.pl/artykul/565/70659/kompleksowe-badania-ruchu-we-wroclawiu-i-otoczeniu-kbr-2024
+(archiwum „KBRWr_2024_Zalaczniki_do_Raportu2_rozdz_2_ankiety.zip").
+
+Dla godzin, w których liczono ruch drogowy (6–10 i 15–19), przeliczenie
+z surowej bazy ankiet daje 1,17 dla mieszkańców Wrocławia i 1,19 razem
+z otoczeniem, a dla dojazdów do pracy 1,08 — więc 1,2 to uczciwe zaokrąglenie
+opublikowanej wartości. Wartości 1,55 z KBR 2018 nie należy używać: dzieli
+liczbę osób w samochodzie przez wszystkie podróże samochodem, także
+pasażerów, więc auto z trzema osobami liczy do trzech razy.
+
+To wartość z ankiety o podróżach mieszkańców, a nie obserwacja na przekroju:
+ruch tranzytowy i dojazdowy reprezentuje tylko próba z otoczenia Wrocławia.
 
 Dostawczych i ciężarowych celowo nie przeliczamy (KBR nie bada ich napełnienia),
 a pasażerów autobusów i tramwajów liczy osobno warstwa komunikacji zbiorowej —

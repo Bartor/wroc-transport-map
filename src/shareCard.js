@@ -61,7 +61,7 @@ const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : s)
 
 /** The method notes that must travel with a split, wherever it is pasted. */
 export function splitNotes(spec) {
-  const { split, pair, occupancy, occ, repeats } = spec
+  const { split, pair, occupancy, occupancyDefault, occ, repeats } = spec
   const n = []
   if (split.basis === 'measured') {
     n.push(`Autobusy i tramwaje: pojazdy policzone na przekrojach drogowych × napełnienie `
@@ -74,7 +74,10 @@ export function splitNotes(spec) {
     n.push('Tylko pasażerowie autobusów i tramwajów — w pobliżu brak przekroju drogowego.')
   }
   if (split.basis !== 'transit') {
-    n.push(`Samochody osobowe × ${occupancy.toFixed(2)} os./poj. — założenie. Dostawcze, `
+    const occSource = Math.abs(occupancy - occupancyDefault) < 1e-9
+      ? 'KBR 2024, badanie ankietowe (zał. 2.2)'
+      : 'wartość ustawiona ręcznie'
+    n.push(`Samochody osobowe × ${occupancy.toFixed(2)} os./poj. — ${occSource}. Dostawcze, `
       + 'ciężarowe, motocykle i mikrobusy: tylko kierowca. Bez pieszych — nie liczono ich '
       + 'na przekrojach drogowych.')
   }

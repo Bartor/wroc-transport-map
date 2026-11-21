@@ -404,3 +404,17 @@ select {
   outline: 2px solid #7aa2e3; outline-offset: 2px;
 }
 .sidebar .row { gap: .6rem; }
+
+/* Citation under the occupancy setting: the default is a quoted figure. */
+.cite { margin: .6rem 0 .2rem; }
+.cite blockquote {
+  margin: 0; padding: .45rem .7rem; border-left: 3px solid #4a6ea9;
+  background: #14161a; border-radius: 0 6px 6px 0;
+  font-size: .78rem; line-height: 1.45; color: #d4d9e2; font-style: italic;
+}
+.cite blockquote p { margin: 0 0 .25rem; }
+.cite blockquote p:last-child { margin: 0; }
+.cite blockquote b { font-style: normal; color: #fff; }
+.cite figcaption { margin-top: .35rem; font-size: .72rem; line-height: 1.45; color: var(--dim); }
+.cite a { color: #7aa2e3; }
+.cite .cite-where { color: #6b7385; font-size: .68rem; }

@@ -430,8 +430,42 @@ export default function Sidebar({
           help={<p>{data.meta.carOccupancy.note}</p>}>
           <input type="range" min={data.meta.carOccupancy.min * 100}
             max={data.meta.carOccupancy.max * 100} step="5"
-            value={(occupancy || 1.3) * 100} aria-label="Napełnienie samochodu"
+            value={(occupancy ?? data.meta.carOccupancy.default) * 100}
+            aria-label="Napełnienie samochodu"
             onChange={(e) => setOccupancy(Number(e.target.value) / 100)} />
+          {/* The default is a cited number, so the citation sits with it. */}
+          <figure className="cite">
+            <blockquote>
+              <p>„{data.meta.carOccupancy.table}”</p>
+              <p>
+                „{data.meta.carOccupancy.question}” — średnio{' '}
+                <b>{data.meta.carOccupancy.value}</b>
+              </p>
+              <p>„{data.meta.carOccupancy.basis}”</p>
+            </blockquote>
+            <figcaption>
+              {data.meta.carOccupancy.scope}.{' '}
+              {data.meta.carOccupancy.source}:{' '}
+              <a href={data.meta.carOccupancy.url} target="_blank" rel="noopener noreferrer">
+                strona KBR 2024 w BIP
+              </a>
+              {' · '}
+              <a href={data.meta.carOccupancy.file} target="_blank" rel="noopener noreferrer">
+                pobierz załączniki (zip, 33 MB)
+              </a>
+              <br />
+              <span className="cite-where">{data.meta.carOccupancy.where}</span>
+            </figcaption>
+          </figure>
+          {Math.abs((occupancy ?? 0) - data.meta.carOccupancy.default) > 1e-9 && (
+            <p className="warn">
+              Ustawiono ręcznie, inaczej niż w KBR 2024.{' '}
+              <button type="button" className="link"
+                onClick={() => setOccupancy(data.meta.carOccupancy.default)}>
+                Przywróć {String(data.meta.carOccupancy.default).replace('.', ',')}
+              </button>
+            </p>
+          )}
         </Field>
 
         <Option checked={wholeDay} onChange={() => setWholeDay(!wholeDay)}

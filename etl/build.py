@@ -612,15 +612,41 @@ def stage_expansion(road, points):
     }
 
 
-# Nothing in the delivered files states how many people travel in a car; 6.1 is
-# a transit fleet matrix. Until the household-survey annex is added this is an
-# assumption the user can change in the interface.
+# Persons per car, driver included. The measurement annexes in data/ do not
+# carry it; the household-survey annex does: KBR 2024, Zal. 2.2 to Raport II,
+# sheet "Podzial zadan przewozowych", table "Srednia liczba osob w samochodzie
+# ogolem oraz wedlug motywacji podrozy" - Wroclaw 1.207 over 4396 trips where
+# the respondent drove, weekday (Tue-Thu diaries). Recomputed from the survey's
+# raw database for trips starting 6-10 and 15-19 it is 1.17 for city residents
+# and 1.19 with suburban ones, so 1.2 fits the hours the road counts cover.
+#
+# The 2018 report's 1.55 is not comparable: it divides people reported in the
+# car by all car trips including passengers' own, so a car of three is counted
+# up to three times.
 CAR_OCCUPANCY = {
-    "default": 1.3, "min": 1.0, "max": 2.0,
-    "note": "Załączniki 3.x–7.1 nie zawierają napełnienia samochodów osobowych "
-            "— 6.1 dotyczy taboru komunikacji zbiorowej. Domyślne 1,3 os./poj. "
-            "to typowa wartość dla podróży miejskich; podmień ją, gdy dojdzie "
-            "załącznik z wynikami badań ankietowych gospodarstw domowych.",
+    "default": 1.2, "min": 1.0, "max": 2.0,
+    "source": "KBR Wrocław 2024, zał. 2.2 do Raportu II (badania ankietowe "
+              "w gospodarstwach domowych)",
+    # quoted verbatim from the annex, so the setting can cite it
+    "table": "Średnia liczba osób w samochodzie ogółem oraz według motywacji podróży",
+    "question": "Ile osób (łącznie z Panem|Panią) jechało w samochodzie?",
+    "value": "1,207",
+    "basis": "Podstawa obliczeń: podróże, w których respondenci byli kierowcami "
+             "samochodu.",
+    "scope": "Wrocław, ogółem (wszystkie motywacje), 4396 podróży; badanie "
+             "BR Sp. z o.o., kwiecień–czerwiec 2024",
+    "url": "https://bip.um.wroc.pl/artykul/565/70659/"
+           "kompleksowe-badania-ruchu-we-wroclawiu-i-otoczeniu-kbr-2024",
+    # "Zalaczniki do Raportu II (cz. 1)" on that page; the annex is inside it
+    "file": "https://bip.um.wroc.pl/attachments/download/152439",
+    "where": "archiwum KBRWr_2024_Zalaczniki_do_Raportu2_rozdz_2_ankiety.zip → "
+             "„Załącznik 2.2 wyniki badań ankietowych w gospodarstwach "
+             "domowych.xlsx” → arkusz „Podział zadań przewozowych”, wiersze 252–260",
+    "note": "1,2 os./poj. według KBR 2024 (zał. 2.2 do Raportu II, „Średnia "
+            "liczba osób w samochodzie”): Wrocław 1,207 w podróżach, w których "
+            "ankietowany prowadził, dzień roboczy. Dla godzin 6–10 i 15–19 "
+            "wychodzi 1,17–1,19; dojazdy do pracy tylko 1,08. Wartość z KBR 2018 "
+            "(1,55) liczy pasażerów kilka razy i nie nadaje się do porównań.",
 }
 
 

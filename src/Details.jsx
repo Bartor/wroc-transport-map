@@ -210,8 +210,10 @@ function ModalSplit({ node, data, occupancy }) {
         {split.basis !== 'transit' && (
           <>
             <li>
-              Samochody osobowe × {occupancy.toFixed(2)} os./poj. — założenie
-              (suwak w „Pojazdy czy ludzie").
+              Samochody osobowe × {occupancy.toFixed(2)} os./poj.
+              {Math.abs(occupancy - data.meta.carOccupancy.default) < 1e-9
+                ? ' — KBR 2024, badanie ankietowe (zał. 2.2).'
+                : ' — wartość ustawiona ręcznie w ustawieniach zaawansowanych.'}
             </li>
             <li>
               Dostawcze, ciężarowe, motocykle i mikrobusy liczone tylko
@@ -511,7 +513,7 @@ export default function Details({
     period,
     accent: split ? '#e4572e' : color,
     split, pair: node?.pair, repeats: !!p.repeatsStreet,
-    occupancy, occ: data.transitOcc,
+    occupancy, occupancyDefault: data.meta.carOccupancy.default, occ: data.transitOcc,
     big: cardBig,
     profile: cardProfile ? { values: cardProfile, hours, color } : null,
     notes: cardNotes,
