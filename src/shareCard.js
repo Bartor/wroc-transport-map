@@ -7,6 +7,7 @@
 import {
   fmt, fmtEst, splitTotal, splitVehicles, splitShares, thinText, HOUR_LABEL, SHARE_ROW,
 } from './data'
+import { inkOn } from './pie'
 
 const SITE = 'bartor.github.io/wroc-transport-map'
 const W = 1000
@@ -204,24 +205,33 @@ function drawSplit(ctx, spec, y) {
       ctx.font = font(15)
       ctx.fillStyle = DIM
       ctx.textBaseline = 'middle'
-      ctx.fillText(SHARE_ROW[row.key], lx, yb + 11)
+      ctx.fillText(SHARE_ROW[row.key], lx, yb + 15)
       let x = bx
       const parts = row.parts.filter((p) => p.share > 0)
       const gaps = 2 * (parts.length - 1)
       for (const p of parts) {
         const w = Math.max(2, (bw - gaps) * p.share)
         ctx.fillStyle = p.color
-        ctx.fillRect(x, yb, w, 22)
+        ctx.fillRect(x, yb, w, 30)
+        // the number inside when it fits; thin segments are in the table
+        const label = `${Math.round(p.share * 100)}%`
+        ctx.font = font(14, 700)
+        if (w >= ctx.measureText(label).width + 10) {
+          ctx.fillStyle = inkOn(p.color)
+          ctx.textAlign = 'center'
+          ctx.fillText(label, x + w / 2, yb + 16)
+          ctx.textAlign = 'left'
+        }
         x += w + 2
       }
       const car = row.parts.find((p) => p.key === 'car')
       ctx.font = font(16, 700)
       ctx.fillStyle = INK
       ctx.textAlign = 'right'
-      ctx.fillText(`${Math.round(car.share * 100)}%`, W - PAD, yb + 11)
+      ctx.fillText(`${Math.round(car.share * 100)}%`, W - PAD, yb + 15)
       ctx.textAlign = 'left'
       ctx.textBaseline = 'top'
-      yb += 34
+      yb += 42
     }
     ctx.font = font(13)
     ctx.fillStyle = FAINT

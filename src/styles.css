@@ -657,10 +657,17 @@ select option { background: #232733; color: var(--text); }
 
 /* people, vehicles, capacity: the same modes as three 100% bars */
 .sharebars { margin: .4rem 0 .2rem; }
-.sharebar { display: grid; grid-template-columns: 8.2rem 1fr 3.2rem; align-items: center;
+/* the label sits above its bar, so the bar gets the panel's width and more
+   of its segments room for their numbers */
+.sharebar > span { grid-column: 1 / -1; margin-bottom: -.2rem; }
+.sharebar { display: grid; grid-template-columns: 1fr 3.2rem; align-items: center;
   gap: .5rem; margin: .3rem 0; font-size: .76rem; color: var(--dim); }
-.sharebar .bar { display: flex; gap: 2px; height: 12px; }
-.sharebar .bar i { display: block; min-width: 2px; border-radius: 2px; }
+.sharebar .bar { display: flex; gap: 2px; height: 18px; }
+.sharebar .bar i {
+  display: flex; align-items: center; justify-content: center; min-width: 2px;
+  border-radius: 2px; overflow: hidden; font: 700 10.5px/1 system-ui, sans-serif;
+  font-style: normal; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
 .sharebar b { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .sharebars .hint { margin-top: .45rem; }
 .split-table td.veh, .split-table td.vp { color: var(--dim); }

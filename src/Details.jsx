@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Sector,
@@ -12,6 +12,7 @@ import {
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 import { useSheetDrag } from './sheetDrag'
+import { inkOn } from './pie'
 
 const SHARE_FILES = canShareImage()
 
@@ -376,8 +377,23 @@ const hoursText = (s) => (/^0?0:00\s*-\s*0?0:00$/.test(s.trim()) ? 'całą dobę
  */
 function ShareBars({ split, pick }) {
   const rows = splitShares(split)
+  // each segment wide enough for its number carries it; the thin ones are in
+  // the table above and in their tooltip
+  const [barW, setBarW] = useState(0)
+  const watch = useRef(null)
+  const measure = useCallback((el) => {
+    watch.current?.disconnect()
+    if (!el) return
+    setBarW(el.clientWidth)
+    watch.current = new ResizeObserver(([e]) => setBarW(e.contentRect.width))
+    watch.current.observe(el)
+  }, [])
   if (!rows) return null
   const shown = pick.active || 'car'
+  const fits = (p, parts) => {
+    const w = (barW - 2 * (parts.length - 1)) * p.share
+    return w >= `${Math.round(p.share * 100)}%`.length * 6.4 + 6
+  }
   return (
     <div className="sharebars" role="table" aria-label="Udziały środków transportu">
       {rows.map((r) => {
@@ -385,12 +401,14 @@ function ShareBars({ split, pick }) {
         return (
           <div key={r.key} className="sharebar" role="row">
             <span role="rowheader">{SHARE_ROW[r.key]}</span>
-            <div className="bar">
-              {r.parts.filter((p) => p.share > 0).map((p) => (
+            <div className="bar" ref={r.key === 'persons' ? measure : undefined}>
+              {r.parts.filter((p) => p.share > 0).map((p, _, parts) => (
                 <i key={p.key} role="cell" {...pick.on(p.key)}
                   className={pick.active && pick.active !== p.key ? 'dim' : undefined}
-                  style={{ flexGrow: p.share, background: p.color }}
-                  title={`${p.label}: ${Math.round(p.share * 100)}% (${SHARE_ROW[r.key]})`} />
+                  style={{ flexGrow: p.share, background: p.color, color: inkOn(p.color) }}
+                  title={`${p.label}: ${Math.round(p.share * 100)}% (${SHARE_ROW[r.key]})`}>
+                  {fits(p, parts) ? `${Math.round(p.share * 100)}%` : ''}
+                </i>
               ))}
             </div>
             <b><i style={{ background: sel.color }} />{Math.round(sel.share * 100)}%</b>

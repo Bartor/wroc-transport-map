@@ -36,6 +36,20 @@ export function pieSvg(split, r, ring) {
     + `${outline}</svg>`
 }
 
+/** Text colour for a label inside a fill: white, except near-black on the
+ *  yellows and ambers (the bus slice), where white washes out - the dataviz
+ *  palette's own rule for labels inside series colours. */
+export function inkOn(hex) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  const max = Math.max(r, g, b)
+  const d = max - Math.min(r, g, b)
+  if (!d) return '#fff'
+  const h = max === r ? 60 * (((g - b) / d) % 6) : max === g ? 60 * ((b - r) / d + 2)
+    : 60 * ((r - g) / d + 4)
+  const hue = (h + 360) % 360
+  return hue >= 35 && hue <= 70 ? '#111' : '#fff'
+}
+
 const pctText = (share) => (share < 0.01 ? '<1%' : `${Math.round(share * 100)}%`)
 
 /**
