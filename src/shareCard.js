@@ -8,6 +8,7 @@ import {
   fmt, fmtEst, splitTotal, splitVehicles, splitShares, thinText, HOUR_LABEL, SHARE_ROW,
 } from './data'
 
+const SITE = 'bartor.github.io/wroc-transport-map'
 const W = 1000
 const PAD = 56
 const SCALE = 2
@@ -310,8 +311,16 @@ export function renderCard(spec) {
   ctx.stroke()
   y = para(ctx, `Źródło: ${spec.source}`, PAD, y + 14, W - 2 * PAD, 14, DIM)
   const stamp = new Date().toLocaleDateString('pl-PL')
+  // where the picture came from, on the line with the date: a card shared
+  // on its own still leads back to the map
+  ctx.font = font(13, 600)
+  ctx.fillStyle = DIM
+  ctx.textAlign = 'right'
+  ctx.textBaseline = 'top'
+  ctx.fillText(SITE, W - PAD, y + 2)
+  ctx.textAlign = 'left'
   y = para(ctx, `KBR Wrocław 2024 — przeglądarka map · wygenerowano ${stamp}`,
-    PAD, y + 2, W - 2 * PAD, 13, FAINT) + PAD - 16
+    PAD, y + 2, W - 2 * PAD - ctx.measureText(SITE).width - 24, 13, FAINT) + PAD - 16
 
   const out = document.createElement('canvas')
   out.width = W * SCALE
