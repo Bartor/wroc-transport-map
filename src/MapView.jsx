@@ -11,7 +11,7 @@ import { BASEMAPS } from './basemaps'
 import {
   LAYERS, MODES, radius, fmt, fmtEst, expansionOf, coverageGap, BASIS_LABEL, windowKind,
   periodShare, NET_MODES, markerIndex, splitTotal, headline, HOUR_LABEL,
-  sectionLetter, sectionOf,
+  sectionLetter, sectionOf, pieceKey,
 } from './data'
 import { pieSvg, labelLines, labelHtml, labelBox } from './pie'
 
@@ -222,7 +222,7 @@ function dodge(map, node, nodeR, dots) {
  * road sections as round dots, the paired transit stops as square ones. Only
  * drawn when points are shown whole - drawn apart they are on the map already.
  */
-function SectionDots({ family, nodeR, selected, onSelect }) {
+function SectionDots({ family, nodeR, selected, onSelect, off }) {
   const map = useMap()
   // re-place on zoom: the dodge is in pixels
   const [, setZoom] = useState(() => map.getZoom())
@@ -235,22 +235,24 @@ function SectionDots({ family, nodeR, selected, onSelect }) {
     <LayerGroup>
       {dots.map(({ kind, m, lat, lon }) => {
         const on = selected?.kind === kind && selected.id === m.id
+        const out = off?.has(pieceKey(kind, m.id))   // left out of the node
         const color = LAYERS[kind].color
         return (
           <Fragment key={`${kind}:${m.id}`}>
             <Polyline positions={[[node.lat, node.lon], [lat, lon]]} interactive={false}
-              pathOptions={{ color, weight: 1.5, opacity: 0.7, dashArray: '3 4' }} />
+              pathOptions={{ color, weight: 1.5, opacity: out ? 0.2 : 0.7, dashArray: '3 4' }} />
             <Marker position={[lat, lon]} zIndexOffset={1000}
               eventHandlers={{ click: () => onSelect({ kind, id: m.id, ref: m }) }}
               icon={L.divIcon({
                 className: 'sec-dot-icon',
-                html: `<span class="sec-dot ${kind}${on ? ' on' : ''}" `
+                html: `<span class="sec-dot ${kind}${on ? ' on' : ''}${out ? ' out' : ''}" `
                   + `style="--c:${color}">${sectionLetter(m.id) || '·'}</span>`,
                 iconSize: [22, 22], iconAnchor: [11, 11],
               })}>
               <Tooltip>
                 {kind === 'pt' ? 'przystanek · ' : 'przekrój drogowy · '}
                 {m.id} · {sectionOf(kind, m) || m.name}
+                {out ? ' · wyłączony z węzła' : ''}
               </Tooltip>
             </Marker>
           </Fragment>
@@ -262,7 +264,7 @@ function SectionDots({ family, nodeR, selected, onSelect }) {
 
 export default function MapView({
   data, visible, hours, period, wholeDay, people, net, basemap, sig,
-  markers, labels, selected, onSelect, family,
+  markers, labels, selected, onSelect, family, off,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
   // The model was fitted on the 8-hour common window; scale it to whatever
@@ -436,7 +438,7 @@ export default function MapView({
           </LayerGroup>
         ))}
 
-        <SectionDots family={family} selected={selected} onSelect={onSelect}
+        <SectionDots family={family} selected={selected} onSelect={onSelect} off={off}
           nodeR={family?.node ? radii[`${family.node.kind}:${family.node.id}`] : 0} />
 
         {labels.mode !== 'hover' && (

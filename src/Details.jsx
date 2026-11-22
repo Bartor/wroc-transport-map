@@ -7,7 +7,7 @@ import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
-  HOUR_LABEL as HL, coverageGap, windowKind,
+  HOUR_LABEL as HL, coverageGap, windowKind, pieceKey,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 import { useSheetDrag } from './sheetDrag'
@@ -21,48 +21,88 @@ const GROUP_LABEL = {
   ped: 'Przekroje piesze',
 }
 
+const NO_OFF = new Set()
+
 /**
  * A node is made of pieces: lettered road sections (KW_08A, KW_08B...), and
- * the stops of the transit point paired with it. These tabs move between the
- * node as a whole and its pieces, each with its share of its own group - road
- * and transit count different things, so they are never summed together.
+ * the stops of the transit point paired with it. The tree stays put while
+ * moving between the node and its pieces, lighting up the one on show.
+ *
+ * Each piece shows its share of its own group - road and transit count
+ * different things, so they are never summed together. Unticking a piece
+ * leaves it out of the node's numbers everywhere: the far approaches of an
+ * interchange, say, to look at one junction of it. A group keeps at least one
+ * piece, or the node would have nothing to stand on.
  */
-function SubNav({ family, shares, onSelect }) {
+function NodeTree({ family, shares, onSelect, off, toggleOff }) {
   const { node, groups, current } = family
   const toNode = () => onSelect({ kind: node.kind, id: node.id, ref: node.ref })
   const isOn = (kind, id) => current?.kind === kind && current.id === id
+  // leaving pieces out only means something when they add up to a node
+  const can = !!node && !!toggleOff
+  const keysOf = (g) => g.members.map((m) => pieceKey(g.kind, m.id))
+  const nOff = can ? groups.flatMap(keysOf).filter((k) => off.has(k)).length : 0
   return (
-    <nav className="subnav" aria-label="Części węzła">
-      {current && node && (
-        <button type="button" className="back" onClick={toNode}>
-          ← cały węzeł {node.id}
+    <nav className="tree" aria-label="Części węzła">
+      {node && (
+        <button type="button" className={current ? 'tree-root' : 'tree-root on'}
+          aria-current={current ? undefined : 'true'} onClick={toNode}>
+          <b>Σ</b>
+          <span>Cały węzeł {node.id}</span>
+          {nOff > 0 && <em>{nOff} pominięte</em>}
         </button>
       )}
-      {node && (
-        <div className="tabs" role="tablist">
-          <button type="button" role="tab" aria-selected={!current}
-            className={current ? 'tab' : 'tab on'} onClick={toNode}>
-            <b>Σ</b><span>Całość</span><em>węzeł</em>
-          </button>
-        </div>
-      )}
-      {groups.map((g) => (
-        <div key={g.kind} className={`tab-group ${g.kind}`}>
-          {(groups.length > 1 || node) && <h5>{GROUP_LABEL[g.kind]}</h5>}
-          <div className="tabs" role="tablist">
-            {g.members.map((m) => (
-              <button key={m.id} type="button" role="tab" aria-selected={isOn(g.kind, m.id)}
-                className={isOn(g.kind, m.id) ? 'tab on' : 'tab'}
-                title={`${m.id} · ${sectionOf(g.kind, m) || m.name}`}
-                onClick={() => onSelect({ kind: g.kind, id: m.id, ref: m })}>
-                <b>{sectionLetter(m.id) || '—'}</b>
-                <span>{(g.kind === 'road' ? m.name : sectionOf(g.kind, m)) || m.name}</span>
-                <em>{shares[`${g.kind}:${m.id}`] == null ? '—' : `${shares[`${g.kind}:${m.id}`]}%`}</em>
-              </button>
-            ))}
+      {groups.map((g) => {
+        const keys = keysOf(g)
+        const left = keys.filter((k) => !off.has(k)).length
+        return (
+          <div key={g.kind} className={`tree-group ${g.kind}${node ? ' nested' : ''}`}>
+            {(groups.length > 1 || node) && (
+              <h5>
+                <span>{GROUP_LABEL[g.kind]}</span>
+                {can && left < keys.length && (
+                  <button type="button" onClick={() => toggleOff(keys, false)}>
+                    wlicz wszystkie
+                  </button>
+                )}
+              </h5>
+            )}
+            <ul>
+              {g.members.map((m, i) => {
+                const out = can && off.has(keys[i])
+                const last = !out && left === 1
+                const on = isOn(g.kind, m.id)
+                const share = shares[keys[i]]
+                return (
+                  <li key={m.id} className={`${on ? 'on' : ''}${out ? ' out' : ''}`}>
+                    {can && (
+                      <input type="checkbox" className="check" checked={!out} disabled={last}
+                        style={{ '--c': LAYERS[g.kind].color }}
+                        aria-label={`Wliczaj ${m.id} do węzła`}
+                        title={last ? 'Grupa musi mieć co najmniej jedną część'
+                          : out ? 'Wlicz do węzła' : 'Pomiń w liczbach węzła'}
+                        onChange={(e) => toggleOff(keys[i], !e.target.checked)} />
+                    )}
+                    <button type="button" aria-current={on ? 'true' : undefined}
+                      title={`${m.id} · ${sectionOf(g.kind, m) || m.name}`}
+                      onClick={() => onSelect({ kind: g.kind, id: m.id, ref: m })}>
+                      <b>{sectionLetter(m.id) || '—'}</b>
+                      <span>{(g.kind === 'road' ? m.name : sectionOf(g.kind, m)) || m.name}</span>
+                      <em>{out ? 'pominięty' : share == null ? '—' : `${share}%`}</em>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
           </div>
-        </div>
-      ))}
+        )
+      })}
+      {nOff > 0 && (
+        <p className="hint">
+          Pominięte części nie wliczają się do sum węzła, podziału modalnego,
+          wielkości koła na mapie ani rankingu.
+        </p>
+      )}
     </nav>
   )
 }
@@ -366,7 +406,7 @@ function unitOf(kind) {
 
 export default function Details({
   data, sel, hours, metric, period, share, wholeDay, people, occupancy,
-  markers, family, onSelect, onClose,
+  markers, family, onSelect, onClose, off, toggleOff,
 }) {
   const { kind, ref: p } = sel
   // phones: the panel is a bottom sheet; dragging its header down closes it
@@ -472,15 +512,20 @@ export default function Details({
       ? profileFor(data, 'road', m, 'all', false)
       : shape(profileFor(data, g.kind, m, metric, people), g.kind)))
     const vals = profs.map((pr) => sumHours(pr, hours))
-    const sum = vals.reduce((x, y) => x + y, 0)
-    g.members.forEach((m, i) => {
-      shares[`${g.kind}:${m.id}`] = sum ? Math.round((100 * vals[i]) / sum) : null
+    // pieces left out of the node are not part of what the shares divide
+    const isIn = g.members.map((m) => !fam.node || !off?.has(pieceKey(g.kind, m.id)))
+    const sum = vals.reduce((x, y, j) => x + (isIn[j] ? y : 0), 0)
+    g.members.forEach((m, j) => {
+      shares[pieceKey(g.kind, m.id)] = sum && isIn[j] ? Math.round((100 * vals[j]) / sum) : null
     })
     const i = fam.current?.kind === g.kind
       ? g.members.findIndex((m) => m.id === fam.current.id) : -1
     if (i >= 0) {
       part = {
-        g, i, profs, val: vals[i], sum, share: shares[`${g.kind}:${g.members[i].id}`],
+        g, i, val: vals[i], sum, share: shares[pieceKey(g.kind, g.members[i].id)],
+        out: !isIn[i], prof: profs[i],
+        // the rest of the group, which a left-out piece is shown against too
+        whole: addProfiles(profs.filter((_, j) => isIn[j] || j === i)),
         unit: g.kind === 'road' && allVehicles ? 'pojazdów, wszystkie kategorie' : unit(g.kind),
       }
     }
@@ -557,7 +602,16 @@ export default function Details({
     body = (
       <>
         <dl>
-          <dt>Przekroje</dt><dd>{p.members.map((m) => m.id).join(', ')}</dd>
+          <dt>Przekroje</dt>
+          <dd>
+            {p.members.map((m) => m.id).join(', ')}
+            {p.all.length > p.members.length && (
+              <span className="partial">
+                {' '}— pominięte: {p.all.filter((m) => !p.members.includes(m))
+                  .map((m) => m.id).join(', ')}
+              </span>
+            )}
+          </dd>
           <dt className="now">W okresie {period}</dt>
           {now(node?.split && splitTotal(node.split) > 0
             ? `${fmtEst(splitTotal(node.split))} osób — wszystkie środki`
@@ -799,20 +853,32 @@ export default function Details({
         <button onClick={onClose}>×</button>
       </div>
       <div className="dbody">
-        {fam && <SubNav family={fam} shares={shares} onSelect={onSelect} />}
+        {fam && (
+          <NodeTree family={fam} shares={shares} onSelect={onSelect}
+            off={off || NO_OFF} toggleOff={toggleOff} />
+        )}
         {part && (
           <div className="part">
             <h4>
               Część węzła {fam.node?.id || fam.parent}
               {' — '}{GROUP_LABEL[part.g.kind].toLowerCase()}
             </h4>
-            <p>
-              {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
-              {sectionLetter(fam.current.id) || fam.current.id} to{' '}
-              <b>{part.sum ? `${part.share}%` : '—'}</b> tej grupy w okresie {period}:
-              {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
-            </p>
-            <PartProfile part={part.profs[part.i]} whole={addProfiles(part.profs)}
+            {part.out ? (
+              <p>
+                {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
+                {sectionLetter(fam.current.id) || fam.current.id} jest{' '}
+                <b>pominięty</b> w liczbach węzła. W okresie {period}:{' '}
+                {fmt(part.val)} ({part.unit}), wobec {fmt(part.sum)} w pozostałej części grupy.
+              </p>
+            ) : (
+              <p>
+                {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
+                {sectionLetter(fam.current.id) || fam.current.id} to{' '}
+                <b>{part.sum ? `${part.share}%` : '—'}</b> tej grupy w okresie {period}:
+                {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
+              </p>
+            )}
+            <PartProfile part={part.prof} whole={part.whole}
               hours={hours} color={LAYERS[part.g.kind].color} />
           </div>
         )}

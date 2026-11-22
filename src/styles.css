@@ -374,18 +374,19 @@ select {
 .breakdown .bar i { grid-column: 1 / span 2; grid-row: 2; }
 
 /* ---------------------------------------------------- checkboxes & switches */
-/* Layers: a checkbox in the layer's colour, so it is also its legend swatch. */
-.sidebar input.check {
+/* A checkbox in its layer's colour, so it is also its legend swatch. Used for
+   the layers and for the pieces of a node. */
+.sidebar input.check, .tree input.check {
   appearance: none; -webkit-appearance: none; flex: 0 0 auto;
   width: 18px; height: 18px; margin: 0; border-radius: 5px; cursor: pointer;
   border: 2px solid var(--c, #4a6ea9); background: transparent;
   transition: background-color .12s, box-shadow .12s;
 }
-.sidebar input.check:checked {
+.sidebar input.check:checked, .tree input.check:checked {
   background: var(--c, #4a6ea9) center / 14px no-repeat
     url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='white' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
-.sidebar input.check:hover { box-shadow: 0 0 0 3px rgba(255, 255, 255, .08); }
+.sidebar input.check:hover, .tree input.check:hover { box-shadow: 0 0 0 3px rgba(255, 255, 255, .08); }
 
 /* Settings: a switch. The knob is a gradient, so no pseudo-elements on <input>. */
 .sidebar input.switch {
@@ -400,7 +401,7 @@ select {
   background-image: radial-gradient(circle, #fff 0 6px, transparent 6.5px);
 }
 
-.sidebar input.check:focus-visible, .sidebar input.switch:focus-visible {
+.sidebar input.check:focus-visible, .tree input.check:focus-visible, .sidebar input.switch:focus-visible {
   outline: 2px solid #7aa2e3; outline-offset: 2px;
 }
 .sidebar .row { gap: .6rem; }
@@ -513,35 +514,55 @@ select {
 /* the sheet handle exists only on phones */
 .sheet-handle { display: none; }
 
-/* ------------------------------------------------- point -> section tabs */
-.subnav { margin: -.2rem 0 1rem; }
-.subnav .back {
-  background: none; border: 0; padding: .2rem 0; margin-bottom: .45rem;
-  color: #8fb3ff; font: inherit; font-size: .82rem; cursor: pointer;
+/* ------------------------------------------------- node -> pieces tree */
+.tree { margin: -.2rem 0 1rem; }
+.tree button { font: inherit; color: inherit; }
+.tree-root, .tree li > button {
+  display: flex; align-items: center; gap: .5rem; width: 100%; min-width: 0;
+  background: none; border: 1px solid transparent; border-radius: 7px;
+  padding: .28rem .45rem; cursor: pointer; text-align: left;
 }
-.subnav .back:hover { text-decoration: underline; }
-.subnav .tabs {
-  display: flex; gap: .35rem; overflow-x: auto; padding-bottom: .25rem;
-  scrollbar-width: thin;
+.tree-root:hover, .tree li > button:hover { background: #232733; }
+.tree-root.on, .tree li.on > button { background: #2d3f5f; border-color: #4a6ea9; }
+.tree b {
+  flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; display: grid;
+  place-items: center; font-size: .74rem; background: #3a4150;
 }
-.subnav .tab {
-  flex: 0 0 auto; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
-  column-gap: .45rem; align-items: center; min-width: 86px; max-width: 170px;
-  padding: .4rem .6rem; border-radius: 9px; cursor: pointer; text-align: left;
-  background: #232733; border: 1px solid var(--line); color: var(--text); font: inherit;
+.tree .on b { background: #4a6ea9; }
+.tree span { flex: 1; min-width: 0; font-size: .82rem; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.tree em { font-style: normal; font-size: .74rem; color: var(--dim);
+  font-variant-numeric: tabular-nums; }
+.tree .on em { color: #cfe0ff; }
+.tree-root span { font-weight: 600; }
+
+/* children hang off the root on a guide line */
+.tree-group { margin-top: .35rem; }
+.tree-group.nested { margin-left: .85rem; padding-left: .6rem; border-left: 1px solid var(--line); }
+.tree-group h5 {
+  display: flex; align-items: baseline; gap: .5rem; margin: .45rem 0 .15rem .45rem;
+  font-size: .68rem; font-weight: 600; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--dim);
 }
-.subnav .tab:hover { border-color: #4a5263; }
-.subnav .tab.on { background: #2d3f5f; border-color: #4a6ea9; }
-.subnav .tab b {
-  grid-row: 1 / 3; width: 22px; height: 22px; border-radius: 50%; display: grid;
-  place-items: center; font-size: .78rem; background: #3a4150;
+.tree-group h5 span { flex: 1; }
+.tree-group h5 button {
+  background: none; border: 0; padding: 0; cursor: pointer; color: #8fb3ff;
+  font-size: .72rem; letter-spacing: 0; text-transform: none; font-weight: 400;
 }
-.subnav .tab.on b { background: #4a6ea9; }
-.subnav .tab span {
-  font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+.tree-group h5 button:hover { text-decoration: underline; }
+.tree ul { list-style: none; margin: 0; padding: 0; }
+.tree li { display: flex; align-items: center; gap: .15rem; }
+.tree li input.check { margin: 0 .15rem 0 .25rem; }
+.tree li input.check:disabled { cursor: not-allowed; opacity: .45; }
+.tree li.out > button { opacity: .5; }
+.tree li.out span { text-decoration: line-through; text-decoration-color: #6b7385; }
+.tree-group.pt b { border-radius: 5px; background: #2b4a5e; }
+.tree-group.pt .on b { background: #2e86ab; }
+.tree .hint { margin: .5rem 0 0 .45rem; }
+@media (hover: none) {
+  .tree-root, .tree li > button { padding: .45rem .5rem; }   /* finger-sized */
+  .tree li input.check { width: 20px; height: 20px; }
 }
-.subnav .tab em { font-style: normal; font-size: .72rem; color: var(--dim); }
-.subnav .tab.on em { color: #cfe0ff; }
 
 .part {
   margin: 0 0 1.1rem; padding: .7rem .8rem .4rem; border-radius: 10px;
@@ -561,14 +582,8 @@ select {
 }
 .sec-dot.on { border-color: #fff; transform: scale(1.18); box-shadow: 0 0 0 3px rgba(255, 255, 255, .25); }
 .sec-dot.pt { border-radius: 6px; }                 /* transit stops: square */
+.sec-dot.out { opacity: .4; filter: grayscale(.7); }  /* left out of the node */
 
-.subnav .tab-group { margin-top: .55rem; }
-.subnav .tab-group h5 {
-  margin: 0 0 .3rem; font-size: .68rem; font-weight: 600; letter-spacing: .06em;
-  text-transform: uppercase; color: var(--dim);
-}
-.subnav .tab-group.pt .tab b { border-radius: 6px; background: #2b4a5e; }
-.subnav .tab-group.pt .tab.on b { background: #2e86ab; }
 
 /* ----------------------------------------------------------- view picker */
 .views { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .6rem; }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   loadAll, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, hoursOf, periodShare, buildMarkers,
-  familyOf, VIEWS,
+  familyOf, VIEWS, markerIndex,
 } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
@@ -27,6 +27,13 @@ export default function App() {
   // map labels: 'hover' (tooltip only), 'num' or 'pct' (always visible)
   const [labels, setLabels] = useState({ mode: 'hover', declutter: true })
   const [selected, setSelected] = useState(null)
+  // Sections left out of their node's numbers, as pieceKey()s.
+  const [off, setOff] = useState(() => new Set())
+  const toggleOff = (keys, out) => setOff((prev) => {
+    const next = new Set(prev)
+    for (const k of [].concat(keys)) (out ? next.add(k) : next.delete(k))
+    return next
+  })
   // On phones the sidebar is a bottom sheet; this is whether it is pulled up.
   const [sheetOpen, setSheetOpen] = useState(false)
 
@@ -71,15 +78,22 @@ export default function App() {
   // refers to the same object.
   const markers = useMemo(
     () => (data ? buildMarkers(data, {
-      visible, hours, metric, areas, aggregate: merged, split, wholeDay, people, occupancy,
+      visible, hours, metric, areas, aggregate: merged, split, wholeDay, people, occupancy, off,
     }) : {}),
-    [data, visible, hours, metric, areas, merged, split, wholeDay, people, occupancy],
+    [data, visible, hours, metric, areas, merged, split, wholeDay, people, occupancy, off],
   )
+
+  // A selected node is rebuilt whenever the markers are; point at the fresh
+  // one, or leaving out a section would not reach the panel.
+  const sel = useMemo(() => {
+    const m = selected && markerIndex(markers)[`${selected.kind}:${selected.id}`]
+    return m && m.ref !== selected.ref ? { ...selected, ref: m.ref } : selected
+  }, [markers, selected])
 
   // The point the selection belongs to, shared by the map and the panel.
   const family = useMemo(
-    () => (data && selected ? familyOf(data, markers, selected) : null),
-    [data, markers, selected],
+    () => (data && sel ? familyOf(data, markers, sel) : null),
+    [data, markers, sel],
   )
 
   if (error) return <div className="fatal">{error}</div>
@@ -106,14 +120,15 @@ export default function App() {
         areas={areas} period={period} aggregate={merged}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
-        selected={selected} onSelect={select} family={family}
+        selected={sel} onSelect={select} family={family} off={off}
       />
       {selected && (
         <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`}
           onClose={() => setSelected(null)}>
-          <Details data={data} sel={selected} hours={hours} metric={metric}
+          <Details data={data} sel={sel} hours={hours} metric={metric}
             period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
             share={periodShare(data.meta, hours)} markers={markers} family={family}
+            off={off} toggleOff={toggleOff}
             onSelect={select} onClose={() => setSelected(null)} />
         </ErrorBoundary>
       )}

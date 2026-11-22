@@ -333,6 +333,7 @@ export function rangeLabel(range) {
  */
 export function buildMarkers(data, {
   visible, hours, metric, areas, aggregate, split, wholeDay, people, occupancy,
+  off = NONE,
 }) {
   const catOrder = data.meta.vehCatOrder
   const out = {}
@@ -384,7 +385,7 @@ export function buildMarkers(data, {
       m.value = toPeople(expand(data.meta, windowKind(k, m.ref), m.value, wholeDay),
         k, occupancy, people)
     }
-    if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k])
+    if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k], off)
   }
   if (split) {
     attachSplits(data, out, {
@@ -396,9 +397,18 @@ export function buildMarkers(data, {
   return out
 }
 
+const NONE = new Set()
+
+/** Key of a section in the set of sections left out of their node. */
+export const pieceKey = (kind, id) => `${kind}:${id}`
+
 /** One marker per measurement point: its cross-sections are separate approaches
- *  of the same place, so their counts add up rather than overlap. */
-function mergeToPoints(kind, list) {
+ *  of the same place, so their counts add up rather than overlap.
+ *
+ *  Sections in `off` are left out of the sums - say the far approaches of a big
+ *  interchange, to look at one junction of it. They stay in `all`, so the panel
+ *  can list them and bring them back, and the marker stays where it was. */
+function mergeToPoints(kind, list, off) {
   const by = new Map()
   for (const m of list) {
     const key = parentOf(kind, m.ref)
@@ -407,23 +417,25 @@ function mergeToPoints(kind, list) {
   }
   return [...by.entries()].map(([key, ms]) => {
     if (ms.length === 1) return ms[0]
+    const on = ms.filter((m) => !off.has(pieceKey(kind, m.id)))
     return {
       id: key, kind,
       lat: ms.reduce((a, m) => a + m.lat, 0) / ms.length,
       lon: ms.reduce((a, m) => a + m.lon, 0) / ms.length,
-      value: ms.reduce((a, m) => a + m.value, 0),
-      raw: ms.reduce((a, m) => a + m.raw, 0),
+      value: on.reduce((a, m) => a + m.value, 0),
+      raw: on.reduce((a, m) => a + m.raw, 0),
       title: `${key} · ${ms[0].ref.name || ms[0].ref.stop || ''}`,
-      sub: `suma ${ms.length} przekrojów: ${ms.map((m) => m.id.slice(-1)).join(', ')}`,
+      sub: `suma ${on.length} przekrojów: ${on.map((m) => m.id.slice(-1)).join(', ')}`
+        + (on.length < ms.length ? ` (z ${ms.length})` : ''),
       ref: {
-        aggregate: true, id: key, members: ms.map((m) => m.ref),
+        aggregate: true, id: key, members: on.map((m) => m.ref), all: ms.map((m) => m.ref),
         name: ms[0].ref.name || ms[0].ref.stop || '',
         // Usually a node's sections are different streets crossing a survey
         // line, and their sum is the traffic across it. In 10 nodes they are
         // the same street either side of a junction, where a vehicle going
         // straight on is counted on both - the sum overstates, shares do not.
         repeatsStreet: kind === 'road'
-          && new Set(ms.map((m) => m.ref.name)).size < ms.length,
+          && new Set(on.map((m) => m.ref.name)).size < on.length,
       },
     }
   })
@@ -438,11 +450,11 @@ function mergeToPoints(kind, list) {
 export function resolveTarget(markers, kind, ref) {
   const list = markers[kind] || []
   const m = list.find((x) => x.id === ref.id)
-    || list.find((x) => x.ref.aggregate && x.ref.members.some((r) => r.id === ref.id))
+    || list.find((x) => x.ref.aggregate && x.ref.all.some((r) => r.id === ref.id))
   if (m) return { kind, id: m.id, ref: m.ref }
   if (kind === 'pt') {
     const host = (markers.road || []).find((x) => x.pair
-      && (x.pair.id === ref.id || x.pair.id === ref.point))
+      && (x.pair.id === ref.id || x.pair.all.some((r) => r.id === ref.id)))
     if (host) return { kind: 'road', id: host.id, ref: host.ref }
   }
   return { kind, id: ref.id, ref }
@@ -478,11 +490,11 @@ export function familyOf(data, markers, sel) {
   let node = [idx[`${kind}:${parent}`], idx[`${kind}:${ref.id}`]]
     .find((m) => m?.split || m?.ref?.aggregate) || null
   if (!node && kind === 'pt') {
-    node = (markers.road || []).find((r) => r.pair?.refs.some((x) => x.id === ref.id)) || null
+    node = (markers.road || []).find((r) => r.pair?.all.some((x) => x.id === ref.id)) || null
   }
   const groups = node
-    ? [{ kind: node.kind, members: membersOf(node) },
-      ...(node.pair ? [{ kind: 'pt', members: node.pair.refs }] : [])]
+    ? [{ kind: node.kind, members: allOf(node) },
+      ...(node.pair ? [{ kind: 'pt', members: node.pair.all }] : [])]
     : [{ kind, members: data[FAMILY_SOURCE[kind]].filter((x) => parentOf(kind, x) === parent) }]
   if (groups.reduce((a, g) => a + g.members.length, 0) < 2) return null
   const atNode = ref.aggregate || ref === node?.ref
@@ -533,7 +545,9 @@ export function metres(a, b) {
   return 2 * R * Math.asin(Math.sqrt(h))
 }
 
+// the sections a node counts, and all it has including the ones left out
 const membersOf = (m) => (m.ref.aggregate ? m.ref.members : [m.ref])
+const allOf = (m) => (m.ref.aggregate ? m.ref.all : [m.ref])
 
 function roadCounts(data, ids, hours) {
   const ci = Object.fromEntries(data.meta.vehCatOrder.map((c, i) => [c, i]))
@@ -679,7 +693,10 @@ function attachSplits(data, out, { hours, occupancy, pair }) {
       ptRefs: pr ? membersOf(pr.m) : null, hours, occupancy,
     })
     if (pr) {
-      r.pair = { id: pr.m.id, title: pr.m.title, dist: Math.round(pr.d), refs: membersOf(pr.m) }
+      r.pair = {
+        id: pr.m.id, title: pr.m.title, dist: Math.round(pr.d),
+        refs: membersOf(pr.m), all: allOf(pr.m),
+      }
     }
   }
   for (const p of pt) {
