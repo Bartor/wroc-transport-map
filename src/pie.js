@@ -45,7 +45,9 @@ const pctText = (share) => (share < 0.01 ? '<1%' : `${Math.round(share * 100)}%`
  * People counts built on an assumption (cars x occupancy, transit estimated
  * from vehicles) are printed rounded with a tilde; measured ones exactly.
  */
-export function labelLines(m, mode, unit) {
+/** What a permanent label says. `show` picks numbers, shares (%) or both;
+ *  shares describe a modal split, so a plain marker only ever has a number. */
+export function labelLines(m, show, unit) {
   if (m.split) {
     const total = splitTotal(m.split)
     if (!total) return []
@@ -55,13 +57,14 @@ export function labelLines(m, mode, unit) {
       .sort((a, b) => b.persons - a.persons)
       .slice(0, 4)
     for (const s of top) {
-      const text = mode === 'pct' ? pctText(s.persons / total)
-        : s.est ? fmtEst(s.persons) : fmt(s.persons)
+      const num = s.est ? fmtEst(s.persons) : fmt(s.persons)
+      const share = pctText(s.persons / total)
+      const text = show.num && show.pct ? `${num} · ${share}` : show.pct ? share : num
       lines.push({ text, color: s.color })
     }
     return lines
   }
-  if (mode === 'num' && m.value) return [{ text: `${fmt(m.value)} ${unit}`, bold: true }]
+  if (show.num && m.value) return [{ text: `${fmt(m.value)} ${unit}`, bold: true }]
   return []
 }
 

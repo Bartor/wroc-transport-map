@@ -300,12 +300,12 @@ export default function MapView({
   const pies = Object.values(markers).some((list) => list.some((m) => m.split))
 
   const labelEntries = useMemo(() => {
-    if (labels.mode === 'hover') return []
+    if (!labels.num && !labels.pct) return []
     const out = []
     for (const [kind, list] of Object.entries(markers)) {
       const unit = people && kind === 'road' ? 'os.' : LAYERS[kind].unit
       for (const m of list) {
-        const lines = labelLines(m, labels.mode, unit)
+        const lines = labelLines(m, labels, unit)
         if (!lines.length) continue
         out.push({
           key: `${kind}:${m.id}`, lat: m.lat, lon: m.lon, r: radii[`${kind}:${m.id}`],
@@ -315,7 +315,7 @@ export default function MapView({
       }
     }
     return out
-  }, [markers, labels.mode, radii, people])
+  }, [markers, labels, radii, people])
 
   return (
     <div className="map-wrap">
@@ -441,7 +441,7 @@ export default function MapView({
         <SectionDots family={family} selected={selected} onSelect={onSelect} off={off}
           nodeR={family?.node ? radii[`${family.node.kind}:${family.node.id}`] : 0} />
 
-        {labels.mode !== 'hover' && (
+        {(labels.num || labels.pct) && (
           <NodeLabels entries={labelEntries} declutter={labels.declutter} />
         )}
       </MapContainer>

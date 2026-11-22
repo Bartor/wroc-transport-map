@@ -402,19 +402,22 @@ export default function Sidebar({
 
         <Field label="Etykiety na mapie" help={(
           <p>
-            Udziały (%) opisują podział modalny, więc pokazują się tylko na
-            węzłach. Przy oddaleniu nakładające się etykiety są ukrywane — większe
-            węzły mają pierwszeństwo; przybliż mapę, aby zobaczyć więcej.
+            Etykiety stale widoczne przy punktach. Liczby i udziały można
+            włączyć razem. Udziały (%) opisują podział modalny, więc pokazują się
+            tylko na węzłach. Bez etykiet szczegóły pojawiają się{' '}
+            {TOUCH ? 'po dotknięciu punktu' : 'po najechaniu na punkt'}. Przy
+            oddaleniu nakładające się etykiety są ukrywane — większe węzły mają
+            pierwszeństwo; przybliż mapę, aby zobaczyć więcej.
           </p>
         )}>
-          <select value={labels.mode} aria-label="Etykiety na mapie"
-            onChange={(e) => setLabels({ ...labels, mode: e.target.value })}>
-            <option value="hover">{TOUCH ? 'Brak — szczegóły po dotknięciu' : 'Tylko po najechaniu'}</option>
-            <option value="num">Zawsze — liczby (#)</option>
-            <option value="pct">Zawsze — udziały (%)</option>
-          </select>
+          <div className="pair">
+            <Option checked={labels.num} label="Liczby (#)"
+              onChange={() => setLabels({ ...labels, num: !labels.num })} />
+            <Option checked={labels.pct} label="Udziały (%)"
+              onChange={() => setLabels({ ...labels, pct: !labels.pct })} />
+          </div>
         </Field>
-        {labels.mode === 'pct' && !V.split && (
+        {labels.pct && !V.split && (
           <p className="warn">
             Udziały opisują podział modalny, więc są tylko w widoku węzłów.{' '}
             <button type="button" className="link" onClick={() => setView('nodes')}>
@@ -633,7 +636,7 @@ export default function Sidebar({
           )}
         </Option>
 
-        {labels.mode !== 'hover' && (
+        {(labels.num || labels.pct) && (
           <Option checked={labels.declutter}
             onChange={() => setLabels({ ...labels, declutter: !labels.declutter })}
             label="Ukrywaj nakładające się etykiety" />

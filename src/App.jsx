@@ -24,8 +24,9 @@ export default function App() {
   const [net, setNet] = useState({ on: false, mode: 'road', min: 3000 })
   const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
   const [sig, setSig] = useState({ on: false, filter: 'candidates' })
-  // map labels: 'hover' (tooltip only), 'num' or 'pct' (always visible)
-  const [labels, setLabels] = useState({ mode: 'hover', declutter: true })
+  // permanent map labels: numbers, shares (%), either or both; with neither
+  // the details come on hover
+  const [labels, setLabels] = useState({ num: false, pct: false, declutter: true })
   const [selected, setSelected] = useState(null)
   // Sections left out of their node's numbers, as pieceKey()s.
   const [off, setOff] = useState(() => new Set())
