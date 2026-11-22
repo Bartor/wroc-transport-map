@@ -67,7 +67,7 @@ What changed:
 
 **Source-side issues** (not pipeline errors; the JSON follows the raw rows)
 
-- 6.4's own pivot sheets (6.4, 6.9) disagree with its data rows for 6 points. R1_11 is the large one: 52,096 in the pivot vs 65,276 in the rows (+25%; the rows are higher in every hour, by 10–34%). The others are small: PR_03 +66, R2_05 +37, R3_06 +19, R2_13 +5, PR_01 +3. It is uncertain which is right.
+- 6.4's own pivot sheets (6.4, 6.9) disagree with its data rows for 6 points. R1_11 is the large one: 52,096 in the pivot vs 65,276 in the rows (+25%; the rows are higher in every hour, by 10–34%). The others are small: PR_03 +66, R2_05 +37, R3_06 +19, R2_13 +5, PR_01 +3. Resolved: the pivots are stale, not wrong data. They were last refreshed on 2024-09-23 from the same data rows (`DANE - potoki pasażerskie`, K4:W34218); refreshing them in Excel on a copy gives 65,276 for R1_11 and matches the data rows for all 103 points. The data rows, which the map uses, are right.
 - 6.3 lists PR_02B twice; the second row (Kazimierza Wielkiego/Nowy Świat, Rynek poles) is the PR_02C that exists in the data. PR_02C, PR_03C, PR_03D, PR_21C, R2_04C and R2_11C have data but no 6.3 row.
 - KW_01B is in 6.3 but has no data: both poles were coded KW_01A in 6.4.
 - 5 PT rows have a blank passenger count (R2_08D ×2, R3_06A ×2, R3_06D). They are counted as vehicles with 0 passengers, which matters very little.
