@@ -419,8 +419,10 @@ export default function Details({
       <>
         <dl>
           <dt>Przekroje</dt><dd>{p.members.map((m) => m.id).join(', ')}</dd>
-          <dt>Suma w okresie {period}</dt><dd>{fmt(sumHours(total, hours))}</dd>
-          <dt>Suma dobowa</dt><dd>{fmt(total.reduce((a, b) => a + b, 0))}</dd>
+          <dt className="now">W okresie {period}</dt>
+          <dd className="now">{fmt(sumHours(total, hours))} {unit(kind)}</dd>
+          <dt className="whole">Cały pomiar</dt>
+          <dd className="whole">{fmt(total.reduce((a, b) => a + b, 0))}</dd>
         </dl>
         {p.repeatsStreet ? (
           <p className="warn">
@@ -482,10 +484,12 @@ export default function Details({
           <dt>Odcinek</dt><dd>{p.segment}</dd>
           <dt>Miejsce pomiaru</dt><dd>{p.where}</dd>
           <dt>Data</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd>
-          <dt>{p.window ? 'Suma z pomiaru' : 'Suma dobowa'}</dt>
-          <dd>
-            {fmt(p.total)} pojazdów — pomiar, wszystkie kategorie
-            {p.window && ' — tylko 6–10 i 15–19, nie cała doba'}
+          <dt className="now">W okresie {period}</dt>
+          <dd className="now">{fmt(sumHours(prof, hours))} {unit('road')}</dd>
+          <dt className="whole">Cały pomiar</dt>
+          <dd className="whole">
+            {fmt(p.total)} pojazdów, wszystkie kategorie
+            {p.window ? ' — tylko 6–10 i 15–19, nie cała doba' : ''}
           </dd>
         </dl>
         <h4>
@@ -508,25 +512,32 @@ export default function Details({
           <dt>Odcinek</dt><dd>{p.segment}</dd>
           {p.where?.length ? <><dt>Miejsce</dt><dd>{p.where.join('; ')}</dd></> : null}
           {p.date ? <><dt>Pomiar</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd></> : null}
-          <dt>Łącznie</dt><dd>{fmt(p.total)} — pomiar</dd>
-          <dt>W okresie {period}</dt>
-          <dd>{fmt(shown(sumHours(p.byHour, hours)))}</dd>
+          <dt className="now">W okresie {period}</dt>
+          <dd className="now">{fmt(shown(sumHours(p.byHour, hours)))} {unit(kind)}</dd>
+          <dt className="whole">Cały pomiar</dt>
+          <dd className="whole">{fmt(p.total)}{p.hours ? ` (${p.hours})` : ''}</dd>
         </dl>
         <h4>Profil dobowy</h4>
         <Profile values={shape(p.byHour)} hours={hours} color={color} />
-        <Breakdown title="Kierunki" obj={p.byDir} />
-        <Breakdown title="Płeć" obj={p.bySex} />
-        {kind === 'bike' && <Breakdown title="Gdzie jadą" obj={p.byPlace} />}
-        {kind === 'bike' && <Breakdown title="Pojazd" obj={p.byMode} />}
-        {kind === 'bike' && <Breakdown title="Kask" obj={p.helmet} />}
-        {kind === 'ped' && <Breakdown title="Sprawność" obj={p.byMobility} />}
-        {kind === 'ped' && <Breakdown title="Cechy dodatkowe" obj={p.byMobility2} />}
-        {kind === 'ped' && <Breakdown title="Strona ulicy" obj={p.bySide} />}
+        <Breakdown title={`Kierunki — ${period}`} obj={p.byHourDir
+          ? Object.fromEntries(Object.entries(p.byHourDir).map(([d, a]) => [d, shown(sumHours(a, hours))]))
+          : p.byDir} />
+        <Breakdown title="Płeć — cały pomiar" obj={p.bySex} />
+        {kind === 'bike' && <Breakdown title="Gdzie jadą — cały pomiar" obj={p.byPlace} />}
+        {kind === 'bike' && <Breakdown title="Pojazd — cały pomiar" obj={p.byMode} />}
+        {kind === 'bike' && <Breakdown title="Kask — cały pomiar" obj={p.helmet} />}
+        {kind === 'ped' && <Breakdown title="Sprawność — cały pomiar" obj={p.byMobility} />}
+        {kind === 'ped' && <Breakdown title="Cechy dodatkowe — cały pomiar" obj={p.byMobility2} />}
+        {kind === 'ped' && <Breakdown title="Strona ulicy — cały pomiar" obj={p.bySide} />}
       </>
     )
   } else if (kind === 'pt') {
     const prof = new Array(24).fill(0)
     Object.values(p.byHour).forEach((arr) => arr.forEach((v, h) => { prof[h] += v }))
+    const vehNow = Object.values(p.vehByHour || {}).reduce((a, arr) => a + sumHours(arr, hours), 0)
+    // per traction in the period; lines and directions exist only as totals
+    const tractionNow = Object.fromEntries(Object.entries(p.vehByHour || {})
+      .map(([t, arr]) => [t, sumHours(arr, hours)]))
     cardBig = { value: fmt(sumHours(shape(prof), hours)), unit: unit('pt') }
     cardProfile = shape(prof)
     body = (
@@ -536,16 +547,29 @@ export default function Details({
           <dt>Lokalizacja</dt><dd>{p.loc}</dd>
           <dt>Osiedle</dt><dd>{p.osiedle || '—'}</dd>
           <dt>Pomiar</dt><dd>{p.dates.join(', ')}</dd>
-          <dt>Pasażerowie w pojazdach</dt><dd>{fmt(p.pax)} w {fmt(p.veh)} pojazdach</dd>
-          <dt>Średnie wykorzystanie miejsc</dt><dd>{pct(p.avgLoad)}</dd>
-          {p.boarded ? <><dt>Wsiadło / wysiadło</dt><dd>{fmt(p.boarded)} / {fmt(p.alighted)}</dd></> : null}
+          <dt className="now">W okresie {period}</dt>
+          <dd className="now">
+            {fmt(sumHours(shape(prof), hours))} pasażerów w {fmt(vehNow)} pojazdach
+          </dd>
+          <dt className="whole">Cały pomiar</dt>
+          <dd className="whole">{fmt(p.pax)} pasażerów w {fmt(p.veh)} pojazdach (5–9, 14–18)</dd>
+          <dt className="whole">Średnie wykorzystanie miejsc</dt>
+          <dd className="whole">{pct(p.avgLoad)} — cały pomiar</dd>
+          {p.boarded ? (
+            <>
+              <dt className="whole">Wsiadło / wysiadło</dt>
+              <dd className="whole">
+                {fmt(p.boarded)} / {fmt(p.alighted)} — cały pomiar, tylko część kursów
+              </dd>
+            </>
+          ) : null}
         </dl>
         <h4>Profil dobowy — pasażerowie</h4>
         <Profile values={shape(prof)} hours={hours} color={color} />
-        <Breakdown title="Trakcja (liczba pojazdów)" obj={p.byTraction} />
-        <Breakdown title="Linie (pasażerowie)" obj={p.byLine} />
-        <Breakdown title="Kierunki (pasażerowie)" obj={p.byDir} />
-        <Breakdown title="Przewoźnicy (liczba pojazdów)" obj={p.byCarrier} />
+        <Breakdown title={`Trakcja (liczba pojazdów) — ${period}`} obj={tractionNow} />
+        <Breakdown title="Linie (pasażerowie) — cały pomiar" obj={p.byLine} />
+        <Breakdown title="Kierunki (pasażerowie) — cały pomiar" obj={p.byDir} />
+        <Breakdown title="Przewoźnicy (liczba pojazdów) — cały pomiar" obj={p.byCarrier} />
       </>
     )
   } else if (kind === 'rail') {
@@ -558,15 +582,20 @@ export default function Details({
         <dl>
           <dt>Stacje kordonu</dt><dd>{p.stations.join(', ')}</dd>
           <dt>Pomiar</dt><dd>{p.dates.join(', ')}</dd>
-          <dt>Pociągi</dt><dd>{p.trains}</dd>
-          <dt>Pasażerowie</dt>
-          <dd>{Object.entries(p.pax).map(([d, v]) => `${d}: ${fmt(v)}`).join(' · ')}</dd>
+          <dt className="now">W okresie {period}</dt>
+          <dd className="now">{fmt(sumHours(shape(prof), hours))} pasażerów</dd>
+          <dt className="whole">Cały pomiar</dt>
+          <dd className="whole">
+            {Object.entries(p.pax).map(([d, v]) => `${d}: ${fmt(v)}`).join(' · ')}
+            {' '}w {p.trains} pociągach
+          </dd>
         </dl>
         <h4>Profil dobowy — pasażerowie</h4>
         <Profile values={shape(prof)} hours={hours} color={color} />
-        <Breakdown title="Kierunek" obj={p.pax} />
-        <Breakdown title="Miejsca w pociągach" obj={p.seats} />
-        <Breakdown title="Przewoźnicy (kursy)" obj={p.carriers} />
+        <Breakdown title={`Kierunek — ${period}`} obj={Object.fromEntries(
+          Object.entries(p.byHour).map(([d, arr]) => [d, shown(sumHours(arr, hours))]))} />
+        <Breakdown title="Miejsca w pociągach — cały pomiar" obj={p.seats} />
+        <Breakdown title="Przewoźnicy (kursy) — cały pomiar" obj={p.carriers} />
       </>
     )
   }

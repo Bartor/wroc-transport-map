@@ -594,6 +594,11 @@ select {
 .totals span .swatch { margin-right: .45rem; }
 .totals b em { font-style: normal; font-weight: 400; color: var(--dim); }
 
+/* period figures lead; whole-survey figures sit back */
+.details dd.now { color: #fff; font-weight: 600; }
+.details dt.now { color: var(--text); }
+.details dt.whole, .details dd.whole { color: var(--dim); font-size: .92em; }
+
 /* ================================================================== phones */
 @media (max-width: 760px) {
   html, body, #root { height: 100%; overflow: hidden; }
