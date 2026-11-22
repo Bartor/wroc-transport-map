@@ -270,10 +270,11 @@ def stage_bike(idx):
 
 # ------------------------------------------------------------ pedestrians (PP_xx)
 PED_MOB = {1: "osoba sprawna ruchowo", 2: "inne"}
+# Codes as defined in the legend of 3.5, sheet "baza", row 2.
 PED_MOB2 = {1: "osoba starsza (60+) z problemami z poruszaniem się",
-            2: "osoba z bagażem", 3: "osoba z wózkiem dziecięcym",
-            4: "osoba z psem", 5: "osoba na wózku inwalidzkim",
-            6: "osoba o kulach / z balkonikiem", 7: "osoba z dzieckiem",
+            2: "osoba z bagażem", 3: "osoba o kulach, z laską lub protezą",
+            4: "osoba z wózkiem dziecięcym", 5: "osoba na wózku inwalidzkim",
+            6: "osoba niewidoma", 7: "„małe kółka” (rolki, hulajnoga, rowerek)",
             8: "inne"}
 
 
@@ -340,15 +341,53 @@ def stage_ped(idx):
 
 
 # ------------------------------------------------- public transport (6.4 / 6.3)
+def gtfs_stops():
+    """MPK stop poles from the cached city timetable: stop_code -> (lat, lon),
+    plus name -> [(lat, lon)]. The code is the pole number 6.4 records for
+    every run, so it pins a section to its own pole, not to a stop name
+    that several places share."""
+    import glob, zipfile, csv, io
+    zips = sorted(glob.glob(os.path.join(geocode.CACHE, "gtfs_*.zip")),
+                  key=lambda f: int(re.findall(r"(\d+)", os.path.basename(f))[0]))
+    if not zips:
+        import gtfs
+        zips = [gtfs.download()]
+    by_code, by_name = {}, collections.defaultdict(list)
+    with zipfile.ZipFile(zips[-1]) as z, z.open("stops.txt") as f:
+        for r in csv.DictReader(io.TextIOWrapper(f, encoding="utf-8-sig")):
+            ll = (float(r["stop_lat"]), float(r["stop_lon"]))
+            if r.get("stop_code"):
+                by_code[r["stop_code"].strip()] = ll
+            by_name[txt(r["stop_name"]).lower()].append(ll)
+    return by_code, by_name
+
+
 def stage_pt(idx, sidx):
     """6.4: passengers counted on board buses and trams.
 
     Careful: the point ids here (KW_01, PR_02, R1_03...) are a *different*
     numbering from the road cross-sections that share the prefix - KW_01 is
     "Pracze Odrzanskie" here and "ul. Kamienskiego" there. So place these by
-    stop name against OSM instead of joining on the id.
+    their own stop poles instead of joining on the id.
     """
-    def where(s):
+    ov = load_overrides()
+    by_code, by_name = gtfs_stops()
+
+    def mean(lls):
+        return (sum(p[0] for p in lls) / len(lls), sum(p[1] for p in lls) / len(lls))
+
+    def where(sid, s):
+        # Own poles first. Stop names repeat across the city ("Bardzka" and
+        # "Bardzka (Cmentarz)", hubs with a dozen platforms), and matching by
+        # name put some sections kilometres off.
+        if sid in ov:
+            return tuple(ov[sid]), "manual"
+        lls = [by_code[c] for c in s["poles"] if c in by_code]
+        if lls:
+            return mean(lls), "pole"
+        name = s["stop"].most_common(1)[0][0].lower() if s["stop"] else ""
+        if by_name.get(name):
+            return mean(by_name[name]), "gtfs-name"
         for cand in (s["stop"].most_common(1)[0][0] if s["stop"] else None, s["name"]):
             g = geocode.find_stop(sidx, cand) if cand else None
             if g:
@@ -367,7 +406,7 @@ def stage_pt(idx, sidx):
             continue
         s = secs.setdefault(sid, {
             "point": pt, "name": txt(r[6]), "loc": txt(r[7]),
-            "osiedle": txt(r[9]), "stop": collections.Counter(),
+            "osiedle": txt(r[9]), "stop": collections.Counter(), "poles": set(),
             "h": collections.Counter(), "hveh": collections.Counter(),
             "traction": collections.Counter(), "line": collections.Counter(),
             "carrier": collections.Counter(), "dir": collections.Counter(),
@@ -380,6 +419,8 @@ def stage_pt(idx, sidx):
         s["dates"].add(txt(r[1]))
         if txt(r[8]):
             s["stop"][txt(r[8])] += 1
+        if txt(r[5]):
+            s["poles"].add(txt(r[5]))
         tr = txt(r[22]) or "?"
         s["traction"][tr] += 1
         if txt(r[17]):
@@ -402,7 +443,7 @@ def stage_pt(idx, sidx):
 
     out = []
     for sid, s in sorted(secs.items()):
-        (lat, lon), how = where(s)
+        (lat, lon), how = where(sid, s)
         tract = sorted(s["traction"])
         out.append({
             "id": sid, "point": s["point"], "name": s["name"], "loc": s["loc"],
@@ -474,17 +515,39 @@ def stage_rail(stations):
         c["dates"].add(r["date"])
         c["runs"].append(r)
 
+    # The marker goes where the line leaves the city: on the shortest
+    # city-station -> outside-station hop any run makes, at the boundary.
+    # Averaging every station a run touches put 9 of 11 markers out of town.
+    border = geocode.city_boundary()
+
+    def place(c):
+        hops = []
+        for r in c["runs"]:
+            a, b = sorted((r["from"], r["to"]), key=lambda n: not n.startswith("Wrocław"))
+            if a.startswith("Wrocław") and not b.startswith("Wrocław")                     and coords[a][0] and coords[b][0]:
+                hops.append((math.dist(coords[a][:2], coords[b][:2]), a, b))
+        if not hops:
+            pts = [coords[s] for s in c["stations"] if coords[s][0]]
+            if not pts:
+                return None, None, "unresolved"
+            return (sum(p[0] for p in pts) / len(pts),
+                    sum(p[1] for p in pts) / len(pts), "stations")
+        _, a, b = min(hops)
+        x = geocode.cross_boundary(coords[a][:2], coords[b][:2], border)
+        if x:
+            return x[0], x[1], "boundary"
+        return ((coords[a][0] + coords[b][0]) / 2, (coords[a][1] + coords[b][1]) / 2,
+                "midpoint")
+
     out = []
     for cid, c in sorted(cordons.items(), key=lambda kv: int(kv[0][1:])):
         sts = sorted(c["stations"])
-        pts = [coords[s] for s in sts if coords[s][0]]
+        lat, lon, how = place(c)
         dirs = sorted(c["pax"])
         out.append({
             "id": cid, "stations": sts,
             "stationCoords": {s: coords[s] for s in sts},
-            "lat": sum(p[0] for p in pts) / len(pts) if pts else None,
-            "lon": sum(p[1] for p in pts) / len(pts) if pts else None,
-            "geo": "stations" if pts else "unresolved",
+            "lat": lat, "lon": lon, "geo": how,
             "trains": c["trains"], "dates": sorted(c["dates"]),
             "pax": {d: round(v) for d, v in c["pax"].items()},
             "seats": {d: round(v) for d, v in c["seats"].items()},
@@ -531,6 +594,8 @@ WINDOWS = {
     "bike": [6, 7, 8, 9, 15, 16, 17, 18],
     "ped": [6, 7, 8, 9, 15, 16, 17, 18],
     "rail": [6, 7, 8, 9, 14, 15, 16, 17, 18],
+    # road counts on the study-area cordon (KO_*) ran in the peaks only
+    "roadPeak": [6, 7, 8, 9, 15, 16, 17, 18],
 }
 
 
@@ -576,6 +641,12 @@ def stage_expansion(road, points):
             "factor": 1.0, "basis": "measured",
             "note": "Ruch drogowy liczono przez całą dobę lub 5:00–21:00 — "
                     "wartości dobowe są mierzone, nie szacowane.",
+        },
+        "roadPeak": {
+            "factor": _factor(motor, WINDOWS["roadPeak"]), "basis": "derived",
+            "note": "Przekroje na kordonie obszaru (KO) liczono tylko 6–10 "
+                    "i 15–19. Współczynnik pochodzi z dobowego rozkładu ruchu "
+                    "silnikowego na %d przekrojach mierzonych 24h." % nfull,
         },
         "pt": {
             "factor": _factor(ptveh, WINDOWS["pt"]), "basis": "assumed",
@@ -677,6 +748,11 @@ def stage_points(cat):
         c["peak"] = peak
         c["byHour"] = hourly
         c["hasOff"] = bool(s and "off" in s)
+        # Most sections ran 5-21 or round the clock; a few only in the peaks,
+        # and their "day" total is an 8-hour sum unless the app knows.
+        counted = {h for h in range(24) if hourly[h]}
+        if counted and counted <= set(WINDOWS["roadPeak"]):
+            c["window"] = WINDOWS["roadPeak"]
     write("points.json", cat)
     return cat
 

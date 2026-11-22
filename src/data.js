@@ -191,6 +191,12 @@ export function coverageGap(meta, kind, hours) {
 
 export const expansionOf = (meta, kind) => meta.expansion?.[kind] || null
 
+/** Which measurement window a marker's numbers come from. Road sections on
+ *  the study-area cordon (KO_*) ran in the peaks only, unlike the rest of the road
+ *  layer, so they expand and warn like the peak-only layers do. */
+export const windowKind = (kind, ref) => (kind === 'road'
+  && (ref?.window || ref?.members?.some((x) => x.window)) ? 'roadPeak' : kind)
+
 /** Scale a peak-only count up to a whole day, when the user asks for it. */
 export function expand(meta, kind, value, on) {
   const e = expansionOf(meta, kind)
@@ -336,7 +342,8 @@ export function buildMarkers(data, {
   for (const k of Object.keys(out)) {
     for (const m of out[k]) {
       m.raw = m.value
-      m.value = toPeople(expand(data.meta, k, m.value, wholeDay), k, occupancy, people)
+      m.value = toPeople(expand(data.meta, windowKind(k, m.ref), m.value, wholeDay),
+        k, occupancy, people)
     }
     if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k])
   }
@@ -534,7 +541,9 @@ export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
     }
   }
 
-  let hrs = hours
+  // Only hours the road sections were counted in: some ran 5-21, the KO
+  // cordon only in the peaks, and the panel says which hours the pie covers.
+  let hrs = hours.filter((h) => roadHasHour(data, roadIds, h))
   let measured = false
   if (ptRefs?.length) {
     const common = hours.filter((h) => ptWin.includes(h) && roadHasHour(data, roadIds, h))

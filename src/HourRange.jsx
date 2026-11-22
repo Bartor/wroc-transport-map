@@ -25,6 +25,14 @@ function bands(data, visible) {
       cells: data.roadCoverage.map((f) => (f >= 0.9 ? 1 : f > 0 ? 0.4 : 0)),
       note: 'część przekrojów liczono 24 h, większość 5:00–21:00',
     })
+    const ko = data.meta.windows?.roadPeak
+    if (ko) {
+      out.push({
+        key: 'roadPeak', color: LAYERS.road.color, label: 'Kordon obszaru (KO)',
+        cells: Array.from({ length: 24 }, (_, h) => (ko.includes(h) ? 1 : 0)),
+        note: 'przekroje drogowe na kordonie obszaru (KO) liczono tylko w szczytach',
+      })
+    }
   }
   for (const k of ['pt', 'bike', 'ped', 'rail']) {
     const w = data.meta.windows?.[k]

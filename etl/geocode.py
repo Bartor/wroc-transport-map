@@ -382,3 +382,36 @@ def find_station(stations, name):
         return stations[k]
     hits = [v for kk, v in stations.items() if kk.startswith(k) or k.startswith(kk)]
     return hits[0] if len(hits) == 1 else None
+
+
+def city_boundary():
+    """Outer ways of the Wroclaw municipal boundary, as lists of [lat, lon]."""
+    path = os.path.join(CACHE, "wroclaw_boundary.json")
+    if os.path.exists(path):
+        return json.load(open(path, encoding="utf8"))
+    q = """[out:json][timeout:120];
+rel["boundary"="administrative"]["name"="Wrocław"]["admin_level"="8"];
+out geom;"""
+    js = json.loads(_get("https://overpass-api.de/api/interpreter",
+                         urllib.parse.urlencode({"data": q}).encode()))
+    ways = [[[p["lat"], p["lon"]] for p in m["geometry"]]
+            for m in js["elements"][0]["members"]
+            if m["type"] == "way" and m.get("role") == "outer" and m.get("geometry")]
+    json.dump(ways, open(path, "w"))
+    return ways
+
+
+def cross_boundary(a, b, ways):
+    """Where the straight line a-b crosses the boundary, or None."""
+    def cut(p, q, r, s):
+        d = (q[0] - p[0]) * (s[1] - r[1]) - (q[1] - p[1]) * (s[0] - r[0])
+        if not d:
+            return None
+        t = ((r[0] - p[0]) * (s[1] - r[1]) - (r[1] - p[1]) * (s[0] - r[0])) / d
+        u = ((r[0] - p[0]) * (q[1] - p[1]) - (r[1] - p[1]) * (q[0] - p[0])) / d
+        return t if 0 <= t <= 1 and 0 <= u <= 1 else None
+    ts = [t for w in ways for r, s in zip(w, w[1:]) for t in [cut(a, b, r, s)] if t is not None]
+    if not ts:
+        return None
+    t = min(ts)                                   # first crossing going outwards
+    return [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])]

@@ -7,7 +7,7 @@ import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
-  HOUR_LABEL as HL, coverageGap,
+  HOUR_LABEL as HL, coverageGap, windowKind,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 
@@ -160,8 +160,14 @@ function ModalSplit({ node, data, occupancy }) {
   const total = splitTotal(split)
   const rows = split.slices.filter((s) => s.persons > 0 || s.vehicles > 0)
   const hrs = [...split.hours].sort((a, b) => a - b)
+  // runs of consecutive hours, so 6-10 and 15-19 do not read as 6-19
+  const runs = []
+  for (const h of hrs) {
+    if (runs.length && runs.at(-1)[1] === h - 1) runs.at(-1)[1] = h
+    else runs.push([h, h])
+  }
   const span = hrs.length
-    ? `${hrs.length} godz. (${HL(hrs[0])}–${HL((hrs.at(-1) + 1) % 24)})`
+    ? `${hrs.length} godz. (${runs.map(([a, b]) => `${HL(a)}–${HL((b + 1) % 24)}`).join(', ')})`
     : 'brak'
   const occ = data.transitOcc
   return (
@@ -266,10 +272,11 @@ export default function Details({
   // The map applies the whole-day expansion and the vehicles-to-people
   // conversion before drawing. This panel has to apply exactly the same pair,
   // or the number here contradicts the marker that was clicked to open it.
+  const wk = windowKind(kind, p)
   const shown = (v, k = kind) =>
-    toPeople(expand(data.meta, k, v, wholeDay), k, occupancy, people)
+    toPeople(expand(data.meta, k === kind ? wk : k, v, wholeDay), k, occupancy, people)
   const shape = (arr, k = kind) => arr.map((v) => shown(v, k))
-  const exp = expansionOf(data.meta, kind)
+  const exp = expansionOf(data.meta, wk)
   const scaled = wholeDay && exp?.factor > 1
   const unit = (k) => (k === 'road'
     ? (people ? 'osób w samochodach osobowych' : `pojazdów — ${ROAD_METRICS[metric].label.toLowerCase()}`)
@@ -422,8 +429,11 @@ export default function Details({
           <dt>Odcinek</dt><dd>{p.segment}</dd>
           <dt>Miejsce pomiaru</dt><dd>{p.where}</dd>
           <dt>Data</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd>
-          <dt>Suma dobowa</dt>
-          <dd>{fmt(p.total)} pojazdów — pomiar, wszystkie kategorie</dd>
+          <dt>{p.window ? 'Suma z pomiaru' : 'Suma dobowa'}</dt>
+          <dd>
+            {fmt(p.total)} pojazdów — pomiar, wszystkie kategorie
+            {p.window && ' — tylko 6–10 i 15–19, nie cała doba'}
+          </dd>
         </dl>
         <h4>
           Profil dobowy — {people ? 'osoby w samochodach osobowych'
@@ -514,7 +524,7 @@ export default function Details({
   if (scaled) {
     cardNotes.push(`Wartości przeliczone na całą dobę (×${exp.factor}, `
       + `${BASIS_LABEL[exp.basis]}) — pomiar obejmował tylko szczyty.`)
-  } else if (!node?.split && coverageGap(data.meta, kind, hours)) {
+  } else if (!node?.split && coverageGap(data.meta, wk, hours)) {
     cardNotes.push('Pomiar tylko w szczytach — część godzin wybranego okresu nie była mierzona.')
   }
   const split = node?.split && splitTotal(node.split) > 0 ? node.split : null

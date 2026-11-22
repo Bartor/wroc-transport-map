@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
   LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, sameRange,
-  coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES, resolveTarget,
+  coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES, resolveTarget, windowKind,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
 import { SIGNAL_FILTERS } from './SignalsLayer'
@@ -182,6 +182,11 @@ export default function Sidebar({
   // layers whose measurement window does not cover the selected period
   const gaps = ['pt', 'bike', 'ped', 'rail']
     .filter((k) => visible[k] && coverageGap(data.meta, k, hours))
+    .map((k) => LAYERS[k].label)
+  if (visible.road && coverageGap(data.meta, 'roadPeak', hours)
+    && data.points.some((p) => p.window && (!areas || areas.includes(p.area)))) {
+    gaps.unshift('Ruch drogowy na kordonie obszaru (KO)')
+  }
   const netMeta = data[NET_MODES[net.mode].file]?.meta
 
   // The map's own marker objects, so selecting one always highlights its dot.
@@ -193,8 +198,9 @@ export default function Sidebar({
   const totals = useMemo(() => {
     const cats = activeCats(metric, people)
     const raw = {
-      road: data.points.reduce(
-        (a, p) => a + roadVolume(data.roadById[p.id], { cats, hours }, catOrder), 0),
+      // KO sections ran in the peaks only, so they expand on their own factor
+      road: data.points.reduce((a, p) => a + expand(data.meta, windowKind('road', p),
+        roadVolume(data.roadById[p.id], { cats, hours }, catOrder), wholeDay), 0),
       bike: data.bike.reduce((a, p) => a + sumHours(p.byHour, hours), 0),
       ped: data.ped.reduce((a, p) => a + sumHours(p.byHour, hours), 0),
       pt: data.pt.reduce(
@@ -250,7 +256,7 @@ export default function Sidebar({
         {/* sits by the slider: moving it is what fixes the gap */}
         {gaps.length > 0 && !wholeDay && (
           <p className="warn">
-            {gaps.map((g) => LAYERS[g].label).join(', ')}: pomiar tylko
+            {gaps.join(', ')}: pomiar tylko
             w szczytach — wybrany okres wychodzi poza paski pomiaru, więc sumy
             nie są porównywalne z ruchem drogowym.{' '}
             <button type="button" className="link" onClick={() => setWholeDay(true)}>

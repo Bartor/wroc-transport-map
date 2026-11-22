@@ -1,9 +1,30 @@
 {
-  "_comment": "Hand-placed coordinates for points the geocoder cannot resolve from the source descriptions. [lat, lon]. Edit and re-run `npm run etl` to correct a marker.",
-  "RR_13": [51.13375, 16.98053],
-  "RR_21A": [51.08790, 16.99930],
-  "RR_21B": [51.08790, 16.99930],
-  "RR_26": [51.07450, 17.01700],
-  "RR_27": [51.07850, 17.03350],
-  "RR_32A": [51.12760, 17.06263]
+  "_comment": "Hand-placed coordinates for points the geocoder cannot resolve from the source descriptions. [lat, lon]. Keys are bike/ped point ids, PT section ids or railway station names. Edit and re-run `npm run etl` to correct a marker.",
+  "_why": {
+    "RR_08": "Promenada Oławska; the geocoder dropped 'Promenada' and landed on ul. Oławska in the Old Town",
+    "RR_11A": "on ul. Dmowskiego level with the Circle K fuel station (OSM node 1200464196), as the source describes",
+    "RR_13": "cobbled link between Pilczycka and Milenijna, not the park centroid (approx.)",
+    "RR_20": "the only bridge in OSM over the Sleza between Trawowa and Francuska (footpath bridge, way 1193756234)",
+    "RR_21A": "ul. Hallera between the railway crossing and Hallera 81",
+    "RR_26": "Promenada Krzycka between Borowska and Pirenejska; path not named in OSM (approx. +-150 m)",
+    "RR_27": "Promenada Krzycka between Bardzka and Ziebicka, by Cmentarz Ducha Swietego (approx. +-150 m)",
+    "RR_30": "Stara Odra embankment between the two cross streets",
+    "RR_31": "Kanal Powodziowy embankment between the two cross streets",
+    "RR_32B": "Kanal Zeglugowy embankment between the two cross streets",
+    "RR_33": "snapped onto ul. Bora-Komorowskiego; the junction midpoint fell on al. Sobieskiego"
+  },
+  "RR_08": [51.10497, 17.05151],
+  "RR_11A": [51.116951, 17.021543],
+  "RR_11B": [51.116951, 17.021543],
+  "RR_13": [51.12996, 16.97990],
+  "RR_20": [51.10285, 16.95762],
+  "RR_21A": [51.09014, 16.99654],
+  "RR_21B": [51.09014, 16.99654],
+  "RR_26": [51.07310, 17.03490],
+  "RR_27": [51.07310, 17.05690],
+  "RR_30": [51.11249, 17.07109],
+  "RR_31": [51.12758, 17.07850],
+  "RR_32A": [51.12760, 17.06263],
+  "RR_32B": [51.12998, 17.06109],
+  "RR_33": [51.149552, 17.114266]
 }

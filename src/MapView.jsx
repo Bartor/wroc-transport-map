@@ -9,7 +9,7 @@ import NetworkLayer, { NETWORK_LEGEND } from './NetworkLayer'
 import SignalsLayer from './SignalsLayer'
 import { BASEMAPS } from './basemaps'
 import {
-  LAYERS, MODES, radius, fmt, fmtEst, expansionOf, coverageGap, BASIS_LABEL,
+  LAYERS, MODES, radius, fmt, fmtEst, expansionOf, coverageGap, BASIS_LABEL, windowKind,
   periodShare, NET_MODES, markerIndex, splitTotal, HOUR_LABEL,
 } from './data'
 import { pieSvg, labelLines, labelHtml, labelBox } from './pie'
@@ -260,6 +260,7 @@ export default function MapView({
           <LayerGroup key={kind}>
             {list.map((m) => {
               const on = selected && selected.kind === kind && selected.id === m.id
+              const wk = windowKind(kind, m.ref)
               const r = radii[`${kind}:${m.id}`]
               const tip = (
                 <Tooltip>
@@ -267,17 +268,17 @@ export default function MapView({
                   {fmt(m.value)}{' '}
                   {people && kind === 'road' ? 'osób w samochodach' : LAYERS[kind].unit}
                   <span className="period"> · {period}</span>
-                  {wholeDay && expansionOf(data.meta, kind)?.factor > 1 && (
+                  {wholeDay && expansionOf(data.meta, wk)?.factor > 1 && (
                     <><br /><span className="period">
-                      oszacowanie doby (×{expansionOf(data.meta, kind).factor},{' '}
-                      {BASIS_LABEL[expansionOf(data.meta, kind).basis]}) —
+                      oszacowanie doby (×{expansionOf(data.meta, wk).factor},{' '}
+                      {BASIS_LABEL[expansionOf(data.meta, wk).basis]}) —
                       zmierzono {fmt(m.raw)}
                     </span></>
                   )}
-                  {!wholeDay && !m.split && coverageGap(data.meta, kind, hours) && (
+                  {!wholeDay && !m.split && coverageGap(data.meta, wk, hours) && (
                     <><br /><span className="warn">
                       pomiar tylko w szczytach — brak danych dla
-                      {' '}{coverageGap(data.meta, kind, hours).missing.length} z
+                      {' '}{coverageGap(data.meta, wk, hours).missing.length} z
                       {' '}{hours.length} godzin okresu
                     </span></>
                   )}
