@@ -16,6 +16,7 @@ import {
 import { pieSvg, labelLines, labelHtml, labelBox } from './pie'
 
 const CENTRE = [51.1097, 17.0324]
+const MAX_ZOOM = 20
 
 /** Bring the selected point into view, but only when it is off screen —
  *  recentring on something already visible is disorienting when you are
@@ -268,15 +269,16 @@ export default function MapView({
 
   return (
     <div className="map-wrap">
+      {/* Sections of one point sit metres apart, so the map zooms past the
+          basemap's own tiles; beyond its native zoom Leaflet scales them up. */}
       <MapContainer className={BASEMAPS[basemap].dark ? 'map dark' : 'map'}
-        center={CENTRE} zoom={12}>
+        center={CENTRE} zoom={12} maxZoom={MAX_ZOOM}>
         <TileLayer key={basemap} url={BASEMAPS[basemap].url}
           attribution={BASEMAPS[basemap].attribution}
-          maxZoom={BASEMAPS[basemap].maxZoom || 19}
-          maxNativeZoom={BASEMAPS[basemap].maxZoom || 19} />
+          maxZoom={MAX_ZOOM} maxNativeZoom={BASEMAPS[basemap].maxZoom || 19} />
         {BASEMAPS[basemap].labels && (
           <TileLayer key={`${basemap}-labels`} url={BASEMAPS[basemap].labels}
-            pane="shadowPane" maxZoom={BASEMAPS[basemap].maxZoom || 19}
+            pane="shadowPane" maxZoom={MAX_ZOOM}
             maxNativeZoom={BASEMAPS[basemap].maxZoom || 19} />
         )}
 
