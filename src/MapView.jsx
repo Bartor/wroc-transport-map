@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  MapContainer, TileLayer, CircleMarker, Marker, Tooltip, LayerGroup, Polyline, useMap,
+  MapContainer, TileLayer, CircleMarker, Marker, Tooltip, LayerGroup, Polyline, Pane, useMap,
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
@@ -90,13 +90,20 @@ function NodeLabels({ entries, declutter }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, declutter, view, map])
 
-  return placed.map((e) => (
-    <Marker key={e.key} position={[e.lat, e.lon]} interactive={false} keyboard={false}
-      icon={L.divIcon({
-        className: 'node-label', html: e.html,
-        iconSize: [e.box.w, e.box.h], iconAnchor: [-(e.r + 5), e.box.h / 2],
-      })} />
-  ))
+  // Their own pane, above every marker: a label is read on top of the pies
+  // and section dots it sits beside, never under them. Below tooltips.
+  return (
+    <Pane name="node-labels" style={{ zIndex: 620, pointerEvents: 'none' }}>
+      {placed.map((e) => (
+        <Marker key={e.key} position={[e.lat, e.lon]} interactive={false} keyboard={false}
+          pane="node-labels"
+          icon={L.divIcon({
+            className: 'node-label', html: e.html,
+            iconSize: [e.box.w, e.box.h], iconAnchor: [-(e.r + 5), e.box.h / 2],
+          })} />
+      ))}
+    </Pane>
+  )
 }
 
 /** Colour key for whatever is currently drawn. Size encodes volume, which a
@@ -222,7 +229,7 @@ function dodge(map, node, nodeR, dots) {
  * road sections as round dots, the paired transit stops as square ones. Only
  * drawn when points are shown whole - drawn apart they are on the map already.
  */
-function SectionDots({ family, nodeR, selected, onSelect, off }) {
+function SectionDots({ family, nodeR, selected, onSelect, off, hot, setHot }) {
   const map = useMap()
   // re-place on zoom: the dodge is in pixels
   const [, setZoom] = useState(() => map.getZoom())
@@ -233,38 +240,63 @@ function SectionDots({ family, nodeR, selected, onSelect, off }) {
     .filter((m) => m.lat).map((m) => ({ kind: g.kind, m, lat: m.lat, lon: m.lon }))))
   return (
     <LayerGroup>
-      {dots.map(({ kind, m, lat, lon }) => {
-        const on = selected?.kind === kind && selected.id === m.id
-        const out = off?.has(pieceKey(kind, m.id))   // left out of the node
-        const color = LAYERS[kind].color
-        return (
-          <Fragment key={`${kind}:${m.id}`}>
-            <Polyline positions={[[node.lat, node.lon], [lat, lon]]} interactive={false}
-              pathOptions={{ color, weight: 1.5, opacity: out ? 0.2 : 0.7, dashArray: '3 4' }} />
-            <Marker position={[lat, lon]} zIndexOffset={1000}
-              eventHandlers={{ click: () => onSelect({ kind, id: m.id, ref: m }) }}
-              icon={L.divIcon({
-                className: 'sec-dot-icon',
-                html: `<span class="sec-dot ${kind}${on ? ' on' : ''}${out ? ' out' : ''}" `
-                  + `style="--c:${color}">${sectionLetter(m.id) || '·'}</span>`,
-                iconSize: [22, 22], iconAnchor: [11, 11],
-              })}>
-              <Tooltip>
-                {kind === 'pt' ? 'przystanek · ' : 'przekrój drogowy · '}
-                {m.id} · {sectionOf(kind, m) || m.name}
-                {out ? ' · wyłączony z węzła' : ''}
-              </Tooltip>
-            </Marker>
-          </Fragment>
-        )
-      })}
+      {dots.map(({ kind, m, lat, lon }) => (
+        <SectionDot key={`${kind}:${m.id}`} kind={kind} m={m} lat={lat} lon={lon} node={node}
+          on={selected?.kind === kind && selected.id === m.id}
+          out={!!off?.has(pieceKey(kind, m.id))}
+          hot={hot?.kind === kind && hot.id === m.id}
+          onSelect={onSelect} setHot={setHot} />
+      ))}
     </LayerGroup>
+  )
+}
+
+const MOUSE = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
+
+/** One piece of the selected node. The icon is kept while only the hover
+ *  changes: a new icon is a new element under the mouse, which fires
+ *  mouseout and mouseover again and flickers. Hover is a class instead. */
+function SectionDot({ kind, m, lat, lon, node, on, out, hot, onSelect, setHot }) {
+  const color = LAYERS[kind].color
+  const letter = sectionLetter(m.id) || '·'
+  const icon = useMemo(() => L.divIcon({
+    className: 'sec-dot-icon',
+    html: `<span class="sec-dot ${kind}${on ? ' on' : ''}${out ? ' out' : ''}" `
+      + `style="--c:${color}">${letter}</span>`,
+    iconSize: [22, 22], iconAnchor: [11, 11],
+  }), [kind, on, out, color, letter])
+  const ref = useRef(null)
+  useEffect(() => {
+    ref.current?.getElement()?.querySelector('.sec-dot')?.classList.toggle('hot', hot)
+  }, [hot, icon])
+  const handlers = useMemo(() => ({
+    click: () => onSelect({ kind, id: m.id, ref: m }),
+    ...(MOUSE && setHot ? {
+      mouseover: () => setHot({ kind, id: m.id }),
+      mouseout: () => setHot(null),
+    } : {}),
+  }), [kind, m, onSelect, setHot])
+  return (
+    <>
+      <Polyline positions={[[node.lat, node.lon], [lat, lon]]} interactive={false}
+        pathOptions={{
+          color, weight: hot ? 2.5 : 1.5, opacity: hot ? 1 : out ? 0.2 : 0.7, dashArray: '3 4',
+        }} />
+      <Marker ref={ref} position={[lat, lon]} zIndexOffset={1000} eventHandlers={handlers}
+        icon={icon}>
+        <Tooltip>
+          {kind === 'pt' ? 'przystanek · ' : 'przekrój drogowy · '}
+          {m.id} · {sectionOf(kind, m) || m.name}
+          {out ? ' · wyłączony z węzła' : ''}
+        </Tooltip>
+      </Marker>
+    </>
   )
 }
 
 export default function MapView({
   data, visible, hours, period, wholeDay, people, net, basemap, sig,
-  markers, labels, selected, onSelect, family, off,
+  markers, labels, selected, onSelect, family, off, hot, setHot,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
   // The model was fitted on the 8-hour common window; scale it to whatever
@@ -439,6 +471,7 @@ export default function MapView({
         ))}
 
         <SectionDots family={family} selected={selected} onSelect={onSelect} off={off}
+          hot={hot} setHot={setHot}
           nodeR={family?.node ? radii[`${family.node.kind}:${family.node.id}`] : 0} />
 
         {(labels.num || labels.pct) && (

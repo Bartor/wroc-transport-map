@@ -30,6 +30,9 @@ export default function App() {
   const [selected, setSelected] = useState(null)
   // Sections left out of their node's numbers, as pieceKey()s.
   const [off, setOff] = useState(() => new Set())
+  // The piece of a node under the mouse, in the panel or on the map; both
+  // light it up.
+  const [hot, setHot] = useState(null)
   const toggleOff = (keys, out) => setOff((prev) => {
     const next = new Set(prev)
     for (const k of [].concat(keys)) (out ? next.add(k) : next.delete(k))
@@ -122,6 +125,7 @@ export default function App() {
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
         selected={sel} onSelect={select} family={family} off={off}
+        hot={hot} setHot={setHot}
       />
       {selected && (
         <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`}
@@ -129,7 +133,7 @@ export default function App() {
           <Details data={data} sel={sel} hours={hours} metric={metric}
             period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
             share={periodShare(data.meta, hours)} markers={markers} family={family}
-            off={off} toggleOff={toggleOff}
+            off={off} toggleOff={toggleOff} hot={hot} setHot={setHot}
             onSelect={select} onClose={() => setSelected(null)} />
         </ErrorBoundary>
       )}

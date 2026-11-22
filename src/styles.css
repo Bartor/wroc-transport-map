@@ -532,6 +532,7 @@ select option { background: #232733; color: var(--text); }
   padding: .28rem .45rem; cursor: pointer; text-align: left;
 }
 .tree-root:hover, .tree li > button:hover { background: #232733; }
+.tree li.hot > button { background: #232733; border-color: #3a4459; }
 .tree-root.on, .tree li.on > button { background: #2d3f5f; border-color: #4a6ea9; }
 .tree b {
   flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; display: grid;
@@ -592,6 +593,10 @@ select option { background: #232733; color: var(--text); }
 .sec-dot.on { border-color: #fff; transform: scale(1.18); box-shadow: 0 0 0 3px rgba(255, 255, 255, .25); }
 .sec-dot.pt { border-radius: 6px; }                 /* transit stops: square */
 .sec-dot.out { opacity: .4; filter: grayscale(.7); }  /* left out of the node */
+.sec-dot.hot {                                         /* under the mouse, here or in the panel */
+  transform: scale(1.12); border-color: rgba(255, 255, 255, .7); opacity: 1;
+}
+.sec-dot.on.hot { transform: scale(1.18); }
 
 
 /* ----------------------------------------------------------- view picker */

@@ -389,7 +389,7 @@ export function buildMarkers(data, {
   }
   if (split) {
     attachSplits(data, out, {
-      hours, occupancy: occupancy ?? data.meta.carOccupancy.default, pair: !!visible.road,
+      hours, occupancy: occupancy ?? data.meta.carOccupancy.default, pair: !!visible.road, off,
     })
   }
   if (!visible.pt) delete out.pt
@@ -666,7 +666,7 @@ export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
 
 /** Pair road and transit nodes, give every node its split, and drop transit
  *  nodes that now live inside a road pie. */
-function attachSplits(data, out, { hours, occupancy, pair }) {
+function attachSplits(data, out, { hours, occupancy, pair, off }) {
   const road = out.road || []
   const pt = out.pt || []
   const partner = new Map()
@@ -688,14 +688,16 @@ function attachSplits(data, out, { hours, occupancy, pair }) {
   }
   for (const r of road) {
     const pr = partner.get(r)
+    // The partner's stops only lend the node their load per vehicle, so all
+    // of them may be left out - a lone stop too, which was never merged.
+    // Then the node falls back to the city average.
+    const refs = pr ? allOf(pr.m).filter((x) => !off.has(pieceKey('pt', x.id))) : null
     r.split = nodeSplit(data, {
-      roadIds: membersOf(r).map((x) => x.id),
-      ptRefs: pr ? membersOf(pr.m) : null, hours, occupancy,
+      roadIds: membersOf(r).map((x) => x.id), ptRefs: refs, hours, occupancy,
     })
     if (pr) {
       r.pair = {
-        id: pr.m.id, title: pr.m.title, dist: Math.round(pr.d),
-        refs: membersOf(pr.m), all: allOf(pr.m),
+        id: pr.m.id, title: pr.m.title, dist: Math.round(pr.d), refs, all: allOf(pr.m),
       }
     }
   }

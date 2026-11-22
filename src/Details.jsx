@@ -31,10 +31,13 @@ const NO_OFF = new Set()
  * Each piece shows its share of its own group - road and transit count
  * different things, so they are never summed together. Unticking a piece
  * leaves it out of the node's numbers everywhere: the far approaches of an
- * interchange, say, to look at one junction of it. A group keeps at least one
- * piece, or the node would have nothing to stand on.
+ * interchange, say, to look at one junction of it. The node's own group keeps
+ * at least one piece, or it would have nothing to stand on; the paired stops
+ * only lend their load per vehicle, and can all go.
+ *
+ * Hovering a piece here lights up its dot on the map, and the other way round.
  */
-function NodeTree({ family, shares, onSelect, off, toggleOff }) {
+function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
   const { node, groups, current } = family
   const toNode = () => onSelect({ kind: node.kind, id: node.id, ref: node.ref })
   const isOn = (kind, id) => current?.kind === kind && current.id === id
@@ -42,6 +45,12 @@ function NodeTree({ family, shares, onSelect, off, toggleOff }) {
   const can = !!node && !!toggleOff
   const keysOf = (g) => g.members.map((m) => pieceKey(g.kind, m.id))
   const nOff = can ? groups.flatMap(keysOf).filter((k) => off.has(k)).length : 0
+  const isHot = (kind, id) => hot?.kind === kind && hot.id === id
+  // a mouse only: on touch a tap would leave the row lit
+  const hover = (kind, id) => (setHot ? {
+    onPointerEnter: (e) => e.pointerType === 'mouse' && setHot({ kind, id }),
+    onPointerLeave: (e) => e.pointerType === 'mouse' && setHot(null),
+  } : {})
   return (
     <nav className="tree" aria-label="Części węzła">
       {node && (
@@ -70,16 +79,18 @@ function NodeTree({ family, shares, onSelect, off, toggleOff }) {
             <ul>
               {g.members.map((m, i) => {
                 const out = can && off.has(keys[i])
-                const last = !out && left === 1
+                const last = !out && left === 1 && g.kind === node.kind
                 const on = isOn(g.kind, m.id)
                 const share = shares[keys[i]]
                 return (
-                  <li key={m.id} className={`${on ? 'on' : ''}${out ? ' out' : ''}`}>
+                  <li key={m.id} {...hover(g.kind, m.id)}
+                    className={`${on ? 'on' : ''}${out ? ' out' : ''}`
+                      + `${isHot(g.kind, m.id) ? ' hot' : ''}`}>
                     {can && (
                       <input type="checkbox" className="check" checked={!out} disabled={last}
                         style={{ '--c': LAYERS[g.kind].color }}
                         aria-label={`Wliczaj ${m.id} do węzła`}
-                        title={last ? 'Grupa musi mieć co najmniej jedną część'
+                        title={last ? 'Węzeł musi mieć co najmniej jeden przekrój'
                           : out ? 'Wlicz do węzła' : 'Pomiń w liczbach węzła'}
                         onChange={(e) => toggleOff(keys[i], !e.target.checked)} />
                     )}
@@ -364,9 +375,9 @@ function ModalSplit({ node, data, occupancy }) {
         {split.basis === 'estimate' && (
           <li>
             Autobusy i tramwaje:{' '}
-            {node.pair
-              ? `punkt KZ ${node.pair.title} nie zarejestrował autobusów ani tramwajów, więc`
-              : 'brak punktu pomiaru KZ w promieniu 150 m, więc'}
+            {!node.pair ? 'brak punktu pomiaru KZ w promieniu 150 m, więc'
+              : !node.pair.refs.length ? `przystanki punktu KZ ${node.pair.title} są pominięte, więc`
+                : `punkt KZ ${node.pair.title} nie zarejestrował autobusów ani tramwajów, więc`}
             {' '}liczba pojazdów × średnie napełnienie z pomiarów KBR (autobus{' '}
             {occ.bus.toFixed(1)}, tramwaj {occ.tram.toFixed(1)} os./poj.) — szacunek.
           </li>
@@ -406,7 +417,7 @@ function unitOf(kind) {
 
 export default function Details({
   data, sel, hours, metric, period, share, wholeDay, people, occupancy,
-  markers, family, onSelect, onClose, off, toggleOff,
+  markers, family, onSelect, onClose, off, toggleOff, hot, setHot,
 }) {
   const { kind, ref: p } = sel
   // phones: the panel is a bottom sheet; dragging its header down closes it
@@ -855,7 +866,7 @@ export default function Details({
       <div className="dbody">
         {fam && (
           <NodeTree family={fam} shares={shares} onSelect={onSelect}
-            off={off || NO_OFF} toggleOff={toggleOff} />
+            off={off || NO_OFF} toggleOff={toggleOff} hot={hot} setHot={setHot} />
         )}
         {part && (
           <div className="part">
