@@ -1,0 +1,68 @@
+# UI cross-check: 20 measuring points vs. source attachments
+
+Date: 2026-11-22. App: http://localhost:5173 (built-in browser). I recomputed every figure from the raw data sheets with my own openpyxl script. I did not use etl/ or the audit scripts. Sources:
+3.3 "DANE - na jezdni" / "DANE - poza jezdnią" / "Wykaz - przekroje pomiarowe"; 3.4 "DANE - pomiary rowerowe"; 3.5 "baza";
+6.4 "DANE - potoki pasażerskie" (hour = col N "Godzina", pax = col Z); 7.1 "DANE SUROWE" (hour = "agregacja do godzin").
+To check stop placement I used GTFS stops.txt (etl/cache/gtfs_*.zip). The 6.4 "Nr słupka" column matches GTFS stop_code. For bike, pedestrian and rail placement I used openstreetmap.org.
+
+## Summary
+
+- **20 points checked** (6 road, 4 bus/tram, 3 bike/ped, 2 rail, 5 nodes), over the periods 7–9, 15–17, 10–14, a custom 16–19 and Cała doba.
+- **Numbers: no numeric mismatches.** Every count I checked matched the sources exactly (≈ values within 2 significant figures): period totals, direction splits, whole-survey totals, categories, cars × 1.2, passengers and vehicles, top destinations and lines, rail directions, seats and trains, node vehicle counts, passengers per vehicle, slice sums and percentages. Sidebar totals also match: 700 019 vehicles and 718 400 car occupants (7–9); 4 796 017 vehicles (whole day); 422 155 passengers; 7579 cyclists and 9651 pedestrians; 10 364 rail passengers.
+- **13/20 points fully OK** (numbers, placement and wording). The other 7 have correct numbers but a presentation or method problem, listed below.
+- **Placement:** road markers sit 1–2 m from the catalogue coordinates (5 sections plus 1 node centroid). Stop markers sit 2–11 m from the GTFS stop positions. Bike, pedestrian and rail markers sit on the named place in OSM. KO_03 was not verified (see notes).
+
+### Problems, most severe first
+
+1. **Węzły, "Cała doba": nodes are computed over different time windows, then ranked and summed together (confirmed).** A node with a paired transit (KZ) point uses only 8 h: "Liczone dla 8 godz. (05:00–09:00, 14:00–18:00)" (R1_05, PR_03, R2_04). A node without one uses 16 h: "Liczone dla 16 godz. (05:00–21:00)" (R2_01). The ranking puts R2_01 ≈200 000 (16 h) next to R1_05 ≈200 000 (8 h), and the WYNIKI totals add both kinds. Also, the whole-day figure of a paired node leaves out hours that the other presets do show. R2_04 Cała doba ≈106 000 (8 h) excludes the 10–14 window, which on its own shows ≈61 000.
+2. **Bike and pedestrian direction arrows point the opposite way to the source's direction definition (confirmed against the source).** 3.4 and 3.5 record **"wlot początkowy"**, the side people came from (sheet 3.5 "Kierunki": "Kierunek (wlot początkowy)"). The UI draws travel arrows towards that letter. Road panels use the same arrows for direction of travel ("↑ S → N"). Examples:
+   - PP_01 7–9 shows "↑ N 381 · ↓ S 488". In the source, 381 people came from N, so they walked south.
+   - RR_02 shows "↗ NE 134".
+   - RR_22 shows "→ E 299 / ← W 340".
+
+   The counts are right; only the arrows are reversed.
+3. **A period with no measurement shows 0 instead of "no data" (confirmed).** KO_03 is counted only 6–10 and 15–19. In Międzyszczyt 10–14 its panel says "W okresie międzyszczyt 10–14 — 0 osób w samochodach osobowych".
+4. **The KW_19 node uses an implausible bus occupancy (arithmetic correct, pairing questionable).** It is paired with KZ PR_16A "Klecina (Stacja kolejowa)", 60 m away but on ul. Kobierzycka. That stop has 4 runs of line 319 with 2 passengers in 7–9, giving 0.5 pax/bus. So the 94 buses counted on al. Karkonoska become 47 people. Meanwhile R2_01 Legnicka gets the city average, even though the Kwiska stop on the same street is about 130 m from section R2_01A (it is more than 150 m from the node centroid).
+5. **KO sections under "Cała doba" (wording).** The headline "W okresie cała doba — 27 196 pojazdów" gives no caveat; only the dimmed "Cały pomiar" line says "tylko 6–10 i 15–19". The road ranking for Cała doba then mixes 8-h KO sections, 16-h ring sections and 24-h KW/AOW sections.
+6. **R2_04 node in 10–14 gives the wrong reason for the fallback.** It says "brak punktu pomiaru KZ w promieniu 150 m", but the 7–9 panel pairs it with KZ R2_03 · FAT "(121 m stąd)". The real reason is that the KZ survey has no data for 10–14.
+7. **"Tylko godziny objęte oboma pomiarami" is not quite true.** The 8-h whole-day window includes 05:00–06:00, but the paired KZ points (PR_04A, R2_03, R1_05) have no runs before 06:00 in 6.4. Similarly, transit "Cały pomiar … (5–9, 14–18)" is a global label; R2_01A and R1_06D data cover 6–9 and 14–18.
+8. **Smaller UI wording issues:**
+   - With "Licz osoby…" on, the disabled category select still reads "Wszystkie pojazdy", but the figures are cars only.
+   - In that mode, "Cały pomiar" stays in vehicles of all categories next to a period figure in persons.
+   - Node panels: under the ≈52 000 modal-split headline, the summary reads "W okresie … 10 619 osób w samochodach osobowych", and the section-tab percentages are car-occupant shares.
+   - On the merged R1_05 point with the cars category, "Cały pomiar 58 028" has no unit.
+   - Section tabs show the segment (odcinek) or the measurement place instead of the street. PR_03 B reads "ul. Oławska - ul. Komuny Paryskiej" but is on ul. Podwale. RR_22 tabs read "infrastruktura rowerowa…".
+   - 24-h sections show "Data … 00:00-00:00".
+   - Search results do not show IDs: typing "R1_07" lists street names only.
+   - In direction lists, "inne" is listed above the top named destination.
+   - The R1_05 note "Przekroje leżą na tej samej ulicy po obu stronach skrzyżowania" is shown for a 4-arm crossing on two streets.
+
+### Notes / limits
+
+- The browser pane's document reported `hidden`, so Leaflet fly and zoom animations stalled. I read marker positions from the rendered SVG path geometry plus the tile grid, at idle zoom, and identified the selected marker by its white outline. KO_03 (outside the initial view) could not be placed.
+- Point IDs differ between attachments. Road KW_19 is al. Karkonoska, but KZ KW_19A is Wilczyce. Road R2_04 pairs with KZ R2_03 FAT, while KZ "R2_04" is Gajowicka. The app pairs by distance and names the KZ point, which is correct but worth knowing when you search by ID.
+
+## Per-point results
+
+| # | Point | View / period | UI showed | Source (filter) | Verdict | Notes |
+|---|---|---|---|---|---|---|
+| 1 | KW_19 (2-dir) | Drogowe, 7–9; 16–19 | 7268 veh; SW→NE 3271 / NE→SW 3997; whole 57 710; cars 6666, buses 94; persons 7999 (dirs 3599/4400). 16–19: 10 990 | 3.3 jezdnia, KW_19, h 7–8: 7268; 3271/3997; all h 57 710; d=6666, j=94; 6666×1.2=7999. h 16–18: 10 990 | OK | Marker 1 m from catalogue (51.058606, 16.987417) |
+| 2 | KO_03 (outer cordon) | Drogowe, 7–9; 16–19; Cała doba; 10–14 | 6979; E→W 3523 / W→E 3456; whole 27 196 "tylko 6–10 i 15–19"; cars 3789, h-trucks 2067. Cała doba 27 196 (12 501/14 695). 16–19: 9738 (4380/5358). 10–14: **0** | hours present 6–9, 15–18 only; 7–8: 6979, 3523/3456; d=3789, h=2067; all: 27 196, 12 501/14 695; 16–18: 9738 | numbers OK; wording issue | Problems 3, 5. Placement not verified (map stalled) |
+| 3 | R1_07A (one-way) | Drogowe, 7–9 | 699 (S→N 100%); A = 62% of 1130; whole 4681; cars 646, bikes 10; persons 775, group 1235 | R1_07A h 7–8: 699 S→N; R1_07B 431; all 4681; d=646, a1=10; 646×1.2=775; (646+383)×1.2=1235 | OK | Marker 2 m from catalogue |
+| 4 | R1_05 A–D (merged) | Drogowe, sums ON, 7–9; cars category | 11 097 veh; A 3915 / B 1415 / C 3873 / D 1894 (35/13/35/17%); dirs e.g. A N→S 1682 / S→N 2233; whole 72 619; cars 8849, whole cars 58 028 | 3.3 R1_05A–D h 7–8 sums identical; all h 72 619; d=8849; d whole 58 028 | OK | Node centroid 1 m; dots A–D on the correct sides. Unit missing on 58 028 |
+| 5 | PR_03B (one-way) | Drogowe, 15–17 | 2654 (N→S 100%), 24% of 11 000; whole 16 487; cars 2488, buses 58; persons 2986 | PR_03B h 15–16: 2654; PR_03A 8346; all 16 487; d=2488, j=58; ×1.2 = 2986 | OK | 1 m from catalogue. Tab B labelled by segment, not "ul. Podwale" |
+| 6 | R2_04C | Drogowe, custom 16:00–19:00 | 10 069; SE→NW 4442 / NW→SE 5627; 42% of 24 061; whole 49 612; cars 9303, LGV 489, buses 145 | h 16–18: 10 069; 4442/5627; A 5978 + B 8014; all 49 612; d=9303, e=489, j=145 | OK | 1 m from catalogue |
+| 7 | R2_01A Kwiska | Potoki, 7–9 | 12 652 pax / 234 veh; whole 44 630 / 795; tram 128 / bus 106 veh; top dest OPORÓW 2025; top line 20 (2384); utilisation 31.5% | 6.4 E=R2_01A, N∈{7,8}: 12 652 / 234; all 44 630 / 795; tram 128 / bus 106; Kierunek OPORÓW 2025; line 20 2384; mean AA 31.5% | OK | Marker ~8 m from GTFS Kwiska stops (12205/12206/12303/12304/112206). Label "(5–9, 14–18)" but data 6–9, 14–18 |
+| 8 | R1_06D Dworzec Gł. (Peronowa) + R1_06 point | Potoki, 7–9 | D: 11 407 / 149; whole 36 078 / 503; bus 89 / tram 60; SĘPOLNO 2439; line 9 2371; util 41.4%; boarded/alighted 4454 / 2333. Point: 26 525, whole 89 788, shares A4 B3 C12 D43 E21 F11 G6 H1% | 6.4 R1_06D: 11 407 / 149, 36 078 / 503, 89/60, SĘPOLNO 2439, line 9 2371, AA 41.4%, AC 4454 / AB 2333; R1_06A–H sum 26 525 / 89 788 | OK | D marker 2 m from GTFS 20268/20269/120268/120269 |
+| 9 | KW_19A Wilczyce | Potoki, 15–17 | 540 / 8 buses; whole 2096 / 35; PL. GRUNWALDZKI 248; line 911 (382); util 45.4%; carrier KŁOSOK 35 | 6.4 KW_19A N∈{15,16}: 540 / 8; all 2096 / 35; 248; 911 = 382; AA 45.3–45.4% (rounding); KŁOSOK 35 | OK | ~10 m from GTFS 31917001/002 |
+| 10 | PR_08A Pl. Grunwaldzki | Potoki, 15–17 | 13 207 / 269; whole 33 844 / 968; bus 147 / tram 122; GAJ (PĘTLA) 2086; line 16 (3053); util 19.1% | 6.4 PR_08A: 13 207 / 269; 33 844 / 968; 147/122; 2086; 16 = 3053; AA 19.1% | OK | ~11 m from GTFS pl. Grunwaldzki stops |
+| 11 | PP_01 Świdnicka/Renoma | Rowery i piesi, 7–9; 16–19 | 869 pedestrians; "↑ N 381 · ↓ S 488"; whole 3856; extra features (whole): 60+ 208, małe kółka 66, bagaż 51, wózek dz. 43, wózek inw. 4, kule 2; fit 3482 / inne 374. 16–19: 1387 | 3.5 baza PP_01 h 7–8: 869; wlot N 381 / S 488; all 3856; col K codes 1=208, 7=66, 2=51, 4=43, 5=4, 3=2 (legend row 2); col J 1=3482, 2=374; h 16–18 1387 | numbers OK; **arrows reversed** | Problem 2. Marker on Świdnicka between Podwale and Kościuszki (OSM) |
+| 12 | RR_02 kładka Radiowej Trójki (+PP_08) | Rowery i piesi, 7–9 | 236 cyclists; "↗ NE 134 / ↙ SW 102"; whole 1143; private 1048 / UTO 60 / city bike 31 / cargo 4. PP_08: 420 pedestrians | 3.4 RR_02 h 7–8: 236; wlot NE 134 / SW 102; all 1143; col L 1=1048, 4=60, 2=31, 3=4 | numbers OK; **arrows reversed** | Marker exactly on the OSM label "Kładka Radiowej Trójki"; PP_08 at the same spot |
+| 13 | RR_22 A+B Hallera / Powst. Śl. | Rowery i piesi, custom 16–19, sums ON | 1252; A 639 (→E 299 / ←W 340), B 613 (NE 305 / SW 308); whole 3071 | 3.4 RR_22A/B h 16–18: 639 / 613; wlot E 299, W 340, NE 305, SW 308; all 3071 | numbers OK; **arrows reversed** | Marker at the Hallera × Powstańców Śl. crossing (OSM). Tabs show the place, not the street |
+| 14 | K1 rail | Pociągi, 7–9 | 1094 pax; to 1025 / from 69; whole to 1917 / from 1826 in 20 trains; seats from 6635 / to 4371; POLREGIO 11, KD 9 | 7.1 K1 hour 07–08: 1094 (1025/69, 5 trains); all 1917/1826, 20 trains; seats 6635/4371; carriers 11/9 | OK | Marker between Świniary and Szewce. The panel does not show the train count for the period |
+| 15 | K5 rail | Pociągi, 7–9 | 1086; 1022 / 64; whole 1837 / 1644 in 21 trains; seats to 5643 / from 5167; KD 17, POLREGIO 4 | 7.1 K5: 1086 (1022/64); 1837/1644, 21; 5643/5167; 17/4 | OK | Marker on the line between Brochów and Radwanice (OSM) |
+| 16 | Node R1_05 | Węzły, 7–9 | trams 442 veh → 35 596; cars 8849 → ≈11 000; buses 90 → 3940; bikes 1340; LGV/trucks 354; other 84; headline ≈52 000; 69/20/8/3/1/0%; KZ R1_05 "autobus 43.8, tramwaj 80.5"; stop tabs 21/26/36/17% | 3.3 R1_05A–D h 7–8: k 442, d 8849, j 90, a/b incl. off-road 1340, e–h 354, c+i+l 84; 6.4 R1_05 h 7–8: tram 17 476/217 = 80.53, bus 1795/41 = 43.78; 442×80.53 = 35 596, 90×43.78 = 3940; sum 51 933; stops 4128/4948/6990/3205 | OK | Car-only summary line and tab percentages are confusing (problem 8) |
+| 17 | Node KW_19 | Węzły, 7–9 | cars 6666 → ≈8000 (94%); LGV/trucks 484; buses 94 → **47**; other 24; KZ PR_16A Klecina "autobus 0.5" | d 6666, e–h 484, j 94, c+i+l 24; 6.4 PR_16A h 7–8: 2 pax / 4 runs = 0.5 | arithmetic OK; **unclear** | Problem 4 (pairing gives an implausible occupancy) |
+| 18 | Node R2_01 | Węzły, 15–17; Cała doba | 15–17: cars 11 380 → ≈14 000, buses 223 → ≈6800, trams 106 → ≈6600, bikes 572, LGV 272, other 150; ≈28 000; city averages. Cała doba: "16 godz. (05:00–21:00)", ≈200 000 | R2_01A+B h 15–16 groups identical; ×1.2 / ×30.6 / ×62.4, sum 28 088. All h: 75 822 / 1644 / 831 …, sum ≈199 920 | OK (15–17) | Cała doba 16 h, while paired nodes get 8 h (problem 1) |
+| 19 | Node PR_03 | Węzły, Cała doba | "8 godz. (05:00–09:00, 14:00–18:00)"; cars 34 094 → ≈41 000; buses 717 → 31 737 (KZ PR_04A 44.3); trams 433 → ≈27 000 (62.4 average); LGV 1469; bikes 1293; other 353 | PR_03A+B h 5–8, 14–17: identical; PR_04A bus 4205/95 = 44.26 (no trams → average); 717×44.26 = 31 737 | arithmetic OK; window issue | Problems 1, 7 (hour 5 included; PR_04A has no runs before 6) |
+| 20 | Node R2_04 | Węzły, 10–14; 7–9; Cała doba | 10–14: cars 27 113, trams 223 → ≈14 000, buses 365 → ≈11 000, LGV 2635, bikes 439, other 221, ≈61 000, "brak punktu KZ w promieniu 150 m". 7–9: KZ R2_03 FAT 121 m, bus 24.6, tram 13.3; stop tabs 20/29/28/23%. Cała doba: 8 h, bus 27.9, tram 17.4 | 3.3 R2_04A–C h 10–13 groups identical (city averages); 6.4 R2_03 h 7–8: tram 1595/120 = 13.29, bus 3465/141 = 24.57; stops 1005/1489/1415/1151; whole-day 27.87 / 17.35 | arithmetic OK; message wrong | Problems 1, 6 |
