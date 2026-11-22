@@ -10,7 +10,7 @@ import SignalsLayer from './SignalsLayer'
 import { BASEMAPS } from './basemaps'
 import {
   LAYERS, MODES, radius, fmt, fmtEst, expansionOf, coverageGap, BASIS_LABEL, windowKind,
-  periodShare, NET_MODES, markerIndex, splitTotal, HOUR_LABEL,
+  periodShare, NET_MODES, markerIndex, splitTotal, headline, HOUR_LABEL,
 } from './data'
 import { pieSvg, labelLines, labelHtml, labelBox } from './pie'
 
@@ -140,14 +140,14 @@ function MapLegend({ visible, net, sig, pies }) {
   )
 }
 
-function SplitTooltip({ m }) {
+function SplitTooltip({ m, titled }) {
   const total = splitTotal(m.split)
   const rows = [...m.split.slices].filter((s) => s.persons > 0)
     .sort((a, b) => b.persons - a.persons)
   return (
     <>
       <br /><span className="period">
-        podział modalny, osoby · {hoursText(m.split.hours)}
+        podział modalny{titled ? '' : `, osoby · ${hoursText(m.split.hours)}`}
       </span>
       {rows.map((s) => (
         <div key={s.key} className="tt-row">
@@ -261,13 +261,24 @@ export default function MapView({
             {list.map((m) => {
               const on = selected && selected.kind === kind && selected.id === m.id
               const wk = windowKind(kind, m.ref)
+              // the pie's total, so the headline and the slices add up
+              const all = headline(m, people) !== m.value
               const r = radii[`${kind}:${m.id}`]
               const tip = (
                 <Tooltip>
                   <b>{m.title}</b><br />
-                  {fmt(m.value)}{' '}
-                  {people && kind === 'road' ? 'osób w samochodach' : LAYERS[kind].unit}
-                  <span className="period"> · {period}</span>
+                  {all ? (
+                    <>
+                      {fmtEst(headline(m, people))} osób — wszystkie środki
+                      <span className="period"> · {hoursText(m.split.hours)}</span>
+                    </>
+                  ) : (
+                    <>
+                      {fmt(m.value)}{' '}
+                      {people && kind === 'road' ? 'osób w samochodach' : LAYERS[kind].unit}
+                      <span className="period"> · {period}</span>
+                    </>
+                  )}
                   {wholeDay && expansionOf(data.meta, wk)?.factor > 1 && (
                     <><br /><span className="period">
                       oszacowanie doby (×{expansionOf(data.meta, wk).factor},{' '}
@@ -289,7 +300,7 @@ export default function MapView({
                       liczeni dwa razy, suma zawyżona
                     </span></>
                   )}
-                  {m.split && <SplitTooltip m={m} />}
+                  {m.split && <SplitTooltip m={m} titled={all} />}
                 </Tooltip>
               )
               const click = { click: () => onSelect({ kind, id: m.id, ref: m.ref }) }

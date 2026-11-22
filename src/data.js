@@ -612,3 +612,8 @@ function attachSplits(data, out, { hours, occupancy, pair }) {
 }
 
 export const splitTotal = (split) => split.slices.reduce((a, s) => a + s.persons, 0)
+
+/** The number a node goes by. When counting people and the node has a modal
+ *  split, that is everyone through it - all modes, not just the car share. */
+export const headline = (m, people) => (people && m.split && splitTotal(m.split) > 0
+  ? splitTotal(m.split) : m.value)

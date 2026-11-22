@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import {
   LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, sameRange,
   coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES, resolveTarget, windowKind,
+  headline, fmtEst,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
 import { SIGNAL_FILTERS } from './SignalsLayer'
@@ -190,10 +191,13 @@ export default function Sidebar({
   const netMeta = data[NET_MODES[net.mode].file]?.meta
 
   // The map's own marker objects, so selecting one always highlights its dot.
+  // Ranked by the same number the tooltip leads with.
   const top = useMemo(
-    () => [...(markers.road || [])].sort((a, b) => b.value - a.value).slice(0, 12),
-    [markers],
+    () => [...(markers.road || [])]
+      .sort((a, b) => headline(b, people) - headline(a, people)).slice(0, 12),
+    [markers, people],
   )
+  const topAll = top.some((m) => headline(m, people) !== m.value)
 
   const totals = useMemo(() => {
     const cats = activeCats(metric, people)
@@ -351,14 +355,14 @@ export default function Sidebar({
           <div><span>Rowerzyści (punkty rowerowe)</span><b>{fmt(totals.bike)}</b></div>
           <div><span>Piesi (punkty piesze)</span><b>{fmt(totals.ped)}</b></div>
         </div>
-        <h3>Najwyższe natężenia na drogach</h3>
+        <h3>{topAll ? 'Najwięcej osób w węzłach — wszystkie środki' : 'Najwyższe natężenia na drogach'}</h3>
         <ol className="top">
           {top.map((m) => (
             <li key={m.id} className={selected?.id === m.id ? 'on' : ''}
               {...activate(() => onSelect({ kind: 'road', id: m.id, ref: m.ref }))}>
               <span>{m.title}</span>
               <em>{m.sub}</em>
-              <b>{fmt(m.value)}</b>
+              <b>{headline(m, people) !== m.value ? fmtEst(headline(m, people)) : fmt(m.value)}</b>
             </li>
           ))}
         </ol>
