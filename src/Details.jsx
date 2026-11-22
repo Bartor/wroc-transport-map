@@ -7,7 +7,7 @@ import {
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
   splitVehicles, bikeNote, pedNote, thinText, splitShares, SHARE_ROW, PCU_SOURCE,
-  HOUR_LABEL as HL, coverageGap, windowKind, pieceKey, transitByMode, MODES,
+  HOUR_LABEL as HL, coverageGap, windowKind, pieceKey, transitByMode, MODES, nodeSplit,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 import { useSheetDrag } from './sheetDrag'
@@ -161,35 +161,77 @@ function HourTip({ active, payload, label, names, colors }) {
 }
 const CURSOR = { fill: 'rgba(255, 255, 255, .06)' }
 
-/** A section's hourly profile stacked on the rest of its point. */
-const PartProfile = ({ part, whole, hours, color, unit }) => (
-  <ResponsiveContainer width="100%" height={120}>
-    <BarChart data={part.map((v, h) => ({ h, v, rest: Math.max(0, (whole[h] || 0) - v) }))}
-      margin={MARGIN}>
-      <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
-      <YAxis {...YAX} />
-      <RTooltip cursor={CURSOR} content={(
-        <HourTip names={{ v: `${unit} — ta część`, rest: `${unit} — reszta grupy` }}
-          colors={{ v: color, rest: '#5b6475' }} />
-      )} />
-      <Bar dataKey="v" stackId="p">
-        {part.map((_, h) => (
-          <Cell key={h} fill={color} fillOpacity={hours.includes(h) ? 1 : 0.3} />
-        ))}
-      </Bar>
-      <Bar dataKey="rest" stackId="p">
-        {part.map((_, h) => (
-          <Cell key={h} fill="#5b6475" fillOpacity={hours.includes(h) ? 0.55 : 0.2} />
-        ))}
-      </Bar>
-    </BarChart>
-  </ResponsiveContainer>
-)
-
 // Axis ticks: thousands shortened, so "3800" is not clipped to "800".
 const AXIS_TICK = (v) => (v >= 1000 ? `${(v / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} tys.` : v)
 const YAX = { tick: { fontSize: 10 }, width: 44, tickFormatter: AXIS_TICK }
 const MARGIN = { top: 4, right: 4, bottom: 0, left: -6 }
+
+// Neighbouring pieces in a stack take alternating shades of the layer colour,
+// with a thin panel-coloured gap between them.
+const SHADES = [0, 0.3, -0.25, 0.5, -0.4]
+function shade(hex, i) {
+  const t = SHADES[i % SHADES.length]
+  const c = [1, 3, 5].map((j) => parseInt(hex.slice(j, j + 2), 16))
+  const to = t > 0 ? 255 : 0
+  const mix = c.map((v) => Math.round(v + (to - v) * Math.abs(t)))
+  return `#${mix.map((v) => v.toString(16).padStart(2, '0')).join('')}`
+}
+
+/** Every piece in an hour, top of the stack first, the pointed one bright. */
+function StackTip({ active, payload, label, pieces, focus, unit }) {
+  if (!active || !payload?.length) return null
+  const val = Object.fromEntries(payload.map((x) => [x.dataKey, x.value]))
+  const total = pieces.reduce((a, s) => a + (s.out ? 0 : val[s.id] || 0), 0)
+  return (
+    <div className="chart-tip stack-tip">
+      <b>{HOUR_LABEL(label)}–{HOUR_LABEL((label + 1) % 24)} · {unit}</b>
+      {[...pieces].reverse().map((s) => (
+        <div key={s.id} className={focus && focus !== s.id ? 'dim' : undefined}>
+          <i style={{ background: s.fill }} />
+          <span>{s.letter} {s.name}{s.out ? ' (pominięty)' : ''}</span>
+          <em>{fmt(val[s.id] || 0)}</em>
+        </div>
+      ))}
+      <div className="sum"><span>razem</span><em>{fmt(total)}</em></div>
+    </div>
+  )
+}
+
+/**
+ * A node's hourly profile stacked by its pieces, so one chart serves the node
+ * and each of its pieces: with a piece open, its segments stay lit and the
+ * rest fade. Hovering a segment names it, and lights its row in the tree and
+ * its dot on the map, as hovering those lights it here; a click opens it.
+ */
+function StackProfile({ kind, pieces, hours, unit, current, hot, setHot, onSelect }) {
+  const [seg, setSeg] = useState(null)
+  const focus = seg || (hot?.kind === kind ? hot.id : null)
+  const lit = (id) => (!current && !focus) || id === current || id === focus
+  const data = Array.from({ length: 24 }, (_, h) => Object.fromEntries(
+    [['h', h], ...pieces.map((s) => [s.id, s.values[h] || 0])]))
+  return (
+    <ResponsiveContainer width="100%" height={140}>
+      <BarChart data={data} margin={MARGIN}>
+        <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
+        <YAxis {...YAX} />
+        <RTooltip cursor={CURSOR} isAnimationActive={false}
+          content={<StackTip pieces={pieces} focus={focus} unit={unit} />} />
+        {pieces.map((s) => (
+          <Bar key={s.id} dataKey={s.id} stackId="p" isAnimationActive={false} cursor="pointer"
+            onMouseEnter={() => { setSeg(s.id); if (MOUSE) setHot?.({ kind, id: s.id }) }}
+            onMouseLeave={() => { setSeg(null); if (MOUSE) setHot?.(null) }}
+            onClick={() => onSelect?.({ kind, id: s.id, ref: s.ref })}>
+            {data.map((_, h) => (
+              <Cell key={h} fill={s.fill} stroke="var(--panel)" strokeWidth={1}
+                fillOpacity={(hours.includes(h) ? 1 : 0.32) * (lit(s.id) ? 1 : 0.25)
+                  * (s.out ? 0.5 : 1)} />
+            ))}
+          </Bar>
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
 
 const Profile = ({ values, hours, color, unit }) => (
   <ResponsiveContainer width="100%" height={130}>
@@ -593,7 +635,11 @@ function ModalSplit({ node, data, occupancy }) {
   }
   return (
     <div className="split">
-      <h4>Podział modalny — osoby</h4>
+      <h4>
+        Podział modalny — osoby
+        {node.piece && ` · ${node.piece.kind === 'pt' ? 'przystanek' : 'przekrój'} `
+          + `${sectionLetter(node.piece.id) || node.piece.id}`}
+      </h4>
       {!total ? (
         <p className="hint">
           Brak danych w wybranym okresie
@@ -683,8 +729,10 @@ function ModalSplit({ node, data, occupancy }) {
         )}
         {split.basis === 'transit' && (
           <li>
-            Węzeł bez przekroju drogowego w promieniu 150 m — widać tylko podział
-            między autobus i tramwaj.
+            {node.piece?.kind === 'pt'
+              ? 'Tylko ten przystanek: pasażerowie autobusów i tramwajów zmierzeni na jego słupku.'
+              : 'Węzeł bez przekroju drogowego w promieniu 150 m — widać tylko podział '
+                + 'między autobus i tramwaj.'}
           </li>
         )}
       </ul>
@@ -822,13 +870,47 @@ export default function Details({
     if (i >= 0) {
       part = {
         g, i, val: vals[i], sum, share: shares[pieceKey(g.kind, g.members[i].id)],
-        out: !isIn[i], prof: profs[i],
-        // the rest of the group, which a left-out piece is shown against too
-        whole: addProfiles(profs.filter((_, j) => isIn[j] || j === i)),
+        out: !isIn[i],
         unit: g.kind === 'road' && allVehicles ? 'pojazdów, wszystkie kategorie' : unit(g.kind),
       }
     }
   }
+
+  // The node's pie stays in its place with a piece open, drawn for that piece
+  // alone: a road section with the node's stop loads, a stop as its own
+  // buses and trams.
+  const occ = occupancy ?? data.meta.carOccupancy.default
+  let splitNode = node?.split ? node : null
+  if (!splitNode && fam?.node?.split && fam.current && (kind === 'road' || kind === 'pt')) {
+    const split = kind === 'road'
+      ? nodeSplit(data, { roadIds: [p.id], ptRefs: fam.node.pair?.refs ?? null, hours, occupancy: occ })
+      : nodeSplit(data, { roadIds: [], ptRefs: [p], hours, occupancy: occ })
+    splitNode = { ...fam.node, id: p.id, ref: p, split, piece: { kind, id: p.id } }
+  }
+
+  // The hourly profile, stacked by the node's pieces of this kind where it
+  // has several - the same chart for the node and for each piece, the open
+  // piece lit. Left-out pieces drop out of the stack unless one is open.
+  const stackGroup = fam?.groups.find((g) => g.kind === kind && g.members.length > 1)
+  const stack = stackGroup && stackGroup.members
+    .filter((m) => !fam.node || !off?.has(pieceKey(kind, m.id)) || m.id === fam.current?.id)
+    .map((m, i) => ({
+      id: m.id, ref: m, letter: sectionLetter(m.id) || m.id,
+      name: (kind === 'road' ? m.name : sectionOf(kind, m)) || m.name,
+      values: shape(profileFor(data, kind, m, metric, people)),
+      fill: shade(color, i),
+      out: !!fam.node && !!off?.has(pieceKey(kind, m.id)),
+    }))
+  const chart = (values) => (stack ? (
+    <StackProfile kind={kind} pieces={stack} hours={hours} unit={unit(kind)}
+      current={fam.current?.kind === kind ? fam.current.id : null}
+      hot={hot} setHot={setHot} onSelect={onSelect} />
+  ) : <Profile values={values} hours={hours} color={color} unit={unit(kind)} />)
+  // a piece's chart is its whole point, so the heading says which is lit
+  const chartFor = (what) => (stack && fam.current
+    ? `Profil dobowy — ${what}: punkt ${fam.node?.id || fam.parent}, `
+      + `${sectionLetter(fam.current.id) || fam.current.id} wyróżniony`
+    : `Profil dobowy — ${what}`)
 
   let body = null
   // what the shareable picture shows when there is no modal split
@@ -950,8 +1032,8 @@ export default function Details({
             przecinające linię pomiaru, więc ich suma to cały ruch przez tę linię.
           </p>
         )}
-        <h4>Profil dobowy — cały punkt</h4>
-        <Profile values={total} hours={hours} color={color} unit={unit(kind)} />
+        <h4>Profil dobowy — cały punkt{stack ? ' po częściach' : ''}</h4>
+        {chart(total)}
         <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
         {kind === 'pt' ? (
           <>
@@ -1017,10 +1099,10 @@ export default function Details({
           </dd>
         </dl>
         <h4>
-          Profil dobowy — {people ? 'osoby w samochodach osobowych'
-            : ROAD_METRICS[metric].label.toLowerCase()}
+          {chartFor(people ? 'osoby w samochodach osobowych'
+            : ROAD_METRICS[metric].label.toLowerCase())}
         </h4>
-        <Profile values={prof} hours={hours} color={color} unit={unit(kind)} />
+        {chart(prof)}
         <DirSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]} />
         <Breakdown title={`Kategorie pojazdów — ${period}`} obj={byCat} />
         <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
@@ -1041,8 +1123,8 @@ export default function Details({
           <dt className="whole">Cały pomiar</dt>
           <dd className="whole">{fmt(p.total)}{p.hours ? ` (${p.hours})` : ''}</dd>
         </dl>
-        <h4>Profil dobowy</h4>
-        <Profile values={shape(p.byHour)} hours={hours} color={color} unit={unit(kind)} />
+        <h4>{chartFor(unit(kind))}</h4>
+        {chart(shape(p.byHour))}
         {p.byHourDir
           ? <DirSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]} />
           : <Breakdown title="Kierunki — cały pomiar" obj={p.byDir} />}
@@ -1087,8 +1169,8 @@ export default function Details({
             </>
           ) : null}
         </dl>
-        <h4>Profil dobowy — pasażerowie</h4>
-        <Profile values={shape(prof)} hours={hours} color={color} unit={unit(kind)} />
+        <h4>{chartFor('pasażerowie')}</h4>
+        {chart(shape(prof))}
         <TransitLoads refs={[p]} hours={hours} scale={(v) => shown(v, 'pt')}
           title={`Pojazdy i napełnienie — ${period}`} />
         <Breakdown title={`Kierunki (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourDir')} />
@@ -1133,17 +1215,17 @@ export default function Details({
   } else if (!node?.split && coverageGap(data.meta, wk, hours)) {
     cardNotes.push('Pomiar tylko w szczytach — część godzin wybranego okresu nie była mierzona.')
   }
-  const split = node?.split && splitTotal(node.split) > 0 ? node.split : null
+  const split = splitNode && splitTotal(splitNode.split) > 0 ? splitNode.split : null
   const spec = {
     id: pill,
-    kicker: `${split ? 'Węzeł pomiarowy' : KICKER[kind] || 'Punkt'} · ${pill}`,
+    kicker: `${split && !splitNode.piece ? 'Węzeł pomiarowy' : KICKER[kind] || 'Punkt'} · ${pill}`,
     title,
     subtitle: node?.sub || p.segment || p.loc || '',
     period,
     accent: split ? '#e4572e' : color,
-    split, pair: node?.pair, repeats: !!p.repeatsStreet,
-    bikeNote: split && split.basis !== 'transit' ? bikeNote(data, node, split) : null,
-    pedNote: split && split.basis !== 'transit' ? pedNote(data, node, split) : null,
+    split, pair: splitNode?.pair, repeats: !!p.repeatsStreet,
+    bikeNote: split && split.basis !== 'transit' ? bikeNote(data, splitNode, split) : null,
+    pedNote: split && split.basis !== 'transit' ? pedNote(data, splitNode, split) : null,
     occupancy, occupancyDefault: data.meta.carOccupancy.default,
     occupancyQuote: data.meta.carOccupancy.value, occ: data.transitOcc,
     big: cardBig,
@@ -1172,6 +1254,9 @@ export default function Details({
           <NodeTree family={fam} shares={shares} onSelect={onSelect}
             off={off || NO_OFF} toggleOff={toggleOff} hot={hot} setHot={setHot} />
         )}
+        {splitNode && (
+          <ModalSplit key={splitNode.id} node={splitNode} data={data} occupancy={occ} />
+        )}
         {part && (
           <div className="part">
             <h4>
@@ -1193,12 +1278,7 @@ export default function Details({
                 {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
               </p>
             )}
-            <PartProfile part={part.prof} whole={part.whole} unit={part.unit}
-              hours={hours} color={LAYERS[part.g.kind].color} />
           </div>
-        )}
-        {node?.split && (
-          <ModalSplit key={node.id} node={node} data={data} occupancy={occupancy} />
         )}
         {body}
         {scaled && (

@@ -821,6 +821,13 @@ select option { background: #232733; color: var(--text); }
   box-shadow: 0 4px 14px rgba(0, 0, 0, .45);
 }
 .chart-tip b { display: block; color: #cfd5df; font-weight: 600; margin-bottom: .1rem; }
+/* a stacked hour: one row per piece, the pointed one bright */
+.stack-tip div { display: flex; align-items: center; gap: .1rem; transition: opacity .12s; }
+.stack-tip div span { flex: 1; padding-right: .8rem; }
+.stack-tip div em { font-style: normal; font-variant-numeric: tabular-nums; }
+.stack-tip div.dim { opacity: .45; }
+.stack-tip div.sum { border-top: 1px solid #3a4459; margin-top: .2rem; padding-top: .15rem;
+  color: #cfd5df; }
 .chart-tip i { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
   margin-right: .35rem; vertical-align: middle; }
 
