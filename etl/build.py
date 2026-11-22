@@ -398,6 +398,8 @@ def stage_pt(idx, sidx):
         return (None, None), "unresolved"
 
     secs = {}
+    # each run by vehicle, to find the ones seen at two poles of one point
+    runs = collections.defaultdict(list)
     for r in sheet(F64, "DANE - potoki pasażerskie", 4):
         if not r[0]:
             continue                                # 31k trailing blank rows
@@ -415,6 +417,9 @@ def stage_pt(idx, sidx):
             "pax": 0, "veh": 0, "load": [], "dates": set()})
         h = r[13] if isinstance(r[13], int) else hour_of(r[14])
         pax = num(r[25]) or 0
+        t = r[11].total_seconds() if hasattr(r[11], "total_seconds") else None
+        if t is not None and txt(r[16]) and h is not None:
+            runs[(pt, txt(r[1]), txt(r[16]), txt(r[17]))].append((t, sid, pax, h))
         s["pax"] += pax
         s["veh"] += 1
         s["dates"].add(txt(r[1]))
@@ -445,6 +450,16 @@ def stage_pt(idx, sidx):
             v = num(r[col])
             if v is not None:
                 s[key] += v
+
+    # A vehicle stopping at two surveyed poles of one point - a line turning
+    # across a hub, a tram at both platforms of a long stop - is two rows in
+    # 6.4, so the point's sum counts its passengers twice. The later sighting,
+    # same vehicle and line within 10 minutes at another pole, is the repeat.
+    for lst in runs.values():
+        lst.sort()
+        for prev, cur in zip(lst, lst[1:]):
+            if cur[0] - prev[0] <= 600 and cur[1] != prev[1]:
+                secs[cur[1]].setdefault("rep", collections.Counter())[cur[3]] += cur[2]
 
     def hourly(by_hour, totals, top):
         """Passengers per hour for the `top` biggest keys, the rest as "inne",
@@ -477,6 +492,9 @@ def stage_pt(idx, sidx):
             # per hour, so the panel can split the selected period
             "byHourDir": hourly(s["hdir"], s["dir"], 10),
             "byHourLine": hourly(s["hline"], s["line"], 15),
+            # passengers already counted at another pole of the point
+            "repeatByHour": [round(s.get("rep", {}).get(h, 0)) for h in range(24)]
+            if s.get("rep") else None,
             "boarded": round(s["board"]) or None,
             "alighted": round(s["alight"]) or None,
         })
