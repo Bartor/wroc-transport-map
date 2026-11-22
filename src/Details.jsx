@@ -160,6 +160,9 @@ function HourTip({ active, payload, label, names, colors }) {
   )
 }
 const CURSOR = { fill: 'rgba(255, 255, 255, .06)' }
+// Tooltips sit above the chart, pinned to its top edge and lifted by their own
+// height in CSS, so they never cover the bars they describe.
+const TIP = { position: { y: 0 }, allowEscapeViewBox: { x: false, y: true }, wrapperStyle: { zIndex: 5 } }
 
 // Axis ticks: thousands shortened, so "3800" is not clipped to "800".
 const AXIS_TICK = (v) => (v >= 1000 ? `${(v / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} tys.` : v)
@@ -214,7 +217,7 @@ function StackProfile({ kind, pieces, hours, unit, current, hot, setHot, onSelec
       <BarChart data={data} margin={MARGIN}>
         <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
         <YAxis {...YAX} />
-        <RTooltip cursor={CURSOR} isAnimationActive={false}
+        <RTooltip {...TIP} cursor={CURSOR} isAnimationActive={false}
           content={<StackTip pieces={pieces} focus={focus} unit={unit} />} />
         {pieces.map((s) => (
           <Bar key={s.id} dataKey={s.id} stackId="p" isAnimationActive={false} cursor="pointer"
@@ -238,7 +241,7 @@ const Profile = ({ values, hours, color, unit }) => (
     <BarChart data={values.map((v, h) => ({ h, v }))} margin={MARGIN}>
       <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
       <YAxis {...YAX} />
-      <RTooltip cursor={CURSOR} content={<HourTip names={{ v: unit }} />} />
+      <RTooltip {...TIP} cursor={CURSOR} content={<HourTip names={{ v: unit }} />} />
       <Bar dataKey="v">
         {values.map((_, h) => (
           <Cell key={h} fill={color} fillOpacity={hours.includes(h) ? 1 : 0.28} />
