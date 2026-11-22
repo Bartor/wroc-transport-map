@@ -138,15 +138,38 @@ function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
   )
 }
 
+/**
+ * The hour and what was counted in it, spelled out: "3 056 osób w samochodach
+ * osobowych", on the dark panel - Recharts' own box was white with a pale
+ * grey hour and the data key "v" for a name.
+ */
+function HourTip({ active, payload, label, names, colors }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="chart-tip">
+      <b>{HOUR_LABEL(label)}–{HOUR_LABEL((label + 1) % 24)}</b>
+      {payload.map((x) => (
+        <div key={x.dataKey}>
+          {colors && <i style={{ background: colors[x.dataKey] }} />}
+          {fmt(x.value)} {names[x.dataKey]}
+        </div>
+      ))}
+    </div>
+  )
+}
+const CURSOR = { fill: 'rgba(255, 255, 255, .06)' }
+
 /** A section's hourly profile stacked on the rest of its point. */
-const PartProfile = ({ part, whole, hours, color }) => (
+const PartProfile = ({ part, whole, hours, color, unit }) => (
   <ResponsiveContainer width="100%" height={120}>
     <BarChart data={part.map((v, h) => ({ h, v, rest: Math.max(0, (whole[h] || 0) - v) }))}
       margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
       <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
       <YAxis tick={{ fontSize: 10 }} width={46} />
-      <RTooltip formatter={(v, n) => [fmt(v), n === 'v' ? 'ten przekrój' : 'reszta punktu']}
-        labelFormatter={(h) => `${HOUR_LABEL(h)}–${HOUR_LABEL((h + 1) % 24)}`} />
+      <RTooltip cursor={CURSOR} content={(
+        <HourTip names={{ v: `${unit} — ta część`, rest: `${unit} — reszta grupy` }}
+          colors={{ v: color, rest: '#5b6475' }} />
+      )} />
       <Bar dataKey="v" stackId="p">
         {part.map((_, h) => (
           <Cell key={h} fill={color} fillOpacity={hours.includes(h) ? 1 : 0.3} />
@@ -161,12 +184,12 @@ const PartProfile = ({ part, whole, hours, color }) => (
   </ResponsiveContainer>
 )
 
-const Profile = ({ values, hours, color }) => (
+const Profile = ({ values, hours, color, unit }) => (
   <ResponsiveContainer width="100%" height={130}>
     <BarChart data={values.map((v, h) => ({ h, v }))} margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
       <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
       <YAxis tick={{ fontSize: 10 }} width={46} />
-      <RTooltip formatter={(v) => fmt(v)} labelFormatter={(h) => `${HOUR_LABEL(h)}–${HOUR_LABEL((h + 1) % 24)}`} />
+      <RTooltip cursor={CURSOR} content={<HourTip names={{ v: unit }} />} />
       <Bar dataKey="v">
         {values.map((_, h) => (
           <Cell key={h} fill={color} fillOpacity={hours.includes(h) ? 1 : 0.28} />
@@ -317,8 +340,9 @@ function ShareButtons({ spec }) {
       <button type="button" className="share-btn" onClick={copy} disabled={state === 'busy'}>
         {state === 'copied' ? 'Skopiowano ✓' : state === 'busy' ? 'Kopiuję…' : 'Kopiuj obraz'}
       </button>
-      <button type="button" className="share-btn icon" onClick={download}
-        title="Pobierz jako PNG" aria-label="Pobierz jako PNG">⬇</button>
+      <button type="button" className="share-btn" onClick={download} title="Pobierz obraz PNG">
+        Pobierz
+      </button>
       <button type="button" className="share-btn" onClick={link}
         title="Kopiuj link do tego widoku">
         {state === 'linked' ? 'Link ✓' : 'Link'}
@@ -733,7 +757,7 @@ export default function Details({
           </p>
         )}
         <h4>Profil dobowy — cały punkt</h4>
-        <Profile values={total} hours={hours} color={color} />
+        <Profile values={total} hours={hours} color={color} unit={unit(kind)} />
         <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
         {kind === 'pt' ? (
           <>
@@ -800,7 +824,7 @@ export default function Details({
           Profil dobowy — {people ? 'osoby w samochodach osobowych'
             : ROAD_METRICS[metric].label.toLowerCase()}
         </h4>
-        <Profile values={prof} hours={hours} color={color} />
+        <Profile values={prof} hours={hours} color={color} unit={unit(kind)} />
         <DirSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]} />
         <Breakdown title={`Kategorie pojazdów — ${period}`} obj={byCat} />
         <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
@@ -822,7 +846,7 @@ export default function Details({
           <dd className="whole">{fmt(p.total)}{p.hours ? ` (${p.hours})` : ''}</dd>
         </dl>
         <h4>Profil dobowy</h4>
-        <Profile values={shape(p.byHour)} hours={hours} color={color} />
+        <Profile values={shape(p.byHour)} hours={hours} color={color} unit={unit(kind)} />
         {p.byHourDir
           ? <DirSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]} />
           : <Breakdown title="Kierunki — cały pomiar" obj={p.byDir} />}
@@ -871,7 +895,7 @@ export default function Details({
           ) : null}
         </dl>
         <h4>Profil dobowy — pasażerowie</h4>
-        <Profile values={shape(prof)} hours={hours} color={color} />
+        <Profile values={shape(prof)} hours={hours} color={color} unit={unit(kind)} />
         <Breakdown title={`Trakcja (liczba pojazdów) — ${period}`} obj={tractionNow} />
         <Breakdown title={`Kierunki (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourDir')} />
         <Breakdown title={`Linie (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourLine')} />
@@ -897,7 +921,7 @@ export default function Details({
           </dd>
         </dl>
         <h4>Profil dobowy — pasażerowie</h4>
-        <Profile values={shape(prof)} hours={hours} color={color} />
+        <Profile values={shape(prof)} hours={hours} color={color} unit={unit(kind)} />
         <Breakdown title={`Kierunek — ${period}`} obj={Object.fromEntries(
           Object.entries(p.byHour).map(([d, arr]) => [d, shown(sumHours(arr, hours))]))} />
         <Breakdown title="Miejsca w pociągach — cały pomiar" obj={p.seats} />
@@ -975,11 +999,13 @@ export default function Details({
                 {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
               </p>
             )}
-            <PartProfile part={part.prof} whole={part.whole}
+            <PartProfile part={part.prof} whole={part.whole} unit={part.unit}
               hours={hours} color={LAYERS[part.g.kind].color} />
           </div>
         )}
-        {node?.split && <ModalSplit node={node} data={data} occupancy={occupancy} />}
+        {node?.split && (
+          <ModalSplit key={node.id} node={node} data={data} occupancy={occupancy} />
+        )}
         {body}
         {scaled && (
           <p className="warn">
