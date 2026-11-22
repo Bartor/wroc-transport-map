@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { memo, useMemo, useState } from 'react'
 import {
   LAYERS, ROAD_METRICS, PRESETS, fmt, sameRange, coverageGap, BASIS_LABEL, NET_MODES,
   resolveTarget, headline, fmtEst, VIEWS, viewOf,
@@ -49,7 +49,9 @@ function HelpButton({ open, onClick }) {
   )
 }
 
-function Panel({ title, help, collapsible = false, defaultOpen = true, badge, children }) {
+function Panel({
+  title, help, collapsible = false, defaultOpen = true, badge, onOpen, children,
+}) {
   const [open, setOpen] = useState(defaultOpen)
   const [showHelp, setShowHelp] = useState(false)
   return (
@@ -57,7 +59,7 @@ function Panel({ title, help, collapsible = false, defaultOpen = true, badge, ch
       <div className="panel-head">
         {collapsible ? (
           <button type="button" className="collapse-head" aria-expanded={open}
-            onClick={() => setOpen(!open)}>
+            onClick={() => { if (!open) onOpen?.(); setOpen(!open) }}>
             <span className={open ? 'chevron open' : 'chevron'}>▸</span>
             <h2>{title}</h2>
             {badge != null && <span className="badge">{badge}</span>}
@@ -201,11 +203,12 @@ function Search({ data, markers, onSelect, view, setView }) {
 
 // ----------------------------------------------------------------------- sidebar
 
-export default function Sidebar({
+/** Memoised: a hover on the map must not redraw the whole panel. */
+export default memo(function Sidebar({
   data, view, setView, visible, survey, setSurvey, range, setRange,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, roadPeople, setPeople, occupancy, setOccupancy,
-  net, setNet, basemap, setBasemap, sig, setSig, labels, setLabels,
+  net, setNet, nets, loadNet, basemap, setBasemap, sig, setSig, labels, setLabels,
   markers, onSelect, selected, sheetOpen, setSheetOpen,
 }) {
   const V = VIEWS[view]
@@ -219,7 +222,7 @@ export default function Sidebar({
     && data.points.some((p) => p.window && (!areas || areas.includes(p.area)))) {
     gaps.unshift('Ruch drogowy na kordonie obszaru (KO)')
   }
-  const netMeta = data[NET_MODES[net.mode].file]?.meta
+  const netMeta = nets[NET_MODES[net.mode].file]?.meta
 
   // Everything drawn in this view, as the map draws it: the totals and the
   // ranking are sums of the markers themselves, so they always agree with it.
@@ -536,6 +539,7 @@ export default function Sidebar({
       </Panel>
 
       <Panel title="Model dla całej sieci" collapsible defaultOpen={false}
+        onOpen={() => loadNet(net.mode)}
         badge={net.on ? 'wł.' : null}
         help={(
           <>
@@ -557,7 +561,7 @@ export default function Sidebar({
             <select value={net.mode} aria-label="Co modelować"
               onChange={(e) => setNet({ ...net, mode: e.target.value })}>
               {Object.entries(NET_MODES).map(([k, v]) => (
-                <option key={k} value={k} disabled={!data[v.file]}>
+                <option key={k} value={k} disabled={nets[v.file] === null}>
                   {v.label}{data[v.file] ? '' : ' — brak modelu'}
                 </option>
               ))}
@@ -699,4 +703,4 @@ export default function Sidebar({
       </footer>
     </aside>
   )
-}
+})

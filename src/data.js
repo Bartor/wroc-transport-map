@@ -1,12 +1,16 @@
-// Loading and reshaping of the ETL output. Everything is small enough to keep
-// in memory (~1.2 MB total), so the map filters client-side.
+// Loading and reshaping of the ETL output. The surveys are small enough to
+// keep in memory, so the map filters client-side.
 
-const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail',
-  'network', 'network_modes']
+const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail']
 
 // survey.json is absent from the public build (household addresses), so it is
-// optional like the model layers that only exist when they validated.
-const OPTIONAL = ['network_pt', 'network_service', 'signals', 'survey']
+// optional.
+const OPTIONAL = ['signals', 'survey']
+
+/** One data file, or null when the build does not have it. The street-network
+ *  model layers (3 MB of the 5 MB) load this way, when first asked for. */
+export const loadFile = (f) => fetch(`data/${f}.json`)
+  .then((r) => (r.ok ? r.json() : null)).catch(() => null)
 
 export async function loadAll() {
   const parts = await Promise.all(
@@ -16,8 +20,7 @@ export async function loadAll() {
     })),
   )
   const d = Object.fromEntries(FILES.map((f, i) => [f, parts[i]]))
-  const opt = await Promise.all(OPTIONAL.map((f) =>
-    fetch(`data/${f}.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null)))
+  const opt = await Promise.all(OPTIONAL.map(loadFile))
   OPTIONAL.forEach((f, i) => { d[f] = opt[i] })
   d.roadById = d.road.sections
   d.transitOcc = transitOccupancy(d.pt)

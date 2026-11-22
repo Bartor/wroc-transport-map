@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import {
   MapContainer, TileLayer, CircleMarker, Marker, Tooltip, LayerGroup, Polyline, Pane, useMap,
   useMapEvents,
@@ -94,17 +94,23 @@ function NodeLabels({ entries, declutter }) {
   // and section dots it sits beside, never under them. Below tooltips.
   return (
     <Pane name="node-labels" style={{ zIndex: 620, pointerEvents: 'none' }}>
-      {placed.map((e) => (
-        <Marker key={e.key} position={[e.lat, e.lon]} interactive={false} keyboard={false}
-          pane="node-labels"
-          icon={L.divIcon({
-            className: 'node-label', html: e.html,
-            iconSize: [e.box.w, e.box.h], iconAnchor: [-(e.r + 5), e.box.h / 2],
-          })} />
-      ))}
+      {placed.map((e) => <NodeLabel key={e.key} e={e} />)}
     </Pane>
   )
 }
+
+/** One label. Its icon is rebuilt only when its text or offset change: a new
+ *  icon makes Leaflet replace the element, and every pan re-placed them all. */
+const NodeLabel = memo(function NodeLabel({ e }) {
+  const icon = useMemo(() => L.divIcon({
+    className: 'node-label', html: e.html,
+    iconSize: [e.box.w, e.box.h], iconAnchor: [-(e.r + 5), e.box.h / 2],
+  }), [e.html, e.box.w, e.box.h, e.r])
+  return (
+    <Marker position={[e.lat, e.lon]} interactive={false} keyboard={false}
+      pane="node-labels" icon={icon} />
+  )
+})
 
 /** Colour key for whatever is currently drawn. Size encodes volume, which a
  *  colour swatch cannot show, so that is stated in words. */
@@ -294,8 +300,88 @@ function SectionDot({ kind, m, lat, lon, node, on, out, hot, onSelect, setHot })
   )
 }
 
+/**
+ * One drawn point: a pie for a node, a circle otherwise. Memoised, so a hover
+ * or a sheet opening does not redraw 150 pies - and a pie's icon is kept until
+ * its split, size or highlight change, since a new icon replaces the element.
+ */
+const PointMarker = memo(function PointMarker({
+  kind, m, r, on, people, period, wholeDay, meta, hours, onSelect,
+}) {
+  const icon = useMemo(() => (m.split ? L.divIcon({
+    className: 'pie-icon', html: pieSvg(m.split, r, on),
+    iconSize: [2 * r + 6, 2 * r + 6], iconAnchor: [r + 3, r + 3],
+  }) : null), [m.split, r, on])
+  const click = useMemo(() => ({ click: () => onSelect({ kind, id: m.id, ref: m.ref }) }),
+    [onSelect, kind, m])
+  const wk = windowKind(kind, m.ref)
+  // the pie's total, so the headline and the slices add up
+  const all = headline(m, people) !== m.value
+  const tip = (
+    <Tooltip>
+      <b>{m.title}</b><br />
+      {all ? (
+        <>
+          {fmtEst(headline(m, people))} osób — wszystkie środki
+          <span className="period"> · {hoursText(m.split.hours)}</span>
+        </>
+      ) : (
+        <>
+          {fmt(m.value)}{' '}
+          {people && kind === 'road' ? 'osób w samochodach' : LAYERS[kind].unit}
+          <span className="period"> · {period}</span>
+        </>
+      )}
+      {wholeDay && expansionOf(meta, wk)?.factor > 1 && (
+        <><br /><span className="period">
+          oszacowanie doby (×{expansionOf(meta, wk).factor},{' '}
+          {BASIS_LABEL[expansionOf(meta, wk).basis]}) —
+          zmierzono {fmt(m.raw)}
+        </span></>
+      )}
+      {!wholeDay && !m.split && coverageGap(meta, wk, hours) && (
+        <><br /><span className="warn">
+          pomiar tylko w szczytach — brak danych dla
+          {' '}{coverageGap(meta, wk, hours).missing.length} z
+          {' '}{hours.length} godzin okresu
+        </span></>
+      )}
+      {m.sub && <><br /><span className="period">{m.sub}</span></>}
+      {m.ref?.repeatsStreet && (
+        <><br /><span className="warn">
+          przekroje po obu stronach skrzyżowania — jadący na wprost
+          liczeni dwa razy, suma zawyżona
+        </span></>
+      )}
+      {m.split && <SplitTooltip m={m} titled={all} />}
+    </Tooltip>
+  )
+  if (m.split) {
+    return (
+      <Marker position={[m.lat, m.lon]} eventHandlers={click} icon={icon}>
+        {tip}
+      </Marker>
+    )
+  }
+  return (
+    <CircleMarker
+      center={[m.lat, m.lon]}
+      radius={r}
+      pathOptions={{
+        color: on ? '#fff' : LAYERS[kind].color,
+        weight: on ? 3 : 1,
+        fillColor: LAYERS[kind].color,
+        fillOpacity: m.value ? 0.6 : 0.15,
+      }}
+      eventHandlers={click}
+    >
+      {tip}
+    </CircleMarker>
+  )
+})
+
 export default function MapView({
-  data, visible, hours, period, wholeDay, people, net, basemap, sig,
+  data, visible, hours, period, wholeDay, people, net, nets, basemap, sig,
   markers, labels, selected, onSelect, family, off, hot, setHot,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
@@ -366,8 +452,8 @@ export default function MapView({
 
         <FlyToSelection selected={selected} index={index} />
 
-        {net.on && data[NET_MODES[net.mode].file] && (
-          <NetworkLayer key={net.mode} network={data[NET_MODES[net.mode].file]}
+        {net.on && nets[NET_MODES[net.mode].file] && (
+          <NetworkLayer key={net.mode} network={nets[NET_MODES[net.mode].file]}
             share={netShare} hours={hours} minVolume={net.min}
             unit={NET_MODES[net.mode].unit}
             measured={!!NET_MODES[net.mode].measured} />
@@ -391,82 +477,14 @@ export default function MapView({
 
         {Object.entries(markers).map(([kind, list]) => (
           <LayerGroup key={kind}>
-            {list.map((m) => {
-              // a node stays lit while one of its pieces is open
-              const on = !!selected && ((selected.kind === kind && selected.id === m.id)
-                || (family?.node === m && !!family.current))
-              const wk = windowKind(kind, m.ref)
-              // the pie's total, so the headline and the slices add up
-              const all = headline(m, people) !== m.value
-              const r = radii[`${kind}:${m.id}`]
-              const tip = (
-                <Tooltip>
-                  <b>{m.title}</b><br />
-                  {all ? (
-                    <>
-                      {fmtEst(headline(m, people))} osób — wszystkie środki
-                      <span className="period"> · {hoursText(m.split.hours)}</span>
-                    </>
-                  ) : (
-                    <>
-                      {fmt(m.value)}{' '}
-                      {people && kind === 'road' ? 'osób w samochodach' : LAYERS[kind].unit}
-                      <span className="period"> · {period}</span>
-                    </>
-                  )}
-                  {wholeDay && expansionOf(data.meta, wk)?.factor > 1 && (
-                    <><br /><span className="period">
-                      oszacowanie doby (×{expansionOf(data.meta, wk).factor},{' '}
-                      {BASIS_LABEL[expansionOf(data.meta, wk).basis]}) —
-                      zmierzono {fmt(m.raw)}
-                    </span></>
-                  )}
-                  {!wholeDay && !m.split && coverageGap(data.meta, wk, hours) && (
-                    <><br /><span className="warn">
-                      pomiar tylko w szczytach — brak danych dla
-                      {' '}{coverageGap(data.meta, wk, hours).missing.length} z
-                      {' '}{hours.length} godzin okresu
-                    </span></>
-                  )}
-                  {m.sub && <><br /><span className="period">{m.sub}</span></>}
-                  {m.ref?.repeatsStreet && (
-                    <><br /><span className="warn">
-                      przekroje po obu stronach skrzyżowania — jadący na wprost
-                      liczeni dwa razy, suma zawyżona
-                    </span></>
-                  )}
-                  {m.split && <SplitTooltip m={m} titled={all} />}
-                </Tooltip>
-              )
-              const click = { click: () => onSelect({ kind, id: m.id, ref: m.ref }) }
-              if (m.split) {
-                return (
-                  <Marker key={m.id} position={[m.lat, m.lon]} eventHandlers={click}
-                    icon={L.divIcon({
-                      className: 'pie-icon', html: pieSvg(m.split, r, on),
-                      iconSize: [2 * r + 6, 2 * r + 6], iconAnchor: [r + 3, r + 3],
-                    })}>
-                    {tip}
-                  </Marker>
-                )
-              }
-              return (
-                <CircleMarker
-                  key={m.id}
-                  center={[m.lat, m.lon]}
-                  radius={r}
-                  pathOptions={{
-                    color: on ? '#fff' : LAYERS[kind].color,
-                    weight: on ? 3 : 1,
-                    fillColor: LAYERS[kind].color,
-                    fillOpacity: m.value ? 0.6 : 0.15,
-                  }}
-                  eventHandlers={click}
-                >
-                  {tip}
-                </CircleMarker>
-              )
-            })}
+            {list.map((m) => (
+              <PointMarker key={m.id} kind={kind} m={m} r={radii[`${kind}:${m.id}`]}
+                // a node stays lit while one of its pieces is open
+                on={!!selected && ((selected.kind === kind && selected.id === m.id)
+                  || (family?.node === m && !!family.current))}
+                people={people} period={period} wholeDay={wholeDay} meta={data.meta}
+                hours={hours} onSelect={onSelect} />
+            ))}
           </LayerGroup>
         ))}
 

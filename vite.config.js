@@ -27,4 +27,17 @@ export default defineConfig(({ mode }) => ({
   base: './',
   plugins: [react(), ...(mode === 'public' ? [publicBuild()] : [])],
   server: { port: 5173, open: true },
+  build: {
+    rollupOptions: {
+      output: {
+        // libraries change less often than the app, so they cache apart
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined
+          if (/[\/](react|react-dom|scheduler)[\/]/.test(id)) return 'react'
+          if (/[\/](leaflet|react-leaflet|@react-leaflet)[\/]/.test(id)) return 'leaflet'
+          return undefined   // the charts stay with the panel that uses them
+        },
+      },
+    },
+  },
 }))
