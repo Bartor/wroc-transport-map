@@ -507,14 +507,20 @@ export function familyOf(data, markers, sel) {
 // ------------------------------------------------------------- modal split
 // What moves through a node, in people. The road survey counts vehicles by
 // category; people are what the modal-split question is about.
+// Pies draw slices in this order, so only neighbours touch - last against
+// first included. The colours were checked as that ring with the dataviz
+// palette validator, on the dark map and the white card: every neighbouring
+// pair at least 12 apart (OKLab x100) under red-green colour blindness and
+// 22 under normal vision. Buses and trams were two near blues before; goods
+// brown and bike green were all but identical without red-green vision.
 export const MODES = [
   { key: 'car', label: 'Samochody osobowe', color: '#e4572e', cats: ['d'] },
-  { key: 'goods', label: 'Dostawcze i ciężarowe', color: '#b07a4f', cats: ['e', 'f', 'g', 'h'] },
-  { key: 'bus', label: 'Autobusy', color: '#2e86ab', cats: ['j'] },
-  { key: 'tram', label: 'Tramwaje', color: '#4cc9f0', cats: ['k'] },
-  { key: 'bike', label: 'Rowery i hulajnogi', color: '#3fa34d',
+  { key: 'goods', label: 'Dostawcze i ciężarowe', color: '#9085e9', cats: ['e', 'f', 'g', 'h'] },
+  { key: 'bus', label: 'Autobusy', color: '#c98500', cats: ['j'] },
+  { key: 'tram', label: 'Tramwaje', color: '#3987e5', cats: ['k'] },
+  { key: 'bike', label: 'Rowery i hulajnogi', color: '#0ca30c',
     cats: ['a1', 'a2', 'b1', 'b2'], off: ['a3', 'a4', 'b3', 'b4'] },
-  { key: 'other', label: 'Inne (motocykle, mikrobusy)', color: '#8d99ae', cats: ['c', 'i', 'l'] },
+  { key: 'other', label: 'Inne (motocykle, mikrobusy)', color: '#6b7385', cats: ['c', 'i', 'l'] },
 ]
 const MODE = Object.fromEntries(MODES.map((m) => [m.key, m]))
 

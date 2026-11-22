@@ -99,8 +99,10 @@ export function splitNotes(spec) {
 function drawSplit(ctx, spec, y) {
   const { split } = spec
   const total = splitTotal(split)
-  const rows = split.slices.filter((s) => s.persons > 0)
-    .sort((a, b) => b.persons - a.persons)
+  // the donut keeps the map's slice order, whose neighbours were checked
+  // against each other; the table beside it goes largest first
+  const ring = split.slices.filter((s) => s.persons > 0)
+  const rows = [...ring].sort((a, b) => b.persons - a.persons)
 
   // headline: the vehicle share against the people share, for road nodes
   const car = split.slices.find((s) => s.key === 'car')
@@ -117,7 +119,7 @@ function drawSplit(ctx, spec, y) {
   const cx = PAD + r + 4
   const cy = y + r + 4
   let a0 = -Math.PI / 2
-  for (const s of rows) {
+  for (const s of ring) {
     const a1 = a0 + (2 * Math.PI * s.persons) / total
     ctx.beginPath()
     ctx.moveTo(cx, cy)

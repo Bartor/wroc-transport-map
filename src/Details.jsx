@@ -393,7 +393,7 @@ function ModalSplit({ node, data, occupancy }) {
             os./poj., zmierzone w godzinach {hourRuns(split.loadHours)}
             {beyond ? ' i przyjęte także dla pozostałych godzin okresu — poza nimi to założenie' : ''}.
             {thinText(split) && ` Średnia miejska tam, gdzie próba była za mała (${thinText(split)}).`}
-            Surowej liczby pasażerów z punktu KZ nie dodajemy, bo obejmuje on
+            {' '}Surowej liczby pasażerów z punktu KZ nie dodajemy, bo obejmuje on
             inne słupki i wloty niż przekroje drogowe.
           </li>
         )}

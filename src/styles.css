@@ -616,7 +616,7 @@ select option { background: #232733; color: var(--text); }
   box-shadow: 0 0 0 2px #14161a, 0 0 0 3px #4a5263;
 }
 .view.on .view-mark { box-shadow: 0 0 0 2px #14161a, 0 0 0 3px #cfe0ff; }
-.view-mark.pie { background: conic-gradient(#e4572e 0 45%, #79c7ee 0 80%, #2e86ab 0 95%, #3fa34d 0); }
+.view-mark.pie { background: conic-gradient(#e4572e 0 45%, #c98500 0 60%, #3987e5 0 95%, #0ca30c 0); }
 .view-text { display: flex; flex-direction: column; min-width: 0; }
 .view-text b { font-size: .88rem; font-weight: 600; }
 .view-text em { font-style: normal; font-size: .74rem; color: var(--dim); line-height: 1.35; }
