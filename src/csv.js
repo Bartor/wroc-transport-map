@@ -1,7 +1,7 @@
 // What the map shows, as a table for a spreadsheet: one row per drawn point.
 // Semicolons and decimal commas, with a BOM, so Excel set to Polish opens
 // it as columns without an import dialog.
-import { LAYERS, MODES, splitTotal, splitVehicles } from './data'
+import { LAYERS, MODES, splitTotal, splitVehicles, splitShares } from './data'
 
 const num = (v, digits = 0) => (v == null || Number.isNaN(v) ? ''
   : (digits ? v.toFixed(digits) : String(Math.round(v))).replace('.', ','))
@@ -20,6 +20,7 @@ export function markersTable({ markers, layers, period, people }) {
     head.push('godziny podziału', 'osoby razem')
     for (const md of MODES) head.push(`${md.label} — osoby`, `${md.label} — pojazdy`)
     for (const md of MODES) head.push(`${md.label} — % osób`, `${md.label} — % pojazdów`)
+    for (const md of MODES) head.push(`${md.label} — % przepustowości (poj. umowne)`)
     head.push('napełnienie autobus', 'napełnienie tramwaj', 'źródło napełnienia', 'przekroje', 'pominięte')
   } else {
     head.push('wartość', 'jednostka', 'przekroje', 'pominięte')
@@ -45,6 +46,11 @@ export function markersTable({ markers, layers, period, people }) {
       const x = by[md.key]
       out.push(x && total ? num((100 * x.persons) / total, 1) : '',
         x?.vehicles != null && veh ? num((100 * x.vehicles) / veh, 1) : '')
+    }
+    const pcu = splitShares(s)?.[2]
+    for (const md of MODES) {
+      const x = pcu?.parts.find((p) => p.key === md.key)
+      out.push(x ? num(100 * x.share, 1) : '')
     }
     const src = s.basis === 'transit' ? 'pomiar pasażerów'
       : s.local?.bus || s.local?.tram ? `punkt KZ ${m.pair?.id || ''}`.trim() : 'średnia miejska'

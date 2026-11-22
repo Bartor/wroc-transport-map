@@ -271,6 +271,16 @@ Dwie rzeczy, które łatwo zrobić źle:
   drogowych. Ze 116 zmierzonych napełnień odpada tak 4: autobusy w KW_19
   (przystanek linii 319 — 4 autobusy wobec 94 na al. Karkonoskiej, 0,5 os./poj.)
   i w R1_11 (2 wobec 37).
+* **Przepustowość jezdni w pojazdach umownych.** Obok udziału w osobach
+  i pojazdach węzeł pokazuje udział w przepustowości: pojazdy z przekrojów
+  × współczynniki z WR-D-13 „Wytyczne wykonywania analiz i prognoz ruchu
+  drogowego” (Ministerstwo Infrastruktury, 2023), tab. 4.3.1, teren
+  zabudowany z sygnalizacją: rower i hulajnoga 0,3, motocykl 0,3, samochód
+  i mikrobus 1, dostawczy 1,5, ciężarowy 2,5, z przyczepą 3, autobus 2,5,
+  tramwaj 3. Kategoria KBR „inne” (ciągniki, maszyny) nie ma klasy — liczona
+  jak ciężarowy (2,5), to założenie. Rowery poza jezdnią liczą się jako 0.
+  To miara przepustowości, nie powierzchni, a tramwaj na własnym torowisku
+  liczy się tak samo jak na jezdni.
 
 W 10 z 53 węzłów wieloprzekrojowych przekroje leżą na tej samej ulicy po obu
 stronach skrzyżowania (np. PR_01 Kazimierza Wielkiego). Tam pojazd jadący na

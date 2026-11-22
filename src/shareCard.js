@@ -4,7 +4,9 @@
 // dependency, crisp at 2x, and no map tiles - tiles from another origin would
 // taint the canvas and make the copy fail. Light background, because the
 // picture ends up in documents and slides, not in this dark interface.
-import { fmt, fmtEst, splitTotal, splitVehicles, thinText, HOUR_LABEL } from './data'
+import {
+  fmt, fmtEst, splitTotal, splitVehicles, splitShares, thinText, HOUR_LABEL, SHARE_ROW,
+} from './data'
 
 const W = 1000
 const PAD = 56
@@ -190,7 +192,43 @@ function drawSplit(ctx, spec, y) {
     ctx.textAlign = 'left'
     ty += 34
   }
-  return Math.max(cy + r, ty) + 28
+  let yb = Math.max(cy + r, ty) + 28
+  // the same modes as people, vehicles and road capacity
+  const bars = splitShares(split)
+  if (bars) {
+    const lx = PAD
+    const bx = PAD + 230
+    const bw = W - PAD - 70 - bx
+    for (const row of bars) {
+      ctx.font = font(15)
+      ctx.fillStyle = DIM
+      ctx.textBaseline = 'middle'
+      ctx.fillText(SHARE_ROW[row.key], lx, yb + 11)
+      let x = bx
+      const parts = row.parts.filter((p) => p.share > 0)
+      const gaps = 2 * (parts.length - 1)
+      for (const p of parts) {
+        const w = Math.max(2, (bw - gaps) * p.share)
+        ctx.fillStyle = p.color
+        ctx.fillRect(x, yb, w, 22)
+        x += w + 2
+      }
+      const car = row.parts.find((p) => p.key === 'car')
+      ctx.font = font(16, 700)
+      ctx.fillStyle = INK
+      ctx.textAlign = 'right'
+      ctx.fillText(`${Math.round(car.share * 100)}%`, W - PAD, yb + 11)
+      ctx.textAlign = 'left'
+      ctx.textBaseline = 'top'
+      yb += 34
+    }
+    ctx.font = font(13)
+    ctx.fillStyle = FAINT
+    ctx.fillText('Liczba po prawej: samochody osobowe. Przepustowość jezdni w pojazdach umownych '
+      + '(WR-D-13, tab. 4.3.1).', lx, yb + 2)
+    yb += 40
+  }
+  return yb
 }
 
 function drawProfile(ctx, spec, y) {

@@ -524,6 +524,23 @@ export const MODES = [
 ]
 const MODE = Object.fromEntries(MODES.map((m) => [m.key, m]))
 
+/**
+ * Passenger car units: how much of a road's capacity one vehicle uses, from
+ * WR-D-13 "Wytyczne wykonywania analiz i prognoz ruchu drogowego" (Ministry
+ * of Infrastructure, 2023), Tab. 4.3.1, urban signalised column. A measure
+ * of capacity, not of area: a 32 m tram counts 3, not six car lengths.
+ * Minibuses of 10-24 seats count as cars (class c, WR-D-12 Tab. 4.7.1.1);
+ * KBR's "other" - tractors, road machinery - has no class and counts as a
+ * lorry, an assumption. Bikes on paths and pavements are off the roadway
+ * and count 0.
+ */
+export const PCU = {
+  c: 0.3, d: 1, e: 1.5, f: 2.5, g: 3, h: 3, i: 1, j: 2.5, k: 3, l: 2.5,
+  a1: 0.3, a2: 0.3, b1: 0.3, b2: 0.3,
+}
+export const PCU_SOURCE = 'WR-D-13, Wytyczne wykonywania analiz i prognoz ruchu drogowego '
+  + '(Ministerstwo Infrastruktury, 2023), tab. 4.3.1 — teren zabudowany, skrzyżowania z sygnalizacją'
+
 // Road and transit nodes are numbered independently, so they are paired by
 // distance. Up to 150 m the pairs are the same junction (Arkady/Swidnicka 16 m,
 // Dworzec/Kollataja 78 m, pl. Grunwaldzki 127 m); past it they start matching
@@ -577,6 +594,8 @@ function roadCounts(data, ids, hours) {
   const ci = Object.fromEntries(data.meta.vehCatOrder.map((c, i) => [c, i]))
   const oi = Object.fromEntries(data.meta.offCatOrder.map((c, i) => [c, i]))
   const v = Object.fromEntries(MODES.map((m) => [m.key, 0]))
+  // the same vehicles in passenger car units, roadway only
+  const pcu = Object.fromEntries(MODES.map((m) => [m.key, 0]))
   for (const id of ids) {
     const s = data.roadById[id]
     if (!s) continue
@@ -584,7 +603,12 @@ function roadCounts(data, ids, hours) {
       for (const h of hours) {
         const row = dd.h[h]
         if (!row) continue
-        for (const m of MODES) for (const c of m.cats) v[m.key] += row[ci[c]] || 0
+        for (const m of MODES) {
+          for (const c of m.cats) {
+            v[m.key] += row[ci[c]] || 0
+            pcu[m.key] += (row[ci[c]] || 0) * PCU[c]
+          }
+        }
       }
     }
     for (const rows of Object.values(s.off || {})) {
@@ -595,6 +619,7 @@ function roadCounts(data, ids, hours) {
       }
     }
   }
+  v.pcu = pcu
   return v
 }
 
@@ -639,7 +664,9 @@ const transitVeh = (refs, hours) => transitSum(refs, hours, 'vehByHour')
 export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
   const ptWin = data.meta.windows?.pt || []
   const occ = data.transitOcc
-  const mk = (key, vehicles, persons, est) => ({ ...MODE[key], vehicles, persons, est })
+  const mk = (key, vehicles, persons, est, pcu = null) => ({
+    ...MODE[key], vehicles, persons, est, pcu,
+  })
 
   if (!roadIds.length) {
     const hrs = hours.filter((h) => ptWin.includes(h))
@@ -691,12 +718,12 @@ export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
   return {
     basis: measured ? 'measured' : 'estimate', hours: hrs, load, local, loadHours, thin,
     slices: [
-      mk('car', v.car, v.car * occupancy, true),
-      mk('goods', v.goods, v.goods, true),
-      mk('bus', v.bus, v.bus * load.bus, !local.bus),
-      mk('tram', v.tram, v.tram * load.tram, !local.tram),
-      mk('bike', v.bike, v.bike, false),
-      mk('other', v.other, v.other, true),
+      mk('car', v.car, v.car * occupancy, true, v.pcu.car),
+      mk('goods', v.goods, v.goods, true, v.pcu.goods),
+      mk('bus', v.bus, v.bus * load.bus, !local.bus, v.pcu.bus),
+      mk('tram', v.tram, v.tram * load.tram, !local.tram, v.pcu.tram),
+      mk('bike', v.bike, v.bike, false, v.pcu.bike),
+      mk('other', v.other, v.other, true, v.pcu.other),
     ],
   }
 }
@@ -837,6 +864,25 @@ function nearestCount(data, kind, node, hours) {
 /** All the vehicles behind a split, for each mode's share of the traffic as
  *  against its share of the people. Zero for a transit-only node. */
 export const splitVehicles = (split) => split.slices.reduce((a, s) => a + (s.vehicles || 0), 0)
+
+/** Each mode's share of people, of vehicles and of road capacity (passenger
+ *  car units), in slice order; null for a transit-only node. */
+export function splitShares(split) {
+  const tot = (f) => split.slices.reduce((a, s) => a + (s[f] || 0), 0)
+  const t = { persons: tot('persons'), vehicles: tot('vehicles'), pcu: tot('pcu') }
+  if (!t.persons || !t.vehicles || !t.pcu) return null
+  return ['persons', 'vehicles', 'pcu'].map((f) => ({
+    key: f,
+    parts: split.slices.map((s) => ({ key: s.key, label: s.label, color: s.color,
+      share: (s[f] || 0) / t[f] })),
+  }))
+}
+
+export const SHARE_ROW = {
+  persons: 'osoby',
+  vehicles: 'pojazdy',
+  pcu: 'przepustowość jezdni',
+}
 
 /** The number a node goes by. When counting people and the node has a modal
  *  split, that is everyone through it - all modes, not just the car share. */

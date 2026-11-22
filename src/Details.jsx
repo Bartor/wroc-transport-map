@@ -7,7 +7,7 @@ import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
-  splitVehicles, bikeNote, pedNote, thinText,
+  splitVehicles, bikeNote, pedNote, thinText, splitShares, SHARE_ROW, PCU_SOURCE,
   HOUR_LABEL as HL, coverageGap, windowKind, pieceKey,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
@@ -324,6 +324,41 @@ function hourRuns(hours) {
 // The survey writes a round-the-clock count as "00:00-00:00".
 const hoursText = (s) => (/^0?0:00\s*-\s*0?0:00$/.test(s.trim()) ? 'całą dobę' : s)
 
+/**
+ * People, vehicles and road capacity as three bars of the same modes, so
+ * "a fifth of the people, four fifths of the road" reads at a glance. The
+ * car share is written on each bar; the rest are in the table above.
+ */
+function ShareBars({ split }) {
+  const rows = splitShares(split)
+  if (!rows) return null
+  return (
+    <div className="sharebars" role="table" aria-label="Udziały środków transportu">
+      {rows.map((r) => {
+        const car = r.parts.find((p) => p.key === 'car')
+        return (
+          <div key={r.key} className="sharebar" role="row">
+            <span role="rowheader">{SHARE_ROW[r.key]}</span>
+            <div className="bar">
+              {r.parts.filter((p) => p.share > 0).map((p) => (
+                <i key={p.key} role="cell" style={{ flexGrow: p.share, background: p.color }}
+                  title={`${p.label}: ${Math.round(p.share * 100)}% (${SHARE_ROW[r.key]})`} />
+              ))}
+            </div>
+            <b>{Math.round(car.share * 100)}%</b>
+          </div>
+        )
+      })}
+      <p className="hint">
+        Liczba po prawej: samochody osobowe. Przepustowość w pojazdach
+        umownych — {PCU_SOURCE}: rower 0,3, samochód 1, dostawczy 1,5,
+        ciężarowy 2,5–3, autobus 2,5, tramwaj 3. To miara zajęcia przepustowości,
+        nie powierzchni; tramwaj liczony jak na jezdni, także gdy ma własne torowisko.
+      </p>
+    </div>
+  )
+}
+
 /** Modal split of a node, in people, with the vehicles it came from. */
 function ModalSplit({ node, data, occupancy }) {
   const { split } = node
@@ -380,6 +415,7 @@ function ModalSplit({ node, data, occupancy }) {
             </table>
           </div>
           <p className="hint">Liczone dla {span}.</p>
+          <ShareBars split={split} />
         </>
       )}
       <ul className="split-notes">
