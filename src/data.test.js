@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildMarkers, familyOf, markerIndex, splitTotal, splitShares, thinText, bikeNote,
-  pieceKey, resolveTarget, PCU,
+  pieceKey, resolveTarget, PCU, carGap,
 } from './data'
 import { fixture, OPTS } from './fixture.test-data'
 
@@ -55,6 +55,19 @@ describe('node modal split', () => {
     // capacity: cars 150, buses 10 x 2.5, trams 10 x 3, bikes 4 x 0.3
     const pcu = 150 * PCU.d + 10 * PCU.j + 10 * PCU.k + 4 * PCU.a1
     expect(rows[2].parts.find((p) => p.key === 'car').share).toBeCloseTo(150 / pcu)
+  })
+})
+
+describe('carGap', () => {
+  const mk = buildMarkers(fixture(), OPTS)
+
+  it('sums up a node where cars are most vehicles and few of the people', () => {
+    // N1: cars 150 of 174 vehicles (86%), 180 of 1584 people (11%)
+    expect(carGap(node(mk, 'N1').split)).toMatch(/^Samochody osobowe: 86% pojazdów i \d+% przepustowości jezdni, ale 11% osób\.$/)
+  })
+
+  it('stays quiet where cars carry their share', () => {
+    expect(carGap(node(mk, 'N2A').split)).toBeNull()       // cars only: 100% and 100%
   })
 })
 

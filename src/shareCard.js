@@ -6,6 +6,7 @@
 // picture ends up in documents and slides, not in this dark interface.
 import {
   fmt, fmtEst, splitTotal, splitVehicles, splitShares, thinText, HOUR_LABEL, SHARE_ROW,
+  carGap,
 } from './data'
 import { inkOn } from './pie'
 
@@ -108,15 +109,7 @@ function drawSplit(ctx, spec, y) {
   const ring = split.slices.filter((s) => s.persons > 0)
   const rows = [...ring].sort((a, b) => b.persons - a.persons)
 
-  // headline: the vehicle share against the people share, for road nodes
-  const car = split.slices.find((s) => s.key === 'car')
   const vehTotal = splitVehicles(split)
-  if (car && vehTotal > 0 && total > 0) {
-    const vp = Math.round((100 * car.vehicles) / vehTotal)
-    const pp = Math.round((100 * car.persons) / total)
-    y = para(ctx, `Samochody osobowe: ${vp}% pojazdów, ale ${pp}% osób`,
-      PAD, y, W - 2 * PAD, 26, '#c2410c', 700, 1.3) + 18
-  }
 
   // donut
   const r = 132
@@ -238,6 +231,10 @@ function drawSplit(ctx, spec, y) {
     ctx.fillText('Liczba po prawej: samochody osobowe. Przepustowość jezdni w pojazdach umownych '
       + '(WR-D-13, tab. 4.3.1).', lx, yb + 2)
     yb += 40
+    // the conclusion of the bars, where it is striking; it used to open the
+    // card, before the evidence for it
+    const gap = carGap(split)
+    if (gap) yb = para(ctx, gap, PAD, yb - 6, W - 2 * PAD, 21, '#c2410c', 700, 1.3) + 22
   }
   return yb
 }

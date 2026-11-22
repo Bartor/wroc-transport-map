@@ -877,6 +877,23 @@ export function splitShares(split) {
   }))
 }
 
+/**
+ * The one-line conclusion of a node's bars, kept for where it is striking:
+ * cars at least half the vehicles and at least twice their share of the
+ * people - about a fifth of the nodes in either peak. R1_19 has the highest
+ * ratio of all (16% of vehicles, 2% of people), but there cars are a minor
+ * part of the traffic and the sentence would say little.
+ */
+export function carGap(split) {
+  const rows = splitShares(split)
+  if (!rows) return null
+  const [ppl, veh, cap] = rows.map((r) => r.parts.find((p) => p.key === 'car').share)
+  if (veh < 0.5 || veh < 2 * ppl) return null
+  const pc = (x) => `${Math.round(x * 100)}%`
+  return `Samochody osobowe: ${pc(veh)} pojazdów i ${pc(cap)} przepustowości jezdni, `
+    + `ale ${pc(ppl)} osób.`
+}
+
 export const SHARE_ROW = {
   persons: 'osoby',
   vehicles: 'pojazdy',
