@@ -281,6 +281,13 @@ function ShareButtons({ spec }) {
       if (r === 'shared') settle('shared')
     } catch { settle('error') }
   }
+  // the address holds the whole view, this node and its left-out pieces
+  const link = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href)
+      settle('linked')
+    } catch { settle('error') }
+  }
   return (
     <div className="share">
       {SHARE_FILES && (
@@ -293,6 +300,10 @@ function ShareButtons({ spec }) {
       </button>
       <button type="button" className="share-btn icon" onClick={download}
         title="Pobierz jako PNG" aria-label="Pobierz jako PNG">⬇</button>
+      <button type="button" className="share-btn" onClick={link}
+        title="Kopiuj link do tego widoku">
+        {state === 'linked' ? 'Link ✓' : 'Link'}
+      </button>
       {state === 'downloaded' && <span className="share-msg">schowek niedostępny — pobrano plik</span>}
       {state === 'saved' && <span className="share-msg">pobrano plik</span>}
       {state === 'error' && <span className="share-msg err">nie udało się</span>}

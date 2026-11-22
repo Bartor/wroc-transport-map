@@ -8,34 +8,50 @@ import {
 import MapView from './MapView'
 import Sidebar from './Sidebar'
 import ErrorBoundary from './ErrorBoundary'
+import { BASEMAPS, DEFAULT_BASEMAP } from './basemaps'
+import { readHash, hashOf, findSelection } from './urlState'
 
 // The panel brings the charts library with it; nobody needs it before the
 // first click, so it loads apart from the map, and early, while idle.
 const loadDetails = () => import('./Details')
 const Details = lazy(loadDetails)
-import { DEFAULT_BASEMAP } from './basemaps'
+
+// What the address asked for when the page opened, checked against what
+// exists; anything unknown falls back to the default.
+const URL0 = readHash()
+const DEFAULTS = {
+  view: 'nodes', range: PRESETS.am.range, metric: 'all', aggregate: true,
+  roadPeople: true, basemap: DEFAULT_BASEMAP,
+}
+const pick = (v, ok, def) => (v !== undefined && ok(v) ? v : def)
 
 export default function App() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
-  const [view, setView] = useState('nodes')         // one survey at a time, see VIEWS
-  const [survey, setSurvey] = useState(false)       // survey addresses overlay
-  const [range, setRange] = useState(PRESETS.am.range) // [from, to) hours, may wrap
-  const [metric, setMetric] = useState('all')
-  const [areas, setAreas] = useState(null) // null = all
-  const [aggregate, setAggregate] = useState(true)     // a point's sections as one
-  const [wholeDay, setWholeDay] = useState(false)   // expand peak-only counts
-  const [roadPeople, setPeople] = useState(true)    // road view: car occupants, not vehicles
+  // one survey at a time, see VIEWS
+  const [view, setView] = useState(pick(URL0.view, (v) => VIEWS[v], DEFAULTS.view))
+  const [survey, setSurvey] = useState(!!URL0.survey)   // survey addresses overlay
+  // [from, to) hours, may wrap
+  const [range, setRange] = useState(URL0.range || DEFAULTS.range)
+  const [metric, setMetric] = useState(pick(URL0.metric, (m) => ROAD_METRICS[m], DEFAULTS.metric))
+  const [areas, setAreas] = useState(URL0.areas || null) // null = all
+  const [aggregate, setAggregate] = useState(URL0.aggregate ?? DEFAULTS.aggregate) // a point's sections as one
+  const [wholeDay, setWholeDay] = useState(!!URL0.wholeDay)   // expand peak-only counts
+  // road view: car occupants, not vehicles
+  const [roadPeople, setPeople] = useState(URL0.roadPeople ?? DEFAULTS.roadPeople)
   const [occupancy, setOccupancy] = useState(null)  // set from meta on load
-  const [net, setNet] = useState({ on: false, mode: 'road', min: 3000 })
-  const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
-  const [sig, setSig] = useState({ on: false, filter: 'candidates' })
+  const [net, setNet] = useState({
+    on: !!URL0.net && !!NET_MODES[URL0.net],
+    mode: pick(URL0.net, (m) => NET_MODES[m], 'road'), min: 3000,
+  })
+  const [basemap, setBasemap] = useState(pick(URL0.basemap, (b) => BASEMAPS[b], DEFAULTS.basemap))
+  const [sig, setSig] = useState({ on: !!URL0.sig, filter: URL0.sig || 'candidates' })
   // permanent map labels: numbers, shares (%), either or both; with neither
   // the details come on hover
-  const [labels, setLabels] = useState({ num: false, pct: false, declutter: true })
+  const [labels, setLabels] = useState(URL0.labels || { num: false, pct: false, declutter: true })
   const [selected, setSelected] = useState(null)
   // Sections left out of their node's numbers, as pieceKey()s.
-  const [off, setOff] = useState(() => new Set())
+  const [off, setOff] = useState(() => new Set(URL0.off || []))
   // The piece of a node under the mouse, in the panel or on the map; both
   // light it up.
   const [hot, setHot] = useState(null)
@@ -68,7 +84,8 @@ export default function App() {
 
   useEffect(() => {
     loadAll().then((d) => {
-      setOccupancy(d.meta.carOccupancy.default)
+      setOccupancy(URL0.occupancy > 0 && URL0.occupancy < 5
+        ? URL0.occupancy : d.meta.carOccupancy.default)
       setData(d)
       const idle = window.requestIdleCallback || ((f) => setTimeout(f, 1500))
       idle(() => loadDetails())
@@ -113,6 +130,28 @@ export default function App() {
     const m = selected && markerIndex(markers)[`${selected.kind}:${selected.id}`]
     return m && m.ref !== selected.ref ? { ...selected, ref: m.ref } : selected
   }, [markers, selected])
+
+  // A linked selection, once there is something to find it in.
+  const linked = useRef(URL0.sel)
+  useEffect(() => {
+    if (!data || !linked.current) return
+    const s = findSelection(data, markerIndex(markers), linked.current)
+    linked.current = null
+    if (s) select(s)
+  }, [data, markers, select])
+
+  // Keep the address in step, without adding a history entry per click.
+  useEffect(() => {
+    if (!data) return
+    const h = hashOf({
+      view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
+      basemap, survey, net, sig, selected, off,
+    }, { ...DEFAULTS, occupancy: data.meta.carOccupancy.default })
+    if (h !== window.location.hash && !(h === '' && !window.location.hash)) {
+      window.history.replaceState(null, '', h || window.location.pathname + window.location.search)
+    }
+  }, [data, view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
+    basemap, survey, net, sig, selected, off])
 
   // The point the selection belongs to, shared by the map and the panel.
   const family = useMemo(
