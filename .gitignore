@@ -4,3 +4,4 @@ public/data/
 etl/cache/
 __pycache__/
 *.pyc
+reports/audit/cache/
