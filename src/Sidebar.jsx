@@ -522,8 +522,8 @@ export default function Sidebar({
             <div className="factors">
               {Object.entries(data.meta.expansion).map(([k, e]) => (
                 <div key={k} title={e.note}>
-                  <i className="swatch" style={{ background: LAYERS[k].color }} />
-                  <span>{LAYERS[k].label}</span>
+                  <i className="swatch" style={{ background: (LAYERS[k] || LAYERS.road).color }} />
+                  <span>{LAYERS[k]?.label || 'Ruch drogowy — kordon obszaru (KO)'}</span>
                   <b>×{e.factor}</b>
                   <em className={`basis ${e.basis}`}>{BASIS_LABEL[e.basis]}</em>
                 </div>
