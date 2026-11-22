@@ -13,40 +13,55 @@ import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 
 const SHARE_FILES = canShareImage()
 
+const GROUP_LABEL = {
+  road: 'Przekroje drogowe',
+  pt: 'Przystanki — pomiar pasażerów',
+  bike: 'Przekroje rowerowe',
+  ped: 'Przekroje piesze',
+}
+
 /**
- * A measurement point is split into lettered sections (KW_08A, KW_08B...): one
- * approach, carriageway or side of the street each. These tabs move between the
- * point as a whole and its sections, showing what share of the point each
- * section carries, so a section reads as part of its point.
+ * A node is made of pieces: lettered road sections (KW_08A, KW_08B...), and
+ * the stops of the transit point paired with it. These tabs move between the
+ * node as a whole and its pieces, each with its share of its own group - road
+ * and transit count different things, so they are never summed together.
  */
 function SubNav({ family, shares, onSelect }) {
-  const { kind, node, members, current } = family
-  const toNode = () => onSelect({ kind, id: node.id, ref: node.ref })
+  const { node, groups, current } = family
+  const toNode = () => onSelect({ kind: node.kind, id: node.id, ref: node.ref })
+  const isOn = (kind, id) => current?.kind === kind && current.id === id
   return (
-    <nav className="subnav" aria-label="Przekroje punktu">
+    <nav className="subnav" aria-label="Części węzła">
       {current && node && (
         <button type="button" className="back" onClick={toNode}>
-          ← cały punkt {family.parent}
+          ← cały węzeł {node.id}
         </button>
       )}
-      <div className="tabs" role="tablist">
-        {node && (
+      {node && (
+        <div className="tabs" role="tablist">
           <button type="button" role="tab" aria-selected={!current}
             className={current ? 'tab' : 'tab on'} onClick={toNode}>
-            <b>Σ</b><span>Całość</span><em>100%</em>
+            <b>Σ</b><span>Całość</span><em>węzeł</em>
           </button>
-        )}
-        {members.map((m) => (
-          <button key={m.id} type="button" role="tab" aria-selected={current === m.id}
-            className={current === m.id ? 'tab on' : 'tab'}
-            title={`${m.id} · ${sectionOf(kind, m) || m.name}`}
-            onClick={() => onSelect({ kind, id: m.id, ref: m })}>
-            <b>{sectionLetter(m.id) || '—'}</b>
-            <span>{sectionOf(kind, m) || m.name}</span>
-            <em>{shares[m.id] == null ? '—' : `${shares[m.id]}%`}</em>
-          </button>
-        ))}
-      </div>
+        </div>
+      )}
+      {groups.map((g) => (
+        <div key={g.kind} className={`tab-group ${g.kind}`}>
+          {(groups.length > 1 || node) && <h5>{GROUP_LABEL[g.kind]}</h5>}
+          <div className="tabs" role="tablist">
+            {g.members.map((m) => (
+              <button key={m.id} type="button" role="tab" aria-selected={isOn(g.kind, m.id)}
+                className={isOn(g.kind, m.id) ? 'tab on' : 'tab'}
+                title={`${m.id} · ${sectionOf(g.kind, m) || m.name}`}
+                onClick={() => onSelect({ kind: g.kind, id: m.id, ref: m })}>
+                <b>{sectionLetter(m.id) || '—'}</b>
+                <span>{sectionOf(g.kind, m) || m.name}</span>
+                <em>{shares[`${g.kind}:${m.id}`] == null ? '—' : `${shares[`${g.kind}:${m.id}`]}%`}</em>
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </nav>
   )
 }
@@ -313,15 +328,24 @@ export default function Details({
     ? (people ? 'osób w samochodach osobowych' : `pojazdów — ${ROAD_METRICS[metric].label.toLowerCase()}`)
     : unitOf(k))
 
-  // Each section's share of its point in the period, for the tabs and the
-  // section view. Same metric and units as everything else in the panel.
+  // Each piece's share of its own group in the period, for the tabs and the
+  // piece view. Same metric and units as everything else in the panel.
   const fam = family && onSelect ? family : null
-  const famProfs = fam ? fam.members.map((m) => shape(profileFor(data, kind, m, metric, people))) : []
-  const famVals = famProfs.map((pr) => sumHours(pr, hours))
-  const famSum = famVals.reduce((x, y) => x + y, 0)
-  const shares = fam ? Object.fromEntries(fam.members.map((m, i) => [
-    m.id, famSum ? Math.round((100 * famVals[i]) / famSum) : null])) : {}
-  const at = fam?.current ? fam.members.findIndex((m) => m.id === fam.current) : -1
+  const shares = {}
+  let part = null
+  for (const g of fam?.groups || []) {
+    const profs = g.members.map((m) => shape(profileFor(data, g.kind, m, metric, people), g.kind))
+    const vals = profs.map((pr) => sumHours(pr, hours))
+    const sum = vals.reduce((x, y) => x + y, 0)
+    g.members.forEach((m, i) => {
+      shares[`${g.kind}:${m.id}`] = sum ? Math.round((100 * vals[i]) / sum) : null
+    })
+    const i = fam.current?.kind === g.kind
+      ? g.members.findIndex((m) => m.id === fam.current.id) : -1
+    if (i >= 0) {
+      part = { g, i, profs, val: vals[i], sum, share: shares[`${g.kind}:${g.members[i].id}`] }
+    }
+  }
 
   let body = null
   // what the shareable picture shows when there is no modal split
@@ -589,16 +613,20 @@ export default function Details({
       </div>
       <div className="dbody">
         {fam && <SubNav family={fam} shares={shares} onSelect={onSelect} />}
-        {at >= 0 && (
+        {part && (
           <div className="part">
-            <h4>Część punktu {fam.parent}</h4>
+            <h4>
+              Część węzła {fam.node?.id || fam.parent}
+              {' — '}{GROUP_LABEL[part.g.kind].toLowerCase()}
+            </h4>
             <p>
-              Przekrój {sectionLetter(fam.current) || fam.current} to{' '}
-              <b>{famSum ? `${shares[fam.current]}%` : '—'}</b> punktu w okresie {period}:
-              {' '}{fmt(famVals[at])} z {fmt(famSum)} ({unit(kind)}).
+              {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
+              {sectionLetter(fam.current.id) || fam.current.id} to{' '}
+              <b>{part.sum ? `${part.share}%` : '—'}</b> tej grupy w okresie {period}:
+              {' '}{fmt(part.val)} z {fmt(part.sum)} ({unit(part.g.kind)}).
             </p>
-            <PartProfile part={famProfs[at]} whole={addProfiles(famProfs)}
-              hours={hours} color={color} />
+            <PartProfile part={part.profs[part.i]} whole={addProfiles(part.profs)}
+              hours={hours} color={LAYERS[part.g.kind].color} />
           </div>
         )}
         {node?.split && <ModalSplit node={node} data={data} occupancy={occupancy} />}

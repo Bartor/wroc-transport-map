@@ -421,21 +421,32 @@ export const markerIndex = (markers) => {
 const FAMILY_SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
 
 /**
- * The measurement point a selection belongs to: its lettered sections and, when
- * points are drawn whole, the merged node standing for them. Lets the panel and
- * the map treat a section as part of its point rather than a separate place.
- * Null for single-section points.
+ * What a selection is part of, so the panel and the map can treat a section as
+ * a piece of something rather than a separate place.
+ *
+ * In node mode that is the drawn node: its road sections and, when it has a
+ * transit partner, that partner's stop sections - one group each, since their
+ * units differ. A transit section whose node was folded into a road pie
+ * belongs to that pie. Otherwise it is the lettered sections of one point.
+ * Null when there is only one piece.
  */
 export function familyOf(data, markers, sel) {
   const { kind, ref } = sel || {}
   if (!FAMILY_SOURCE[kind] || !ref) return null
   const parent = ref.aggregate ? ref.id : parentOf(kind, ref)
-  const drawn = markerIndex(markers)[`${kind}:${parent}`]
-  const node = drawn?.ref?.aggregate ? drawn : null
-  const members = node ? node.ref.members
-    : data[FAMILY_SOURCE[kind]].filter((x) => parentOf(kind, x) === parent)
-  if (members.length < 2) return null
-  return { kind, parent, node, members, current: ref.aggregate ? null : ref.id }
+  const idx = markerIndex(markers)
+  // only pies are nodes; with points drawn apart, markers are plain sections
+  let node = [idx[`${kind}:${parent}`], idx[`${kind}:${ref.id}`]].find((m) => m?.split) || null
+  if (!node && kind === 'pt') {
+    node = (markers.road || []).find((r) => r.pair?.refs.some((x) => x.id === ref.id)) || null
+  }
+  const groups = node
+    ? [{ kind: node.kind, members: membersOf(node) },
+      ...(node.pair ? [{ kind: 'pt', members: node.pair.refs }] : [])]
+    : [{ kind, members: data[FAMILY_SOURCE[kind]].filter((x) => parentOf(kind, x) === parent) }]
+  if (groups.reduce((a, g) => a + g.members.length, 0) < 2) return null
+  const atNode = ref.aggregate || ref === node?.ref
+  return { parent, node, groups, current: atNode ? null : { kind, id: ref.id } }
 }
 
 // ------------------------------------------------------------- modal split
@@ -621,7 +632,9 @@ function attachSplits(data, out, { hours, occupancy, pair }) {
       roadIds: membersOf(r).map((x) => x.id),
       ptRefs: pr ? membersOf(pr.m) : null, hours, occupancy,
     })
-    if (pr) r.pair = { id: pr.m.id, title: pr.m.title, dist: Math.round(pr.d) }
+    if (pr) {
+      r.pair = { id: pr.m.id, title: pr.m.title, dist: Math.round(pr.d), refs: membersOf(pr.m) }
+    }
   }
   for (const p of pt) {
     if (!used.has(p)) {
