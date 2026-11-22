@@ -750,3 +750,6 @@ select option { background: #232733; color: var(--text); }
   .leaflet-control-zoom a { width: 36px !important; height: 36px !important; line-height: 36px !important; }
   .leaflet-control-attribution { font-size: 9px; margin-bottom: 62px !important; }
 }
+
+/* table download under the results */
+.link.csv { display: block; margin: .2rem 0 .8rem; font-size: .8rem; }

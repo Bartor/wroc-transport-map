@@ -8,6 +8,10 @@ import { SIGNAL_FILTERS } from './SignalsLayer'
 import { BASEMAPS } from './basemaps'
 import HourRange from './HourRange'
 import { useSheetDrag } from './sheetDrag'
+import { markersTable, downloadCsv } from './csv'
+
+const slug = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 const COUNTS = {
   road: (d) => d.points.length,
@@ -477,6 +481,12 @@ export default memo(function Sidebar({
             liczony w każdym z nich.
           </p>
         )}
+        <button type="button" className="link csv" onClick={() => downloadCsv(
+          markersTable({ markers, layers: V.layers, period, people }),
+          `kbr-${view}-${slug(period)}.csv`,
+        )}>
+          Pobierz tabelę wszystkich punktów (CSV)
+        </button>
         <h3>
           {RANK_TITLE[view]
             || (people ? 'Najwięcej osób w samochodach' : 'Najwyższe natężenia na drogach')}
