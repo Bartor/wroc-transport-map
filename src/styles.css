@@ -245,13 +245,24 @@ select option { background: #232733; color: var(--text); }
 /* the donut above its table: side by side the five columns ran off the panel */
 .split-body { display: flex; flex-direction: column; align-items: stretch; gap: .3rem; }
 .split-body > :first-child { align-self: center; }
-.split-table tbody tr { cursor: pointer; transition: opacity .12s; }
+/* hand-drawn donut: picked slices slide out along their middle, the rest fade */
+.donut { overflow: visible; }
+.donut path {
+  stroke: #1c1f26; stroke-width: 1; cursor: pointer;
+  transition: transform .28s cubic-bezier(.2, .8, .2, 1), opacity .22s ease, stroke .22s;
+}
+.donut path.on { transform: translate(var(--dx), var(--dy)); stroke: #fff; stroke-width: 1.5; }
+.donut path.dim { opacity: .3; }
+@media (prefers-reduced-motion: reduce) { .donut path { transition: none; } }
+.split-table tbody tr { cursor: pointer; transition: opacity .22s ease; }
+.split-table td { transition: background-color .22s ease; }
 .split-table tbody tr:hover td, .split-table tbody tr.on td { background: #232733; }
 .split-table tbody tr.on td { background: #2d3f5f; }
 .split-table tbody tr.dim { opacity: .45; }
 .split-table tbody tr:focus-visible { outline: 2px solid #7aa2e3; outline-offset: -2px; }
-.sharebar .bar i { cursor: pointer; transition: opacity .12s; }
+.sharebar .bar i { cursor: pointer; transition: opacity .22s ease; }
 .sharebar .bar i.dim { opacity: .25; }
+.sharebar b i + i { margin-left: -.15rem; }
 .sharebar b i { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   margin-right: .3rem; vertical-align: middle; }
 .split-table { border-collapse: collapse; font-size: .74rem; flex: 1; }
@@ -660,7 +671,7 @@ select option { background: #232733; color: var(--text); }
 /* the label sits above its bar, so the bar gets the panel's width and more
    of its segments room for their numbers */
 .sharebar > span { grid-column: 1 / -1; margin-bottom: -.2rem; }
-.sharebar { display: grid; grid-template-columns: 1fr 3.2rem; align-items: center;
+.sharebar { display: grid; grid-template-columns: 1fr 3.8rem; align-items: center;
   gap: .5rem; margin: .3rem 0; font-size: .76rem; color: var(--dim); }
 .sharebar .bar { display: flex; gap: 2px; height: 18px; }
 .sharebar .bar i {

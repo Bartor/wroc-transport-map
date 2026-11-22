@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
-  PieChart, Pie, Sector,
 } from 'recharts'
 import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
@@ -389,7 +388,8 @@ function ShareBars({ split, pick }) {
     watch.current.observe(el)
   }, [])
   if (!rows) return null
-  const shown = pick.active || 'car'
+  const shown = pick.active.size ? pick.active : new Set(['car'])
+  const dim = (key) => pick.active.size > 0 && !pick.active.has(key)
   const fits = (p, parts) => {
     const w = (barW - 2 * (parts.length - 1)) * p.share
     return w >= `${Math.round(p.share * 100)}%`.length * 6.4 + 6
@@ -397,27 +397,32 @@ function ShareBars({ split, pick }) {
   return (
     <div className="sharebars" role="table" aria-label="Udziały środków transportu">
       {rows.map((r) => {
-        const sel = r.parts.find((p) => p.key === shown)
+        const sel = r.parts.filter((p) => shown.has(p.key))
+        const sum = sel.reduce((a, p) => a + p.share, 0)
         return (
           <div key={r.key} className="sharebar" role="row">
             <span role="rowheader">{SHARE_ROW[r.key]}</span>
             <div className="bar" ref={r.key === 'persons' ? measure : undefined}>
               {r.parts.filter((p) => p.share > 0).map((p, _, parts) => (
                 <i key={p.key} role="cell" {...pick.on(p.key)}
-                  className={pick.active && pick.active !== p.key ? 'dim' : undefined}
+                  className={dim(p.key) ? 'dim' : undefined}
                   style={{ flexGrow: p.share, background: p.color, color: inkOn(p.color) }}
                   title={`${p.label}: ${Math.round(p.share * 100)}% (${SHARE_ROW[r.key]})`}>
                   {fits(p, parts) ? `${Math.round(p.share * 100)}%` : ''}
                 </i>
               ))}
             </div>
-            <b><i style={{ background: sel.color }} />{Math.round(sel.share * 100)}%</b>
+            <b>
+              {sel.map((p) => <i key={p.key} style={{ background: p.color }} />)}
+              {Math.round(sum * 100)}%
+            </b>
           </div>
         )
       })}
       <p className="hint">
-        Liczba po prawej: samochody osobowe albo środek wskazany na wykresie
-        lub w tabeli. Przepustowość w pojazdach
+        Liczba po prawej: samochody osobowe albo suma środków zaznaczonych na
+        wykresie lub w tabeli — np. autobusy z tramwajami to cała komunikacja
+        zbiorowa. Przepustowość w pojazdach
         umownych — {PCU_SOURCE}: rower 0,3, samochód 1, dostawczy 1,5,
         ciężarowy 2,5–3, autobus 2,5, tramwaj 3. To miara zajęcia przepustowości,
         nie powierzchni; tramwaj liczony jak na jezdni, także gdy ma własne torowisko.
@@ -426,13 +431,41 @@ function ShareBars({ split, pick }) {
   )
 }
 
-/** The picked slice, pushed out from the ring along its middle. */
-function PopOut(props) {
-  const { cx, cy, midAngle, outerRadius } = props
-  const a = (-midAngle * Math.PI) / 180
+/**
+ * The modal split as a ring, drawn by hand rather than with Recharts so the
+ * picked slices can slide out and the rest fade with a CSS transition -
+ * Recharts swaps its "active" shape in one frame.
+ */
+function Donut({ rows, active, pick }) {
+  const R = 60
+  const r = 30
+  const c = 75
+  const total = rows.reduce((a, s) => a + s.persons, 0)
+  let a0 = -Math.PI / 2
+  const pt = (rad, a) => `${(c + rad * Math.cos(a)).toFixed(2)},${(c + rad * Math.sin(a)).toFixed(2)}`
   return (
-    <Sector {...props} cx={cx + 6 * Math.cos(a)} cy={cy + 6 * Math.sin(a)}
-      outerRadius={outerRadius + 3} stroke="#fff" strokeWidth={1.5} />
+    <svg className="donut" width={2 * c} height={2 * c} viewBox={`0 0 ${2 * c} ${2 * c}`}
+      role="img" aria-label="Podział modalny — osoby">
+      {rows.filter((s) => s.persons > 0).map((s) => {
+        const a1 = a0 + (2 * Math.PI * s.persons) / total
+        const mid = (a0 + a1) / 2
+        const large = a1 - a0 > Math.PI ? 1 : 0
+        // a whole ring cannot be one arc; stop a hair short
+        const end = a1 - a0 >= 2 * Math.PI - 1e-6 ? a1 - 1e-4 : a1
+        const d = `M${pt(R, a0)} A${R},${R} 0 ${large} 1 ${pt(R, end)} `
+          + `L${pt(r, end)} A${r},${r} 0 ${large} 0 ${pt(r, a0)} Z`
+        a0 = a1
+        const on = active.has(s.key)
+        return (
+          <path key={s.key} d={d} fill={s.color} {...pick.on(s.key)}
+            className={on ? 'on' : active.size ? 'dim' : undefined}
+            style={{ '--dx': `${(6 * Math.cos(mid)).toFixed(2)}px`,
+              '--dy': `${(6 * Math.sin(mid)).toFixed(2)}px` }}>
+            <title>{`${s.label}: ${Math.round((100 * s.persons) / total)}%`}</title>
+          </path>
+        )
+      })}
+    </svg>
   )
 }
 
@@ -449,13 +482,19 @@ function ModalSplit({ node, data, occupancy }) {
   const beyond = (split.loadHours || []).length
     && split.hours.some((h) => !split.loadHours.includes(h))
   const occ = data.transitOcc
-  // One mode can be picked: hovering previews it, a click or tap pins it
-  // until clicked again. The donut, the table and the bars all follow, so a
-  // slice can be traced to its row and its share of the road.
+  // Modes can be picked, several at once: a click or tap adds or drops one,
+  // and hovering previews what a click would add. The donut, the table and
+  // the bars all follow, and the bars sum the picked shares - buses and trams
+  // together are the whole of public transport.
   const [hover, setHover] = useState(null)
-  const [pinned, setPinned] = useState(null)
-  const active = pinned || (MOUSE ? hover : null)
-  const toggle = (key) => setPinned((p) => (p === key ? null : key))
+  const [pinned, setPinned] = useState(() => new Set())
+  const active = MOUSE && hover && !pinned.has(hover) ? new Set([...pinned, hover]) : pinned
+  const toggle = (key) => setPinned((p) => {
+    const n = new Set(p)
+    if (n.has(key)) n.delete(key)
+    else n.add(key)
+    return n
+  })
   const pick = {
     active,
     on: (key) => ({
@@ -464,7 +503,6 @@ function ModalSplit({ node, data, occupancy }) {
       onClick: () => toggle(key),
     }),
   }
-  const at = active ? rows.findIndex((s) => s.key === active) : -1
   return (
     <div className="split">
       <h4>Podział modalny — osoby</h4>
@@ -476,19 +514,7 @@ function ModalSplit({ node, data, occupancy }) {
       ) : (
         <>
           <div className="split-body">
-            <PieChart width={150} height={150}>
-              <Pie data={rows.map((s) => ({ name: s.label, v: s.persons }))} dataKey="v"
-                innerRadius={30} outerRadius={60} stroke="#1c1f26" isAnimationActive={false}
-                activeIndex={at >= 0 ? at : undefined} activeShape={PopOut}
-                onMouseEnter={MOUSE ? (_, i) => setHover(rows[i].key) : undefined}
-                onMouseLeave={MOUSE ? () => setHover(null) : undefined}
-                onClick={(_, i) => toggle(rows[i].key)}>
-                {rows.map((s) => (
-                  <Cell key={s.key} fill={s.color} cursor="pointer"
-                    fillOpacity={active && active !== s.key ? 0.35 : 1} />
-                ))}
-              </Pie>
-            </PieChart>
+            <Donut rows={rows} active={active} pick={pick} />
             <table className="split-table">
               <thead>
                 <tr>
@@ -498,11 +524,11 @@ function ModalSplit({ node, data, occupancy }) {
               </thead>
               <tbody>
                 {[...rows].sort((a, b) => b.persons - a.persons).map((s) => (
-                  <tr key={s.key} {...pick.on(s.key)} tabIndex={0} aria-pressed={pinned === s.key}
+                  <tr key={s.key} {...pick.on(s.key)} tabIndex={0} aria-pressed={pinned.has(s.key)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(s.key) }
                     }}
-                    className={active === s.key ? 'on' : active ? 'dim' : undefined}>
+                    className={active.has(s.key) ? 'on' : active.size ? 'dim' : undefined}>
                     <td><i style={{ background: s.color }} />{s.label}</td>
                     <td>{s.est ? fmtEst(s.persons) : fmt(s.persons)}</td>
                     <td className="pp">{Math.round((100 * s.persons) / total)}</td>
