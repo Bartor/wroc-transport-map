@@ -265,7 +265,16 @@ Dwie rzeczy, które łatwo zrobić źle:
   inne słupki i wloty — na Dworcu Głównym punkt KZ ma 8 przekrojów na trzech
   ulicach, a węzeł drogowy 4 przekroje. Strumień definiują przekroje drogowe
   (liczą autobusy i tramwaje jako pojazdy), a punkt KZ dostarcza tylko tego,
-  jak bardzo te pojazdy są zapełnione.
+  jak bardzo te pojazdy są zapełnione. Przykład: na pl. Legionów w 15–17 punkt
+  KZ ma 19 082 pasażerów, z czego 13 271 na słupkach przy Piłsudskiego — ulicy,
+  na której węzeł R1_03 nie ma przekroju. Ponadto pojazd, który zatrzymał się
+  na dwóch badanych słupkach jednego punktu, jest w zał. 6.4 dwoma wierszami;
+  ETL zapisuje takich pasażerów (`repeatByHour`: ten sam pojazd i linia na
+  innym słupku w ciągu 10 minut). To 3,5% wszystkich, ale np. 25% na Dworcu
+  Głównym (R1_06). Liczba osób w pojeździe to ocena napełnienia na oko w skali
+  0–6, przeliczona na osoby według pojemności pojazdu (zał. 6.1).
+  Napełnienie użyte w węźle to średnia ze wszystkich zaznaczonych słupków
+  sparowanego punktu; panel węzła pokazuje każdy słupek osobno.
 * **Godziny ruchu drogowego.** Wszystkie środki w węźle pochodzą z przekrojów
   drogowych, więc węzeł liczy się dla godzin, w których je liczono (zwykle
   5–21, kordon KO tylko 6–10 i 15–19) — węzły są porównywalne w każdym okresie.

@@ -272,6 +272,16 @@ select option { background: #232733; color: var(--text); }
 .split-table td:first-child { text-align: left; padding-left: 0; white-space: normal; }
 .split-table td i { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
   margin-right: .35rem; vertical-align: middle; }
+/* vehicles and load per transit mode, and per stop pole */
+.tloads { margin-top: .6rem; }
+.tloads .split-table { width: 100%; }
+.tloads .split-table.poles { margin-top: .5rem; }
+.tloads .split-table th i { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: .25rem; vertical-align: middle; }
+.tloads .split-table tbody tr { cursor: default; }
+.tloads .split-table tbody tr:hover td { background: none; }
+.tloads tr.sum td { border-top: 1px solid #333a48; color: var(--text); }
+.tloads tr.out { opacity: .45; }
 .split-notes { margin: .5rem 0 0; padding-left: 1rem; color: var(--dim);
   font-size: .7rem; line-height: 1.45; }
 .split-notes li { margin-bottom: .2rem; }

@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { Fragment, useCallback, useRef, useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
 } from 'recharts'
@@ -7,7 +7,7 @@ import {
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
   splitVehicles, bikeNote, pedNote, thinText, splitShares, SHARE_ROW, PCU_SOURCE,
-  HOUR_LABEL as HL, coverageGap, windowKind, pieceKey,
+  HOUR_LABEL as HL, coverageGap, windowKind, pieceKey, transitByMode, MODES,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 import { useSheetDrag } from './sheetDrag'
@@ -165,9 +165,9 @@ const CURSOR = { fill: 'rgba(255, 255, 255, .06)' }
 const PartProfile = ({ part, whole, hours, color, unit }) => (
   <ResponsiveContainer width="100%" height={120}>
     <BarChart data={part.map((v, h) => ({ h, v, rest: Math.max(0, (whole[h] || 0) - v) }))}
-      margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
+      margin={MARGIN}>
       <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
-      <YAxis tick={{ fontSize: 10 }} width={46} />
+      <YAxis {...YAX} />
       <RTooltip cursor={CURSOR} content={(
         <HourTip names={{ v: `${unit} — ta część`, rest: `${unit} — reszta grupy` }}
           colors={{ v: color, rest: '#5b6475' }} />
@@ -186,11 +186,16 @@ const PartProfile = ({ part, whole, hours, color, unit }) => (
   </ResponsiveContainer>
 )
 
+// Axis ticks: thousands shortened, so "3800" is not clipped to "800".
+const AXIS_TICK = (v) => (v >= 1000 ? `${(v / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} tys.` : v)
+const YAX = { tick: { fontSize: 10 }, width: 44, tickFormatter: AXIS_TICK }
+const MARGIN = { top: 4, right: 4, bottom: 0, left: -6 }
+
 const Profile = ({ values, hours, color, unit }) => (
   <ResponsiveContainer width="100%" height={130}>
-    <BarChart data={values.map((v, h) => ({ h, v }))} margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
+    <BarChart data={values.map((v, h) => ({ h, v }))} margin={MARGIN}>
       <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
-      <YAxis tick={{ fontSize: 10 }} width={46} />
+      <YAxis {...YAX} />
       <RTooltip cursor={CURSOR} content={<HourTip names={{ v: unit }} />} />
       <Bar dataKey="v">
         {values.map((_, h) => (
@@ -217,6 +222,89 @@ const Breakdown = ({ title, obj, total }) => {
           <b>{fmt(v)}</b>
         </div>
       ))}
+    </div>
+  )
+}
+
+const TRANSIT_MODES = MODES.filter((m) => m.key === 'bus' || m.key === 'tram')
+const perVehicle = (x) => (x.veh
+  ? (x.pax / x.veh).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+  : '—')
+
+/**
+ * What a transit point counted, by mode: the vehicles that stopped at its
+ * poles, the people in them, and so how full they were - the figure a node
+ * borrows. With several poles, each one's own as well, so a node's load can
+ * be traced to the poles behind it; left-out ones stay listed, greyed.
+ */
+function TransitLoads({ title, refs, all, hours, scale = (v) => v }) {
+  const tot = transitByMode(refs, hours)
+  const poles = all || refs
+  const modes = TRANSIT_MODES.filter((m) => poles
+    .some((r) => transitByMode([r], hours)[m.key].veh > 0))
+  if (!modes.length) return null
+  const sum = { veh: tot.bus.veh + tot.tram.veh, pax: tot.bus.pax + tot.tram.pax }
+  return (
+    <div className="tloads">
+      <h4>{title}</h4>
+      <table className="split-table static">
+        <thead>
+          <tr><th /><th>pojazdy</th><th>pasażerowie</th><th>os./poj.</th><th>% pas.</th></tr>
+        </thead>
+        <tbody>
+          {modes.map((m) => (
+            <tr key={m.key}>
+              <td><i style={{ background: m.color }} />{m.label}</td>
+              <td>{fmt(scale(tot[m.key].veh))}</td>
+              <td>{fmt(scale(tot[m.key].pax))}</td>
+              <td className="pp">{perVehicle(tot[m.key])}</td>
+              <td>{sum.pax ? Math.round((100 * tot[m.key].pax) / sum.pax) : '—'}</td>
+            </tr>
+          ))}
+          {modes.length > 1 && (
+            <tr className="sum">
+              <td>Razem</td><td>{fmt(scale(sum.veh))}</td><td>{fmt(scale(sum.pax))}</td>
+              <td className="pp">{perVehicle(sum)}</td><td>100</td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      {poles.length > 1 && (
+        <table className="split-table static poles">
+          <thead>
+            <tr>
+              <th>słupki</th>
+              {modes.map((m) => (
+                <th key={m.key} colSpan={2}><i style={{ background: m.color }} />{m.label.toLowerCase()}</th>
+              ))}
+            </tr>
+            <tr>
+              <th />
+              {modes.map((m) => <Fragment key={m.key}><th>poj.</th><th>os./poj.</th></Fragment>)}
+            </tr>
+          </thead>
+          <tbody>
+            {poles.map((r) => {
+              const t = transitByMode([r], hours)
+              const out = !refs.includes(r)
+              return (
+                <tr key={r.id} className={out ? 'out' : undefined}>
+                  <td>
+                    <b>{sectionLetter(r.id) || r.id}</b> {sectionOf('pt', r) || r.loc}
+                    {out && <span className="partial"> — pominięty</span>}
+                  </td>
+                  {modes.map((m) => (
+                    <Fragment key={m.key}>
+                      <td>{t[m.key].veh ? fmt(scale(t[m.key].veh)) : '—'}</td>
+                      <td className="pp">{t[m.key].veh ? perVehicle(t[m.key]) : ''}</td>
+                    </Fragment>
+                  ))}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   )
 }
@@ -552,15 +640,17 @@ function ModalSplit({ node, data, occupancy }) {
         {split.basis === 'measured' && (
           <li>
             Autobusy i tramwaje: pojazdy policzone na przekrojach drogowych ×
-            napełnienie zmierzone w punkcie KZ <b>{node.pair.title}</b>{' '}
-            ({node.pair.dist} m stąd): autobus {split.load.bus.toFixed(1)}
+            średnie napełnienie ze wszystkich zaznaczonych słupków punktu KZ{' '}
+            <b>{node.pair.title}</b> ({node.pair.dist} m stąd): autobus {split.load.bus.toFixed(1)}
             {split.local.bus ? '' : ' (średnia miejska)'}, tramwaj{' '}
             {split.load.tram.toFixed(1)}{split.local.tram ? '' : ' (średnia miejska)'}{' '}
             os./poj., zmierzone w godzinach {hourRuns(split.loadHours)}
             {beyond ? ' i przyjęte także dla pozostałych godzin okresu — poza nimi to założenie' : ''}.
             {thinText(split) && ` Średnia miejska tam, gdzie próba była za mała (${thinText(split)}).`}
-            {' '}Surowej liczby pasażerów z punktu KZ nie dodajemy, bo obejmuje on
-            inne słupki i wloty niż przekroje drogowe.
+            {' '}Surowej liczby pasażerów z punktu KZ nie dodajemy, bo jego słupki
+            stoją też przy innych ulicach i kierunkach niż przekroje drogowe —
+            tabela poniżej pokazuje każdy słupek; te, które nie pasują do
+            wybranych przekrojów, można odznaczyć w drzewie.
           </li>
         )}
         {split.basis === 'estimate' && (
@@ -598,6 +688,10 @@ function ModalSplit({ node, data, occupancy }) {
           </li>
         )}
       </ul>
+      {node.pair && split.basis !== 'transit' && split.loadHours?.length > 0 && (
+        <TransitLoads refs={node.pair.refs} all={node.pair.all} hours={split.loadHours}
+          title={`Słupki punktu KZ ${node.pair.id} — ${hourRuns(split.loadHours)}`} />
+      )}
     </div>
   )
 }
@@ -791,6 +885,10 @@ export default function Details({
     )
   } else if (p.aggregate) {
     const profs = p.members.map((m) => shape(profileFor(data, kind, m, metric, people)))
+    // transit: the share of passengers seen twice, at two poles of the point
+    const ptTot = kind === 'pt' ? transitByMode(p.members, hours) : null
+    const ptRepeat = ptTot && ptTot.bus.pax + ptTot.tram.pax > 0
+      ? ptTot.repeat / (ptTot.bus.pax + ptTot.tram.pax) : 0
     const total = addProfiles(profs)
     cardBig = { value: fmt(sumHours(total, hours)), unit: unit(kind) }
     cardProfile = total
@@ -831,7 +929,16 @@ export default function Details({
           <dt className="whole">Cały pomiar</dt>
           <dd className="whole">{fmt(total.reduce((a, b) => a + b, 0))} {unit(kind)}</dd>
         </dl>
-        {p.repeatsStreet ? (
+        {kind === 'pt' ? (
+          <p className="hint">
+            Punkt KZ jako całość: pasażerowie w pojazdach, które zatrzymały się
+            na badanych słupkach, zsumowani po słupkach. Słupki stoją przy
+            różnych ulicach i w różnych kierunkach, więc ta suma nie odpowiada
+            przekrojom drogowym pobliskiego węzła.
+            {ptRepeat >= 0.01 && ` Ok. ${Math.round(ptRepeat * 100)}% to pasażerowie pojazdów `
+              + 'widzianych na dwóch słupkach tego punktu — liczeni dwa razy.'}
+          </p>
+        ) : p.repeatsStreet ? (
           <p className="warn">
             Przekroje leżą na tej samej ulicy po obu stronach skrzyżowania, więc
             pojazd jadący na wprost jest liczony dwa razy. Suma zawyża ruch przez
@@ -848,6 +955,8 @@ export default function Details({
         <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
         {kind === 'pt' ? (
           <>
+            <TransitLoads refs={p.members} hours={hours} scale={(v) => shown(v, 'pt')}
+              title={`Pojazdy i napełnienie — ${period}`} />
             <Breakdown title={`Kierunki (pasażerowie) — ${period}`}
               obj={perPeriod(p.members, 'byHourDir')} />
             <Breakdown title={`Linie (pasażerowie) — ${period}`}
@@ -950,9 +1059,6 @@ export default function Details({
     const prof = new Array(24).fill(0)
     Object.values(p.byHour).forEach((arr) => arr.forEach((v, h) => { prof[h] += v }))
     const vehNow = Object.values(p.vehByHour || {}).reduce((a, arr) => a + sumHours(arr, hours), 0)
-    // per traction in the period; lines and directions exist only as totals
-    const tractionNow = Object.fromEntries(Object.entries(p.vehByHour || {})
-      .map(([t, arr]) => [t, sumHours(arr, hours)]))
     cardBig = { value: fmt(sumHours(shape(prof), hours)), unit: unit('pt') }
     cardProfile = shape(prof)
     body = (
@@ -983,7 +1089,8 @@ export default function Details({
         </dl>
         <h4>Profil dobowy — pasażerowie</h4>
         <Profile values={shape(prof)} hours={hours} color={color} unit={unit(kind)} />
-        <Breakdown title={`Trakcja (liczba pojazdów) — ${period}`} obj={tractionNow} />
+        <TransitLoads refs={[p]} hours={hours} scale={(v) => shown(v, 'pt')}
+          title={`Pojazdy i napełnienie — ${period}`} />
         <Breakdown title={`Kierunki (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourDir')} />
         <Breakdown title={`Linie (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourLine')} />
         <Breakdown title="Przewoźnicy (liczba pojazdów) — cały pomiar" obj={p.byCarrier} />

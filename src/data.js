@@ -639,6 +639,15 @@ function transitSum(refs, hours, field) {
 const transitPax = (refs, hours) => transitSum(refs, hours, 'byHour')
 const transitVeh = (refs, hours) => transitSum(refs, hours, 'vehByHour')
 
+/** Vehicles and passengers by mode at some stop poles over some hours, and
+ *  the passengers who were counted at another pole of the point already. */
+export function transitByMode(refs, hours) {
+  const pax = transitPax(refs, hours)
+  const veh = transitVeh(refs, hours)
+  const repeat = refs.reduce((a, r) => a + (r.repeatByHour ? sumHours(r.repeatByHour, hours) : 0), 0)
+  return { bus: { veh: veh.bus, pax: pax.bus }, tram: { veh: veh.tram, pax: pax.tram }, repeat }
+}
+
 /**
  * Modal split at a node, in people.
  *
