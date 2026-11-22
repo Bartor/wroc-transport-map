@@ -11,7 +11,7 @@ import { BASEMAPS } from './basemaps'
 import {
   LAYERS, MODES, radius, fmt, fmtEst, expansionOf, coverageGap, BASIS_LABEL, windowKind,
   periodShare, NET_MODES, markerIndex, splitTotal, headline, HOUR_LABEL,
-  sectionLetter, sectionOf, pieceKey,
+  sectionLetter, sectionOf, pieceKey, dirKeys, BEARING,
 } from './data'
 import { pieSvg, labelLines, labelHtml, labelBox } from './pie'
 
@@ -238,7 +238,7 @@ function dodge(map, node, nodeR, dots) {
  * road sections as round dots, the paired transit stops as square ones. Only
  * drawn when points are shown whole - drawn apart they are on the map already.
  */
-function SectionDots({ family, nodeR, selected, onSelect, off, hot, setHot }) {
+function SectionDots({ data, family, nodeR, selected, onSelect, off, hot, setHot }) {
   const map = useMap()
   // re-place on zoom: the dodge is in pixels
   const [, setZoom] = useState(() => map.getZoom())
@@ -253,7 +253,8 @@ function SectionDots({ family, nodeR, selected, onSelect, off, hot, setHot }) {
         <SectionDot key={`${kind}:${m.id}`} kind={kind} m={m} lat={lat} lon={lon} node={node}
           on={selected?.kind === kind && selected.id === m.id}
           out={!!off?.has(pieceKey(kind, m.id))}
-          hot={hot?.kind === kind && hot.id === m.id}
+          hot={hot?.kind === kind && hot.id === m.id} hotDir={hot?.dir}
+          dirs={dirKeys(data, kind, m).join()}
           onSelect={onSelect} setHot={setHot} />
       ))}
     </LayerGroup>
@@ -262,10 +263,57 @@ function SectionDots({ family, nodeR, selected, onSelect, off, hot, setHot }) {
 
 const MOUSE = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
 
+// the two ways of a section, coloured as their bar segments in the panel
+const DIR_COLORS = ['#e4572e', '#f4a261']
+const ARROWS_SIZE = 84
+
+/**
+ * A section's directions as arrows around its dot, each keeping to the right
+ * of the dot as traffic keeps right, so a two-way street reads as two lanes.
+ * With one direction lit, the other fades.
+ */
+function arrowsSvg(dirs, lit) {
+  const c = ARROWS_SIZE / 2
+  const x = c + 16                      // right of the dot, before rotating
+  const ink = '#14161a'
+  const ways = dirs.split(',').map((k, i) => {
+    const turn = BEARING[k.split('>')[1]]
+    if (turn == null) return ''
+    const col = DIR_COLORS[i] || DIR_COLORS[1]
+    return `<g transform="rotate(${turn} ${c} ${c})" opacity="${!lit || lit === k ? 1 : 0.2}">`
+      + `<path d="M${x} ${c + 17}V${c - 8}" stroke="${ink}" stroke-width="6" stroke-linecap="round"/>`
+      + `<path d="M${x - 7} ${c - 7}L${x} ${c - 20}L${x + 7} ${c - 7}Z" fill="${col}" `
+      + `stroke="${ink}" stroke-width="2" stroke-linejoin="round"/>`
+      + `<path d="M${x} ${c + 17}V${c - 7}" stroke="${col}" stroke-width="3" stroke-linecap="round"/>`
+      + '</g>'
+  }).join('')
+  return `<svg width="${ARROWS_SIZE}" height="${ARROWS_SIZE}" fill="none">${ways}</svg>`
+}
+
+/** The arrows of a hovered section, under its dot and out of the mouse's way. */
+function DirArrows({ lat, lon, dirs, lit }) {
+  const icon = useMemo(() => L.divIcon({
+    className: 'dir-arrows', html: arrowsSvg(dirs, lit),
+    iconSize: [ARROWS_SIZE, ARROWS_SIZE], iconAnchor: [ARROWS_SIZE / 2, ARROWS_SIZE / 2],
+  }), [dirs, lit])
+  if (!dirs) return null
+  return <Marker position={[lat, lon]} icon={icon} interactive={false} keyboard={false}
+    zIndexOffset={900} />
+}
+
+/** Arrows for a hovered piece drawn as its own marker, not as a node's dot. */
+function HotArrows({ data, index, hot, family }) {
+  if (!hot || family?.node) return null
+  const m = index[`${hot.kind}:${hot.id}`]
+  if (!m?.lat) return null
+  return <DirArrows lat={m.lat} lon={m.lon} dirs={dirKeys(data, hot.kind, m.ref || m).join()}
+    lit={hot.dir} />
+}
+
 /** One piece of the selected node. The icon is kept while only the hover
  *  changes: a new icon is a new element under the mouse, which fires
  *  mouseout and mouseover again and flickers. Hover is a class instead. */
-function SectionDot({ kind, m, lat, lon, node, on, out, hot, onSelect, setHot }) {
+function SectionDot({ kind, m, lat, lon, node, on, out, hot, hotDir, dirs, onSelect, setHot }) {
   const color = LAYERS[kind].color
   const letter = sectionLetter(m.id) || '·'
   const icon = useMemo(() => L.divIcon({
@@ -299,6 +347,7 @@ function SectionDot({ kind, m, lat, lon, node, on, out, hot, onSelect, setHot })
           {out ? ' · wyłączony z węzła' : ''}
         </Tooltip>
       </Marker>
+      {hot && <DirArrows lat={lat} lon={lon} dirs={dirs} lit={hotDir} />}
     </>
   )
 }
@@ -491,7 +540,8 @@ export default function MapView({
           </LayerGroup>
         ))}
 
-        <SectionDots family={family} selected={selected} onSelect={onSelect} off={off}
+        <HotArrows data={data} index={index} hot={hot} family={family} />
+        <SectionDots data={data} family={family} selected={selected} onSelect={onSelect} off={off}
           hot={hot} setHot={setHot}
           nodeR={family?.node ? radii[`${family.node.kind}:${family.node.id}`] : 0} />
 

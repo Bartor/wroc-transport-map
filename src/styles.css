@@ -725,6 +725,15 @@ select option { background: #232733; color: var(--text); }
 }
 .dir-vals b { color: var(--text); font-weight: 600; }
 .dir-vals .b { text-align: right; }
+/* lit from here or from the map; a hovered direction dims the other */
+.dir-row { border-radius: 4px; transition: background .12s; }
+.dir-row.hot { background: #232733; box-shadow: 0 0 0 4px #232733; }
+.dir-row.hot > b { background: #4a5266; }
+.dir-bar i, .dir-vals span { transition: opacity .12s; }
+.dir-bar i.dim, .dir-vals span.dim { opacity: .3; }
+.dir-vals span.lit { color: var(--text); }
+/* the ways of travel of a hovered section, on the map */
+.dir-arrows { background: none; border: 0; pointer-events: none; }
 
 /* Touch screens have no hover: a tapped marker would leave its tooltip
    over the map, repeating what the details sheet already shows. */

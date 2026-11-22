@@ -8,6 +8,7 @@ import {
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
   splitVehicles, bikeNote, pedNote, thinText, splitShares, SHARE_ROW, PCU_SOURCE,
   HOUR_LABEL as HL, coverageGap, windowKind, pieceKey, transitByMode, MODES, nodeSplit,
+  dirKey,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 import { useSheetDrag } from './sheetDrag'
@@ -356,7 +357,6 @@ function TransitLoads({ title, refs, all, hours, scale = (v) => v }) {
 
 // Direction of travel, "W>E" = from west to east; the arrow points where they go.
 const ARROW = { N: '↑', S: '↓', E: '→', W: '←', NE: '↗', NW: '↖', SE: '↘', SW: '↙' }
-const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E', NE: 'SW', SW: 'NE', NW: 'SE', SE: 'NW' }
 const dirLabel = (d) => {
   const to = d.includes('>') ? d.split('>')[1] : d
   return `${ARROW[to] || ''} ${d.replace('>', ' → ')}`.trim()
@@ -367,8 +367,12 @@ const dirLabel = (d) => {
  * section, split between its two directions. Shows tidal flows - a street
  * busy inbound in the morning and outbound in the afternoon - that a single
  * total hides. One-way sections have a single segment.
+ *
+ * Hovering a row lights its section on the map, and a direction - its bar
+ * segment or figure - draws that way's arrow there; hovering the section on
+ * the map lights its row here.
  */
-function DirSplit({ title, rows }) {
+function DirSplit({ title, rows, hot, setHot }) {
   const shown = rows.filter((r) => r.dirs.some((d) => d.v > 0))
   if (!shown.length) return null
   return (
@@ -376,18 +380,28 @@ function DirSplit({ title, rows }) {
       <h4>{title}</h4>
       {shown.map((r) => {
         const sum = r.dirs.reduce((a, d) => a + d.v, 0)
+        const on = hot?.kind === r.kind && hot.id === r.id
+        const cls = (d, i) => `${i ? 'b' : 'a'}${on && hot.dir
+          ? (hot.dir === d.key ? ' lit' : ' dim') : ''}`
+        // a mouse only: on touch a tap would leave the row lit
+        const hover = setHot ? {
+          onPointerOver: (e) => e.pointerType === 'mouse' && setHot({
+            kind: r.kind, id: r.id, dir: e.target.closest('[data-dir]')?.dataset.dir,
+          }),
+          onPointerLeave: (e) => e.pointerType === 'mouse' && setHot(null),
+        } : {}
         return (
-          <div key={r.id} className="dir-row">
+          <div key={r.id} className={on ? 'dir-row hot' : 'dir-row'} {...hover}>
             <b>{r.letter}</b>
             <span className="dir-name" title={r.id}>{r.name}</span>
             <div className="dir-bar">
               {r.dirs.map((d, i) => (
-                <i key={d.key} className={i ? 'b' : 'a'} style={{ flexGrow: d.v }} />
+                <i key={d.key} data-dir={d.key} className={cls(d, i)} style={{ flexGrow: d.v }} />
               ))}
             </div>
             <div className="dir-vals">
               {r.dirs.map((d, i) => (
-                <span key={d.key} className={i ? 'b' : 'a'}>
+                <span key={d.key} data-dir={d.key} className={cls(d, i)}>
                   {dirLabel(d.key)} <b>{fmt(d.v)}</b> · {sum ? Math.round((100 * d.v) / sum) : 0}%
                 </span>
               ))}
@@ -800,7 +814,7 @@ export default function Details({
       // 3.4 and 3.5 record the side people came from ("wlot początkowy"), so
       // "E" is someone heading west; spelled as from > to like the road keys
       return Object.entries(ref.byHourDir || {}).map(([d, arr]) => ({
-        key: OPPOSITE[d] ? `${d}>${OPPOSITE[d]}` : d, v: shown(sumHours(arr, hours), k),
+        key: dirKey(d), v: shown(sumHours(arr, hours), k),
       }))
     }
     return []
@@ -833,7 +847,7 @@ export default function Details({
     )
   }
   const dirRow = (k, m) => ({
-    id: m.id,
+    kind: k, id: m.id,
     letter: sectionLetter(m.id) || '—',
     name: k === 'road' ? m.name : sectionOf(k, m) || m.name,
     dirs: dirsOf(k, m),
@@ -1049,7 +1063,7 @@ export default function Details({
           </>
         ) : (
           <DirSplit title={`Kierunki przekrojów — ${period} (${unit(kind)})`}
-            rows={p.members.map((m) => dirRow(kind, m))} />
+            rows={p.members.map((m) => dirRow(kind, m))} hot={hot} setHot={setHot} />
         )}
       </>
     )
@@ -1106,7 +1120,8 @@ export default function Details({
             : ROAD_METRICS[metric].label.toLowerCase())}
         </h4>
         {chart(prof)}
-        <DirSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]} />
+        <DirSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]}
+          hot={hot} setHot={setHot} />
         <Breakdown title={`Kategorie pojazdów — ${period}`} obj={byCat} />
         <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
       </>
@@ -1129,7 +1144,8 @@ export default function Details({
         <h4>{chartFor(unit(kind))}</h4>
         {chart(shape(p.byHour))}
         {p.byHourDir
-          ? <DirSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]} />
+          ? <DirSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]}
+            hot={hot} setHot={setHot} />
           : <Breakdown title="Kierunki — cały pomiar" obj={p.byDir} />}
         <Breakdown title="Płeć — cały pomiar" obj={p.bySex} />
         {kind === 'bike' && <Breakdown title="Gdzie jadą — cały pomiar" obj={p.byPlace} />}

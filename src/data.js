@@ -463,6 +463,20 @@ export function resolveTarget(markers, kind, ref) {
   return { kind, id: ref.id, ref }
 }
 
+// Directions of travel are "from>to" compass keys, "W>E" = heading east.
+// Road counts store them so; bike and pedestrian counts (3.4, 3.5) record only
+// the side people came from, so "E" is someone heading west.
+const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E', NE: 'SW', SW: 'NE', NW: 'SE', SE: 'NW' }
+export const BEARING = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 }
+export const dirKey = (d) => (OPPOSITE[d] ? `${d}>${OPPOSITE[d]}` : d)
+
+/** A piece's directions as "from>to" keys, in the order the panel lists them. */
+export function dirKeys(data, kind, ref) {
+  if (kind === 'road') return Object.keys(data.roadById[ref.id]?.dirs || {})
+  if (kind === 'bike' || kind === 'ped') return Object.keys(ref.byHourDir || {}).map(dirKey)
+  return []
+}
+
 /** Flat lookup so the map can find a selected marker without rescanning. */
 export const markerIndex = (markers) => {
   const idx = {}
