@@ -258,9 +258,13 @@ Dwie rzeczy, które łatwo zrobić źle:
   ulicach, a węzeł drogowy 4 przekroje. Strumień definiują przekroje drogowe
   (liczą autobusy i tramwaje jako pojazdy), a punkt KZ dostarcza tylko tego,
   jak bardzo te pojazdy są zapełnione.
-* **Tylko godziny wspólne.** Pasażerów liczono 5–9 i 14–18, ruch drogowy całą
-  dobę. Para jest liczona wyłącznie dla godzin objętych oboma pomiarami
-  w wybranym okresie, a dymek i panel podają, które to godziny.
+* **Godziny ruchu drogowego.** Wszystkie środki w węźle pochodzą z przekrojów
+  drogowych, więc węzeł liczy się dla godzin, w których je liczono (zwykle
+  5–21, kordon KO tylko 6–10 i 15–19) — węzły są porównywalne w każdym okresie.
+  Napełnienie z punktu KZ to stosunek pasażerów do pojazdów, mierzony
+  w godzinach badania KZ (6–9 i 14–18 w okresie albo, poza nim, w całym oknie
+  badania) i przyjmowany dla wszystkich godzin okresu. Poza godzinami badania
+  KZ to założenie, co panel węzła mówi wprost.
 
 W 10 z 53 węzłów wieloprzekrojowych przekroje leżą na tej samej ulicy po obu
 stronach skrzyżowania (np. PR_01 Kazimierza Wielkiego). Tam pojazd jadący na

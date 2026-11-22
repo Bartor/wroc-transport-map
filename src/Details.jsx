@@ -55,7 +55,7 @@ function SubNav({ family, shares, onSelect }) {
                 title={`${m.id} · ${sectionOf(g.kind, m) || m.name}`}
                 onClick={() => onSelect({ kind: g.kind, id: m.id, ref: m })}>
                 <b>{sectionLetter(m.id) || '—'}</b>
-                <span>{sectionOf(g.kind, m) || m.name}</span>
+                <span>{(g.kind === 'road' ? m.name : sectionOf(g.kind, m)) || m.name}</span>
                 <em>{shares[`${g.kind}:${m.id}`] == null ? '—' : `${shares[`${g.kind}:${m.id}`]}%`}</em>
               </button>
             ))}
@@ -105,7 +105,9 @@ const Profile = ({ values, hours, color }) => (
 )
 
 const Breakdown = ({ title, obj, total }) => {
-  const rows = Object.entries(obj || {}).filter(([, v]) => v).sort((a, b) => b[1] - a[1])
+  // largest first; the "inne" remainder last, however big
+  const rows = Object.entries(obj || {}).filter(([, v]) => v)
+    .sort((a, b) => (a[0] === 'inne') - (b[0] === 'inne') || b[1] - a[1])
   if (!rows.length) return null
   const sum = total || rows.reduce((a, [, v]) => a + v, 0)
   return (
@@ -122,8 +124,9 @@ const Breakdown = ({ title, obj, total }) => {
   )
 }
 
-// Direction of travel as recorded: "W>E" (from west to east) or just "E".
+// Direction of travel, "W>E" = from west to east; the arrow points where they go.
 const ARROW = { N: '↑', S: '↓', E: '→', W: '←', NE: '↗', NW: '↖', SE: '↘', SW: '↙' }
+const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E', NE: 'SW', SW: 'NE', NW: 'SE', SE: 'NW' }
 const dirLabel = (d) => {
   const to = d.includes('>') ? d.split('>')[1] : d
   return `${ARROW[to] || ''} ${d.replace('>', ' → ')}`.trim()
@@ -244,21 +247,28 @@ function ShareButtons({ spec }) {
   )
 }
 
+/** Hours as runs, so 6-10 and 15-19 do not read as 6-19: "07:00–09:00, 15:00–17:00". */
+function hourRuns(hours) {
+  const runs = []
+  for (const h of [...hours].sort((a, b) => a - b)) {
+    if (runs.length && runs.at(-1)[1] === h - 1) runs.at(-1)[1] = h
+    else runs.push([h, h])
+  }
+  return runs.map(([a, b]) => `${HL(a)}–${HL((b + 1) % 24)}`).join(', ')
+}
+
+// The survey writes a round-the-clock count as "00:00-00:00".
+const hoursText = (s) => (/^0?0:00\s*-\s*0?0:00$/.test(s.trim()) ? 'całą dobę' : s)
+
 /** Modal split of a node, in people, with the vehicles it came from. */
 function ModalSplit({ node, data, occupancy }) {
   const { split } = node
   const total = splitTotal(split)
   const rows = split.slices.filter((s) => s.persons > 0 || s.vehicles > 0)
-  const hrs = [...split.hours].sort((a, b) => a - b)
-  // runs of consecutive hours, so 6-10 and 15-19 do not read as 6-19
-  const runs = []
-  for (const h of hrs) {
-    if (runs.length && runs.at(-1)[1] === h - 1) runs.at(-1)[1] = h
-    else runs.push([h, h])
-  }
-  const span = hrs.length
-    ? `${hrs.length} godz. (${runs.map(([a, b]) => `${HL(a)}–${HL((b + 1) % 24)}`).join(', ')})`
-    : 'brak'
+  const span = split.hours.length ? `${split.hours.length} godz. (${hourRuns(split.hours)})` : 'brak'
+  // the stop survey's load applied beyond the hours it was measured in
+  const beyond = (split.loadHours || []).length
+    && split.hours.some((h) => !split.loadHours.includes(h))
   const occ = data.transitOcc
   return (
     <div className="split">
@@ -304,15 +314,19 @@ function ModalSplit({ node, data, occupancy }) {
             ({node.pair.dist} m stąd): autobus {split.load.bus.toFixed(1)}
             {split.local.bus ? '' : ' (średnia miejska)'}, tramwaj{' '}
             {split.load.tram.toFixed(1)}{split.local.tram ? '' : ' (średnia miejska)'}{' '}
-            os./poj. Tylko godziny objęte oboma pomiarami. Surowej liczby
-            pasażerów z punktu KZ nie dodajemy, bo obejmuje on inne słupki
-            i wloty niż przekroje drogowe.
+            os./poj., zmierzone w godzinach {hourRuns(split.loadHours)}
+            {beyond ? ' i przyjęte także dla pozostałych godzin okresu — poza nimi to założenie' : ''}.
+            Surowej liczby pasażerów z punktu KZ nie dodajemy, bo obejmuje on
+            inne słupki i wloty niż przekroje drogowe.
           </li>
         )}
         {split.basis === 'estimate' && (
           <li>
-            Autobusy i tramwaje: brak punktu pomiaru KZ w promieniu 150 m, więc
-            liczba pojazdów × średnie napełnienie z pomiarów KBR (autobus{' '}
+            Autobusy i tramwaje:{' '}
+            {node.pair
+              ? `punkt KZ ${node.pair.title} nie zarejestrował autobusów ani tramwajów, więc`
+              : 'brak punktu pomiaru KZ w promieniu 150 m, więc'}
+            {' '}liczba pojazdów × średnie napełnienie z pomiarów KBR (autobus{' '}
             {occ.bus.toFixed(1)}, tramwaj {occ.tram.toFixed(1)} os./poj.) — szacunek.
           </li>
         )}
@@ -390,11 +404,40 @@ export default function Details({
       }))
     }
     if (k === 'bike' || k === 'ped') {
+      // 3.4 and 3.5 record the side people came from ("wlot początkowy"), so
+      // "E" is someone heading west; spelled as from > to like the road keys
       return Object.entries(ref.byHourDir || {}).map(([d, arr]) => ({
-        key: d, v: shown(sumHours(arr, hours), k),
+        key: OPPOSITE[d] ? `${d}>${OPPOSITE[d]}` : d, v: shown(sumHours(arr, hours), k),
       }))
     }
     return []
+  }
+  // Hours of the period this piece was actually counted in. A count of 0 in
+  // an hour nobody measured is "no data", not "no traffic".
+  const coveredOf = (k, ref) => {
+    if (ref.aggregate) {
+      return hours.filter((h) => ref.members.some((m) => coveredOf(k, m).includes(h)))
+    }
+    if (k === 'road') {
+      const sec = data.roadById[ref.id]
+      return hours.filter((h) => Object.values(sec?.dirs || {})
+        .some((dd) => (dd.h[h] || []).some((x) => x > 0)))
+    }
+    const w = data.meta.windows?.[windowKind(k, ref)]
+    return w ? hours.filter((h) => w.includes(h)) : hours
+  }
+  const covered = kind === 'signal' ? hours : coveredOf(kind, p)
+  /** The period figure, or why there is none. */
+  const now = (text) => {
+    if (!covered.length) return <dd className="now gap">brak pomiaru w tym okresie</dd>
+    return (
+      <dd className="now">
+        {text}
+        {!scaled && covered.length < hours.length && (
+          <span className="partial"> — zmierzono {covered.length} z {hours.length} godz.</span>
+        )}
+      </dd>
+    )
   }
   const dirRow = (k, m) => ({
     id: m.id,
@@ -418,8 +461,13 @@ export default function Details({
   const fam = family && onSelect ? family : null
   const shares = {}
   let part = null
+  // Under a modal-split pie the road sections' shares are of all vehicles,
+  // not of car occupants, which would say little about the junction.
+  const allVehicles = !!fam?.node?.split
   for (const g of fam?.groups || []) {
-    const profs = g.members.map((m) => shape(profileFor(data, g.kind, m, metric, people), g.kind))
+    const profs = g.members.map((m) => (g.kind === 'road' && allVehicles
+      ? profileFor(data, 'road', m, 'all', false)
+      : shape(profileFor(data, g.kind, m, metric, people), g.kind)))
     const vals = profs.map((pr) => sumHours(pr, hours))
     const sum = vals.reduce((x, y) => x + y, 0)
     g.members.forEach((m, i) => {
@@ -428,7 +476,10 @@ export default function Details({
     const i = fam.current?.kind === g.kind
       ? g.members.findIndex((m) => m.id === fam.current.id) : -1
     if (i >= 0) {
-      part = { g, i, profs, val: vals[i], sum, share: shares[`${g.kind}:${g.members[i].id}`] }
+      part = {
+        g, i, profs, val: vals[i], sum, share: shares[`${g.kind}:${g.members[i].id}`],
+        unit: g.kind === 'road' && allVehicles ? 'pojazdów, wszystkie kategorie' : unit(g.kind),
+      }
     }
   }
 
@@ -505,9 +556,17 @@ export default function Details({
         <dl>
           <dt>Przekroje</dt><dd>{p.members.map((m) => m.id).join(', ')}</dd>
           <dt className="now">W okresie {period}</dt>
-          <dd className="now">{fmt(sumHours(total, hours))} {unit(kind)}</dd>
+          {now(node?.split && splitTotal(node.split) > 0
+            ? `${fmtEst(splitTotal(node.split))} osób — wszystkie środki`
+            : `${fmt(sumHours(total, hours))} ${unit(kind)}`)}
+          {node?.split && splitTotal(node.split) > 0 && (
+            <>
+              <dt className="whole">w tym ruch drogowy</dt>
+              <dd className="whole">{fmt(sumHours(total, hours))} {unit(kind)}</dd>
+            </>
+          )}
           <dt className="whole">Cały pomiar</dt>
-          <dd className="whole">{fmt(total.reduce((a, b) => a + b, 0))}</dd>
+          <dd className="whole">{fmt(total.reduce((a, b) => a + b, 0))} {unit(kind)}</dd>
         </dl>
         {p.repeatsStreet ? (
           <p className="warn">
@@ -576,9 +635,9 @@ export default function Details({
           <dt>Obszar</dt><dd>{p.area}</dd>
           <dt>Odcinek</dt><dd>{p.segment}</dd>
           <dt>Miejsce pomiaru</dt><dd>{p.where}</dd>
-          <dt>Data</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd>
+          <dt>Data</dt><dd>{p.date}{p.hours ? ` · ${hoursText(p.hours)}` : ''}</dd>
           <dt className="now">W okresie {period}</dt>
-          <dd className="now">{fmt(sumHours(prof, hours))} {unit('road')}</dd>
+          {now(`${fmt(sumHours(prof, hours))} ${unit('road')}`)}
           <dt className="whole">Cały pomiar</dt>
           <dd className="whole">
             {fmt(p.total)} pojazdów, wszystkie kategorie
@@ -606,7 +665,7 @@ export default function Details({
           {p.where?.length ? <><dt>Miejsce</dt><dd>{p.where.join('; ')}</dd></> : null}
           {p.date ? <><dt>Pomiar</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd></> : null}
           <dt className="now">W okresie {period}</dt>
-          <dd className="now">{fmt(shown(sumHours(p.byHour, hours)))} {unit(kind)}</dd>
+          {now(`${fmt(shown(sumHours(p.byHour, hours)))} ${unit(kind)}`)}
           <dt className="whole">Cały pomiar</dt>
           <dd className="whole">{fmt(p.total)}{p.hours ? ` (${p.hours})` : ''}</dd>
         </dl>
@@ -641,11 +700,13 @@ export default function Details({
           <dt>Osiedle</dt><dd>{p.osiedle || '—'}</dd>
           <dt>Pomiar</dt><dd>{p.dates.join(', ')}</dd>
           <dt className="now">W okresie {period}</dt>
-          <dd className="now">
-            {fmt(sumHours(shape(prof), hours))} pasażerów w {fmt(vehNow)} pojazdach
-          </dd>
+          {now(`${fmt(sumHours(shape(prof), hours))} pasażerów w ${fmt(vehNow)} pojazdach`)}
           <dt className="whole">Cały pomiar</dt>
-          <dd className="whole">{fmt(p.pax)} pasażerów w {fmt(p.veh)} pojazdach (5–9, 14–18)</dd>
+          <dd className="whole">
+            {fmt(p.pax)} pasażerów w {fmt(p.veh)} pojazdach
+            {' '}({hourRuns(Array.from({ length: 24 }, (_, h) => h).filter((h) =>
+              Object.values(p.vehByHour || {}).some((arr) => arr[h] > 0)))})
+          </dd>
           <dt className="whole">Średnie wykorzystanie miejsc</dt>
           <dd className="whole">{pct(p.avgLoad)} — cały pomiar</dd>
           {p.boarded ? (
@@ -676,7 +737,7 @@ export default function Details({
           <dt>Stacje kordonu</dt><dd>{p.stations.join(', ')}</dd>
           <dt>Pomiar</dt><dd>{p.dates.join(', ')}</dd>
           <dt className="now">W okresie {period}</dt>
-          <dd className="now">{fmt(sumHours(shape(prof), hours))} pasażerów</dd>
+          {now(`${fmt(sumHours(shape(prof), hours))} pasażerów`)}
           <dt className="whole">Cały pomiar</dt>
           <dd className="whole">
             {Object.entries(p.pax).map(([d, v]) => `${d}: ${fmt(v)}`).join(' · ')}
@@ -745,7 +806,7 @@ export default function Details({
               {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
               {sectionLetter(fam.current.id) || fam.current.id} to{' '}
               <b>{part.sum ? `${part.share}%` : '—'}</b> tej grupy w okresie {period}:
-              {' '}{fmt(part.val)} z {fmt(part.sum)} ({unit(part.g.kind)}).
+              {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
             </p>
             <PartProfile part={part.profs[part.i]} whole={addProfiles(part.profs)}
               hours={hours} color={LAYERS[part.g.kind].color} />

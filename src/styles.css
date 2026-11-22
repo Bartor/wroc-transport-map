@@ -598,6 +598,8 @@ select {
 .details dd.now { color: #fff; font-weight: 600; }
 .details dt.now { color: var(--text); }
 .details dt.whole, .details dd.whole { color: var(--dim); font-size: .92em; }
+.details dd.now.gap { color: #e8b04b; font-weight: 500; }
+.details dd.now .partial { color: #e8b04b; font-weight: 400; font-size: .92em; }
 
 /* both directions of each section, side by side */
 .dirsplit { margin-top: 1rem; }

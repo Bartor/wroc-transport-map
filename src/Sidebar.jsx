@@ -185,7 +185,7 @@ function Search({ data, markers, onSelect, view, setView }) {
           {results.map((r) => (
             <li key={`${r.kind}:${r.id}`} {...activate(() => pick(r))}>
               <i className="swatch" style={{ background: LAYERS[r.kind].color }} />
-              <span>{r.label}</span><em>{r.sub}</em>
+              <span>{r.label}</span><em>{r.id} · {r.sub}</em>
             </li>
           ))}
         </ul>
@@ -364,7 +364,10 @@ export default function Sidebar({
                 </>
               )} />
             <Field label="Kategorie pojazdów">
-              <select value={metric} aria-label="Kategorie pojazdów" disabled={roadPeople}
+              {/* counting people means counting cars; say so rather than
+                  leave the last choice showing */}
+              <select value={roadPeople ? 'car' : metric} aria-label="Kategorie pojazdów"
+                disabled={roadPeople}
                 onChange={(e) => setMetric(e.target.value)}>
                 {Object.entries(ROAD_METRICS).map(([k, v]) => (
                   <option key={k} value={k}>{v.label}</option>

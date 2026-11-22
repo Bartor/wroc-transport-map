@@ -612,27 +612,33 @@ export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
     }
   }
 
-  // Only hours the road sections were counted in: some ran 5-21, the KO
-  // cordon only in the peaks, and the panel says which hours the pie covers.
-  let hrs = hours.filter((h) => roadHasHour(data, roadIds, h))
-  let measured = false
-  if (ptRefs?.length) {
-    const common = hours.filter((h) => ptWin.includes(h) && roadHasHour(data, roadIds, h))
-    if (common.length) { hrs = common; measured = true }
-  }
+  // Every mode comes from the road counts, over the hours the road sections
+  // were counted in (most 5-21, the KO cordon only in the peaks). That keeps
+  // nodes comparable whatever the period.
+  const hrs = hours.filter((h) => roadHasHour(data, roadIds, h))
   const v = roadCounts(data, roadIds, hrs)
-  // Local load per vehicle where the partner saw that mode, else city average.
+  // The partner's passengers per vehicle is a ratio, so it is measured where
+  // the stop survey ran - within the period if they overlap, else its whole
+  // window - and applied to all the road-counted vehicles. Outside the stop
+  // survey's hours that is an assumption, which the panel says. City average
+  // for a mode the partner never saw.
   const load = { ...occ }
   const local = { bus: false, tram: false }
-  if (measured) {
-    const pax = transitPax(ptRefs, hrs)
-    const veh = transitVeh(ptRefs, hrs)
+  let loadHours = []
+  if (ptRefs?.length) {
+    const inPeriod = hours.filter((h) => ptWin.includes(h))
+    const pax = transitPax(ptRefs, inPeriod.length ? inPeriod : ptWin)
+    const veh = transitVeh(ptRefs, inPeriod.length ? inPeriod : ptWin)
     for (const k of ['bus', 'tram']) {
       if (veh[k] > 0) { load[k] = pax[k] / veh[k]; local[k] = true }
     }
+    // the hours the stop actually saw vehicles in, for the note
+    loadHours = (inPeriod.length ? inPeriod : ptWin).filter((h) => ptRefs.some((r) =>
+      Object.values(r.vehByHour || {}).some((arr) => arr[h] > 0)))
   }
+  const measured = local.bus || local.tram
   return {
-    basis: measured ? 'measured' : 'estimate', hours: hrs, load, local,
+    basis: measured ? 'measured' : 'estimate', hours: hrs, load, local, loadHours,
     slices: [
       mk('car', v.car, v.car * occupancy, true),
       mk('goods', v.goods, v.goods, true),
