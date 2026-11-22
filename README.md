@@ -285,8 +285,8 @@ Dwie rzeczy, które łatwo zrobić źle:
   drogowego” (Ministerstwo Infrastruktury, 2023), tab. 4.3.1, teren
   zabudowany z sygnalizacją: rower i hulajnoga 0,3, motocykl 0,3, samochód
   i mikrobus 1, dostawczy 1,5, ciężarowy 2,5, z przyczepą 3, autobus 2,5,
-  tramwaj 3. Kategoria KBR „inne” (ciągniki, maszyny) nie ma klasy — liczona
-  jak ciężarowy (2,5), to założenie. Rowery poza jezdnią liczą się jako 0.
+  tramwaj 3, ciągniki i maszyny wolnobieżne 3. Rowery poza jezdnią liczą się
+  jako 0.
   To miara przepustowości, nie powierzchni, a tramwaj na własnym torowisku
   liczy się tak samo jak na jezdni.
 

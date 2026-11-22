@@ -529,13 +529,12 @@ const MODE = Object.fromEntries(MODES.map((m) => [m.key, m]))
  * WR-D-13 "Wytyczne wykonywania analiz i prognoz ruchu drogowego" (Ministry
  * of Infrastructure, 2023), Tab. 4.3.1, urban signalised column. A measure
  * of capacity, not of area: a 32 m tram counts 3, not six car lengths.
- * Minibuses of 10-24 seats count as cars (class c, WR-D-12 Tab. 4.7.1.1);
- * KBR's "other" - tractors, road machinery - has no class and counts as a
- * lorry, an assumption. Bikes on paths and pavements are off the roadway
- * and count 0.
+ * KBR's categories map one to one: its minibuses fall under the table's
+ * class c, which names "mikrobusy"; its "other" - tractors, road machinery -
+ * is class h. Bikes on paths and pavements are off the roadway and count 0.
  */
 export const PCU = {
-  c: 0.3, d: 1, e: 1.5, f: 2.5, g: 3, h: 3, i: 1, j: 2.5, k: 3, l: 2.5,
+  c: 0.3, d: 1, e: 1.5, f: 2.5, g: 3, h: 3, i: 1, j: 2.5, k: 3, l: 3,
   a1: 0.3, a2: 0.3, b1: 0.3, b2: 0.3,
 }
 export const PCU_SOURCE = 'WR-D-13, Wytyczne wykonywania analiz i prognoz ruchu drogowego '
