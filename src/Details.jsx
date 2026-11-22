@@ -7,7 +7,7 @@ import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
-  splitVehicles, bikeNote,
+  splitVehicles, bikeNote, thinText,
   HOUR_LABEL as HL, coverageGap, windowKind, pieceKey,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
@@ -392,6 +392,7 @@ function ModalSplit({ node, data, occupancy }) {
             {split.load.tram.toFixed(1)}{split.local.tram ? '' : ' (średnia miejska)'}{' '}
             os./poj., zmierzone w godzinach {hourRuns(split.loadHours)}
             {beyond ? ' i przyjęte także dla pozostałych godzin okresu — poza nimi to założenie' : ''}.
+            {thinText(split) && ` Średnia miejska tam, gdzie próba była za mała (${thinText(split)}).`}
             Surowej liczby pasażerów z punktu KZ nie dodajemy, bo obejmuje on
             inne słupki i wloty niż przekroje drogowe.
           </li>
@@ -401,6 +402,8 @@ function ModalSplit({ node, data, occupancy }) {
             Autobusy i tramwaje:{' '}
             {!node.pair ? 'brak punktu pomiaru KZ w promieniu 150 m, więc'
               : !node.pair.refs.length ? `przystanki punktu KZ ${node.pair.title} są pominięte, więc`
+              : thinText(split) ? `w punkcie KZ ${node.pair.title} próba była za mała `
+                + `(${thinText(split)}), więc`
                 : `punkt KZ ${node.pair.title} nie zarejestrował autobusów ani tramwajów, więc`}
             {' '}liczba pojazdów × średnie napełnienie z pomiarów KBR (autobus{' '}
             {occ.bus.toFixed(1)}, tramwaj {occ.tram.toFixed(1)} os./poj.) — szacunek.

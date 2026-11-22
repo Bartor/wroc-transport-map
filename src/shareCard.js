@@ -4,7 +4,7 @@
 // dependency, crisp at 2x, and no map tiles - tiles from another origin would
 // taint the canvas and make the copy fail. Light background, because the
 // picture ends up in documents and slides, not in this dark interface.
-import { fmt, fmtEst, splitTotal, splitVehicles, HOUR_LABEL } from './data'
+import { fmt, fmtEst, splitTotal, splitVehicles, thinText, HOUR_LABEL } from './data'
 
 const W = 1000
 const PAD = 56
@@ -66,10 +66,12 @@ export function splitNotes(spec) {
   if (split.basis === 'measured') {
     n.push(`Autobusy i tramwaje: pojazdy policzone na przekrojach drogowych × napełnienie `
       + `zmierzone w punkcie KZ ${pair.title} (${pair.dist} m): autobus `
-      + `${split.load.bus.toFixed(1)}, tramwaj ${split.load.tram.toFixed(1)} os./poj.`)
+      + `${split.load.bus.toFixed(1)}, tramwaj ${split.load.tram.toFixed(1)} os./poj.`
+      + (thinText(split) ? ` Średnia miejska tam, gdzie próba była za mała (${thinText(split)}).` : ''))
   } else if (split.basis === 'estimate') {
     n.push(`Autobusy i tramwaje: pojazdy × średnie napełnienie z pomiarów KBR `
-      + `(autobus ${occ.bus.toFixed(1)}, tramwaj ${occ.tram.toFixed(1)} os./poj.) — szacunek.`)
+      + `(autobus ${occ.bus.toFixed(1)}, tramwaj ${occ.tram.toFixed(1)} os./poj.) — szacunek`
+      + (thinText(split) ? `; próba na przystanku za mała (${thinText(split)})` : '') + '.')
   } else {
     n.push('Tylko pasażerowie autobusów i tramwajów — w pobliżu brak przekroju drogowego.')
   }

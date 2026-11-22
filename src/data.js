@@ -524,6 +524,21 @@ const MODE = Object.fromEntries(MODES.map((m) => [m.key, m]))
 // a different street.
 export const PAIR_RADIUS = 150
 
+// Below either, a paired stop's load per vehicle is not used: fewer vehicles
+// of a mode than THIN_MIN, or under THIN_SHARE of what the road sections
+// counted in the same hours. Of 116 measured loads this drops four, at
+// KW_19 and R1_11, where the stop saw 4-7% of the buses.
+export const THIN_MIN = 5
+export const THIN_SHARE = 0.1
+
+const MODE_NAME = { bus: 'autobusy', tram: 'tramwaje' }
+
+/** Why a mode's load is the city average despite a paired stop, if it is. */
+export const thinText = (split) => Object.entries(split.thin || {})
+  .map(([k, t]) => `${MODE_NAME[k]}: przystanek widział ${t.stop} poj. wobec ${t.road} `
+    + 'na przekrojach drogowych')
+  .join('; ')
+
 /** Measured passengers per vehicle, by mode, from the transit survey (6.4). */
 function transitOccupancy(pt) {
   const pax = { bus: 0, tram: 0 }
@@ -641,13 +656,26 @@ export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
   // for a mode the partner never saw.
   const load = { ...occ }
   const local = { bus: false, tram: false }
+  const thin = {}
   let loadHours = []
   if (ptRefs?.length) {
     const inPeriod = hours.filter((h) => ptWin.includes(h))
-    const pax = transitPax(ptRefs, inPeriod.length ? inPeriod : ptWin)
-    const veh = transitVeh(ptRefs, inPeriod.length ? inPeriod : ptWin)
+    const lh = inPeriod.length ? inPeriod : ptWin
+    const pax = transitPax(ptRefs, lh)
+    const veh = transitVeh(ptRefs, lh)
+    // A stop that saw a sliver of the node's vehicles says little about how
+    // full the rest are: KW_19's stop saw 4 buses of one quiet line against
+    // 94 on the road, and put 0.5 people in each. The city average serves
+    // better there, and the panel says why.
+    const onRoad = roadCounts(data, roadIds, lh)
     for (const k of ['bus', 'tram']) {
-      if (veh[k] > 0) { load[k] = pax[k] / veh[k]; local[k] = true }
+      if (!(veh[k] > 0)) continue
+      if (veh[k] < THIN_MIN || veh[k] < THIN_SHARE * onRoad[k]) {
+        thin[k] = { stop: veh[k], road: onRoad[k] }
+      } else {
+        load[k] = pax[k] / veh[k]
+        local[k] = true
+      }
     }
     // the hours the stop actually saw vehicles in, for the note
     loadHours = (inPeriod.length ? inPeriod : ptWin).filter((h) => ptRefs.some((r) =>
@@ -655,7 +683,7 @@ export function nodeSplit(data, { roadIds, ptRefs, hours, occupancy }) {
   }
   const measured = local.bus || local.tram
   return {
-    basis: measured ? 'measured' : 'estimate', hours: hrs, load, local, loadHours,
+    basis: measured ? 'measured' : 'estimate', hours: hrs, load, local, loadHours, thin,
     slices: [
       mk('car', v.car, v.car * occupancy, true),
       mk('goods', v.goods, v.goods, true),

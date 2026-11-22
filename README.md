@@ -265,6 +265,12 @@ Dwie rzeczy, które łatwo zrobić źle:
   w godzinach badania KZ (6–9 i 14–18 w okresie albo, poza nim, w całym oknie
   badania) i przyjmowany dla wszystkich godzin okresu. Poza godzinami badania
   KZ to założenie, co panel węzła mówi wprost.
+* **Za mała próba na przystanku → średnia miejska.** Napełnienia z punktu KZ
+  nie używamy, gdy przystanek zarejestrował mniej niż 5 pojazdów danego środka
+  albo mniej niż 10% pojazdów policzonych w tych godzinach na przekrojach
+  drogowych. Ze 116 zmierzonych napełnień odpada tak 4: autobusy w KW_19
+  (przystanek linii 319 — 4 autobusy wobec 94 na al. Karkonoskiej, 0,5 os./poj.)
+  i w R1_11 (2 wobec 37).
 
 W 10 z 53 węzłów wieloprzekrojowych przekroje leżą na tej samej ulicy po obu
 stronach skrzyżowania (np. PR_01 Kazimierza Wielkiego). Tam pojazd jadący na
