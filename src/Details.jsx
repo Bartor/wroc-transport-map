@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
-  PieChart, Pie,
+  PieChart, Pie, Sector,
 } from 'recharts'
 import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
@@ -39,6 +39,8 @@ const NO_OFF = new Set()
  * Hovering a piece here lights up its dot on the map, and the other way round.
  */
 const PHONE = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches
+// a pointer that can hover; on touch a tap pins instead, and a hover would stick
+const MOUSE = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
 
 function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
   const { node, groups, current } = family
@@ -372,33 +374,47 @@ const hoursText = (s) => (/^0?0:00\s*-\s*0?0:00$/.test(s.trim()) ? 'całą dobę
  * "a fifth of the people, four fifths of the road" reads at a glance. The
  * car share is written on each bar; the rest are in the table above.
  */
-function ShareBars({ split }) {
+function ShareBars({ split, pick }) {
   const rows = splitShares(split)
   if (!rows) return null
+  const shown = pick.active || 'car'
   return (
     <div className="sharebars" role="table" aria-label="Udziały środków transportu">
       {rows.map((r) => {
-        const car = r.parts.find((p) => p.key === 'car')
+        const sel = r.parts.find((p) => p.key === shown)
         return (
           <div key={r.key} className="sharebar" role="row">
             <span role="rowheader">{SHARE_ROW[r.key]}</span>
             <div className="bar">
               {r.parts.filter((p) => p.share > 0).map((p) => (
-                <i key={p.key} role="cell" style={{ flexGrow: p.share, background: p.color }}
+                <i key={p.key} role="cell" {...pick.on(p.key)}
+                  className={pick.active && pick.active !== p.key ? 'dim' : undefined}
+                  style={{ flexGrow: p.share, background: p.color }}
                   title={`${p.label}: ${Math.round(p.share * 100)}% (${SHARE_ROW[r.key]})`} />
               ))}
             </div>
-            <b>{Math.round(car.share * 100)}%</b>
+            <b><i style={{ background: sel.color }} />{Math.round(sel.share * 100)}%</b>
           </div>
         )
       })}
       <p className="hint">
-        Liczba po prawej: samochody osobowe. Przepustowość w pojazdach
+        Liczba po prawej: samochody osobowe albo środek wskazany na wykresie
+        lub w tabeli. Przepustowość w pojazdach
         umownych — {PCU_SOURCE}: rower 0,3, samochód 1, dostawczy 1,5,
         ciężarowy 2,5–3, autobus 2,5, tramwaj 3. To miara zajęcia przepustowości,
         nie powierzchni; tramwaj liczony jak na jezdni, także gdy ma własne torowisko.
       </p>
     </div>
+  )
+}
+
+/** The picked slice, pushed out from the ring along its middle. */
+function PopOut(props) {
+  const { cx, cy, midAngle, outerRadius } = props
+  const a = (-midAngle * Math.PI) / 180
+  return (
+    <Sector {...props} cx={cx + 6 * Math.cos(a)} cy={cy + 6 * Math.sin(a)}
+      outerRadius={outerRadius + 3} stroke="#fff" strokeWidth={1.5} />
   )
 }
 
@@ -415,6 +431,22 @@ function ModalSplit({ node, data, occupancy }) {
   const beyond = (split.loadHours || []).length
     && split.hours.some((h) => !split.loadHours.includes(h))
   const occ = data.transitOcc
+  // One mode can be picked: hovering previews it, a click or tap pins it
+  // until clicked again. The donut, the table and the bars all follow, so a
+  // slice can be traced to its row and its share of the road.
+  const [hover, setHover] = useState(null)
+  const [pinned, setPinned] = useState(null)
+  const active = pinned || (MOUSE ? hover : null)
+  const toggle = (key) => setPinned((p) => (p === key ? null : key))
+  const pick = {
+    active,
+    on: (key) => ({
+      onMouseEnter: MOUSE ? () => setHover(key) : undefined,
+      onMouseLeave: MOUSE ? () => setHover(null) : undefined,
+      onClick: () => toggle(key),
+    }),
+  }
+  const at = active ? rows.findIndex((s) => s.key === active) : -1
   return (
     <div className="split">
       <h4>Podział modalny — osoby</h4>
@@ -426,10 +458,17 @@ function ModalSplit({ node, data, occupancy }) {
       ) : (
         <>
           <div className="split-body">
-            <PieChart width={128} height={128}>
+            <PieChart width={150} height={150}>
               <Pie data={rows.map((s) => ({ name: s.label, v: s.persons }))} dataKey="v"
-                innerRadius={30} outerRadius={60} stroke="#1c1f26" isAnimationActive={false}>
-                {rows.map((s) => <Cell key={s.key} fill={s.color} />)}
+                innerRadius={30} outerRadius={60} stroke="#1c1f26" isAnimationActive={false}
+                activeIndex={at >= 0 ? at : undefined} activeShape={PopOut}
+                onMouseEnter={MOUSE ? (_, i) => setHover(rows[i].key) : undefined}
+                onMouseLeave={MOUSE ? () => setHover(null) : undefined}
+                onClick={(_, i) => toggle(rows[i].key)}>
+                {rows.map((s) => (
+                  <Cell key={s.key} fill={s.color} cursor="pointer"
+                    fillOpacity={active && active !== s.key ? 0.35 : 1} />
+                ))}
               </Pie>
             </PieChart>
             <table className="split-table">
@@ -441,7 +480,11 @@ function ModalSplit({ node, data, occupancy }) {
               </thead>
               <tbody>
                 {[...rows].sort((a, b) => b.persons - a.persons).map((s) => (
-                  <tr key={s.key}>
+                  <tr key={s.key} {...pick.on(s.key)} tabIndex={0} aria-pressed={pinned === s.key}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(s.key) }
+                    }}
+                    className={active === s.key ? 'on' : active ? 'dim' : undefined}>
                     <td><i style={{ background: s.color }} />{s.label}</td>
                     <td>{s.est ? fmtEst(s.persons) : fmt(s.persons)}</td>
                     <td className="pp">{Math.round((100 * s.persons) / total)}</td>
@@ -458,7 +501,7 @@ function ModalSplit({ node, data, occupancy }) {
             </table>
           </div>
           <p className="hint">Liczone dla {span}.</p>
-          <ShareBars split={split} />
+          <ShareBars split={split} pick={pick} />
         </>
       )}
       <ul className="split-notes">
