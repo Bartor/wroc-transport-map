@@ -742,8 +742,9 @@ function attachSplits(data, out, { hours, occupancy, pair, off }) {
 
 export const splitTotal = (split) => split.slices.reduce((a, s) => a + s.persons, 0)
 
-// How far to look for a cycle count to set beside a node's road-counted bikes.
-const BIKE_NEAR = 800
+// How far to look for a count to set beside a node. Walking is local - a
+// street 750 m away tells little - so pedestrians get a tighter radius.
+const NEAR = { bike: 800, ped: 400 }
 
 const runsText = (hours) => {
   const runs = []
@@ -781,36 +782,48 @@ export function bikeNote(data, node, split) {
       : 'Rowery i hulajnogi: tylko na jezdni i pasach rowerowych. Na tych przekrojach '
         + 'nie liczono dróg rowerowych ani chodników obok jezdni, więc to dolna granica '
         + '— rowerzystów może być znacznie więcej.'
-    const near = nearestBike(data, node, split.hours)
-    if (near) {
-      text += ` Najbliższy pomiar ruchu rowerowego: ${near.id} · ${near.name} `
-        + `(${near.dist} m) — ${near.hours.length
-          ? `${fmt(near.count)} rowerzystów w godz. ${runsText(near.hours)}`
-          : `liczony tylko w godz. ${runsText(near.window)}`}.`
-    }
+    text += nearText(data, 'bike', node, split.hours, 'ruchu rowerowego', 'rowerzystów')
   }
   return text
 }
 
-/** The closest cycle count point to a node, its sides summed. */
-function nearestBike(data, node, hours) {
+/** Pedestrians are not in the road counts at all. The nearest pedestrian
+ *  count gives a sense of how many there are, without adding a figure from
+ *  another place to the pie. */
+export function pedNote(data, node, split) {
+  return 'Bez pieszych — nie liczono ich na przekrojach drogowych.'
+    + nearText(data, 'ped', node, split.hours, 'ruchu pieszego', 'pieszych')
+}
+
+function nearText(data, kind, node, hours, what, who) {
+  const near = nearestCount(data, kind, node, hours)
+  if (!near) return ''
+  return ` Najbliższy pomiar ${what}: ${near.id} · ${near.name} (${near.dist} m) — `
+    + (near.hours.length
+      ? `${fmt(near.count)} ${who} w godz. ${runsText(near.hours)}.`
+      : `liczony tylko w godz. ${runsText(near.window)}.`)
+}
+
+/** The closest cycle or pedestrian count point to a node, its sides summed,
+ *  over the hours both surveys share. */
+function nearestCount(data, kind, node, hours) {
   const by = new Map()
-  for (const b of data.bike || []) {
+  for (const b of data[kind] || []) {
     if (!b.lat) continue
-    const key = parentOf('bike', b)
+    const key = parentOf(kind, b)
     if (!by.has(key)) by.set(key, [])
     by.get(key).push(b)
   }
   let best = null
   for (const [id, bs] of by) {
     const dist = Math.min(...bs.map((b) => metres(node, b)))
-    if (dist <= BIKE_NEAR && (!best || dist < best.dist)) best = { id, bs, dist }
+    if (dist <= NEAR[kind] && (!best || dist < best.dist)) best = { id, bs, dist }
   }
   if (!best) return null
-  const window = data.meta.windows?.bike || []
+  const window = data.meta.windows?.[kind] || []
   const hrs = hours.filter((h) => window.includes(h))
   return {
-    id: best.id, name: best.bs[0].name, dist: Math.round(best.dist / 10) * 10,
+    id: best.id, name: best.bs[0].short || best.bs[0].name, dist: Math.round(best.dist / 10) * 10,
     hours: hrs, window, count: best.bs.reduce((a, b) => a + sumHours(b.byHour, hrs), 0),
   }
 }

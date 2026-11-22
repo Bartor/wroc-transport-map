@@ -85,8 +85,8 @@ export function splitNotes(spec) {
         + 'respondenci byli kierowcami samochodu, dni robocze)'
       : `wartość ustawiona ręcznie; KBR Wrocław 2024 podaje ${spec.occupancyQuote || '1,207'}`
     n.push(`Samochody osobowe × ${occupancy.toFixed(2).replace('.', ',')} os./poj. — ${occSource}. Dostawcze, `
-      + 'ciężarowe, motocykle i mikrobusy: tylko kierowca. Bez pieszych — nie liczono ich '
-      + 'na przekrojach drogowych.')
+      + 'ciężarowe, motocykle i mikrobusy: tylko kierowca.')
+    if (spec.pedNote) n.push(spec.pedNote)
   }
   if (spec.bikeNote) n.push(spec.bikeNote)
   if (repeats) {

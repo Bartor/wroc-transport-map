@@ -7,7 +7,7 @@ import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
-  splitVehicles, bikeNote, thinText,
+  splitVehicles, bikeNote, pedNote, thinText,
   HOUR_LABEL as HL, coverageGap, windowKind, pieceKey,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
@@ -422,7 +422,7 @@ function ModalSplit({ node, data, occupancy }) {
               z kierowcą — dolne oszacowanie.
             </li>
             {bikeNote(data, node, split) && <li>{bikeNote(data, node, split)}</li>}
-            <li>Bez pieszych — KBR nie liczył ich na przekrojach drogowych.</li>
+            <li>{pedNote(data, node, split)}</li>
           </>
         )}
         {split.basis === 'transit' && (
@@ -870,6 +870,7 @@ export default function Details({
     accent: split ? '#e4572e' : color,
     split, pair: node?.pair, repeats: !!p.repeatsStreet,
     bikeNote: split && split.basis !== 'transit' ? bikeNote(data, node, split) : null,
+    pedNote: split && split.basis !== 'transit' ? pedNote(data, node, split) : null,
     occupancy, occupancyDefault: data.meta.carOccupancy.default,
     occupancyQuote: data.meta.carOccupancy.value, occ: data.transitOcc,
     big: cardBig,
