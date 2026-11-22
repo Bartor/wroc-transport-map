@@ -58,21 +58,20 @@ def wrap(draw, text, fnt, max_w):
 def og_image():
     W, H = 1200, 630
     src = Image.open(os.path.join(HERE, "og-source.webp")).convert("RGB")
-    # Cover the frame with some room to spare, so the crop can shift right
-    # (keeping the labelled pies clear of the title) without running off the
-    # edge of the screenshot.
-    k = max(W / src.width, H / src.height) * 1.12
+    # Fit the screenshot to the frame height and pin it right; whatever it
+    # leaves uncovered on the left disappears under the title's fade anyway.
+    k = max(H / src.height, (W - 380) / src.width)
     src = src.resize((round(src.width * k), round(src.height * k)), Image.LANCZOS)
-    left = src.width - W
+    im = Image.new("RGB", (W, H), (14, 16, 20))
     top = (src.height - H) // 2
-    im = src.crop((left, top, left + W, top + H))
+    im.paste(src.crop((0, top, src.width, top + H)), (W - src.width, 0))
     im = ImageEnhance.Brightness(im).enhance(0.92)
 
     # Fade the map out towards the left, where the title sits.
     fade = Image.new("L", (W, H))
     px = fade.load()
     for x in range(W):
-        t = min(1.0, max(0.0, (x - 380) / 520))     # 0 = fully covered
+        t = min(1.0, max(0.0, (x - 400) / 420))     # 0 = fully covered
         a = int(255 * (1 - t * t * (3 - 2 * t)))     # smoothstep
         for y in range(H):
             px[x, y] = a
