@@ -7,6 +7,7 @@ import { NETWORK_LEGEND } from './NetworkLayer'
 import { SIGNAL_FILTERS } from './SignalsLayer'
 import { BASEMAPS } from './basemaps'
 import HourRange from './HourRange'
+import { useSheetDrag } from './sheetDrag'
 
 const COUNTS = {
   road: (d) => d.points.length,
@@ -16,6 +17,9 @@ const COUNTS = {
   rail: (d) => d.rail.length,
   survey: (d) => d.survey?.length ?? 0,
 }
+
+// Touch screens cannot hover, so hover-only wording is wrong there.
+const TOUCH = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
 
 // What a view's totals and ranking are called.
 const TOTAL_LABEL = {
@@ -205,6 +209,8 @@ export default function Sidebar({
   markers, onSelect, selected, sheetOpen, setSheetOpen,
 }) {
   const V = VIEWS[view]
+  // phones: the sidebar is a bottom sheet, dragged by its header
+  const sheet = useSheetDrag(sheetOpen, setSheetOpen)
   // layers whose measurement window does not cover the selected period
   const gaps = ['pt', 'bike', 'ped', 'rail']
     .filter((k) => visible[k] && coverageGap(data.meta, k, hours))
@@ -254,13 +260,17 @@ export default function Sidebar({
     : []
 
   return (
-    <aside className={sheetOpen ? 'sidebar open' : 'sidebar'}>
+    <aside className={`sidebar${sheetOpen ? ' open' : ''}${sheet.dy != null ? ' dragging' : ''}`}
+      style={sheet.dy != null ? {
+        transform: sheetOpen ? `translateY(${sheet.dy}px)`
+          : `translateY(calc(100% - 62px + ${sheet.dy}px))`,
+      } : undefined}>
       {/* On phones the header is the sheet's handle; on desktop the button is
           hidden and the header is just a title. */}
       <header>
         <button type="button" className="sheet-handle" aria-expanded={sheetOpen}
           aria-label={sheetOpen ? 'Zwiń panel' : 'Rozwiń panel ustawień i wyników'}
-          onClick={() => setSheetOpen(!sheetOpen)}>
+          onClick={() => setSheetOpen(!sheetOpen)} {...sheet.handlers}>
           <span className="grip" />
           <span className="sheet-title">
             <b>KBR Wrocław 2024</b>
@@ -399,7 +409,7 @@ export default function Sidebar({
         )}>
           <select value={labels.mode} aria-label="Etykiety na mapie"
             onChange={(e) => setLabels({ ...labels, mode: e.target.value })}>
-            <option value="hover">Tylko po najechaniu</option>
+            <option value="hover">{TOUCH ? 'Brak — szczegóły po dotknięciu' : 'Tylko po najechaniu'}</option>
             <option value="num">Zawsze — liczby (#)</option>
             <option value="pct">Zawsze — udziały (%)</option>
           </select>

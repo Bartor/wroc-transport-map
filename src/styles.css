@@ -627,6 +627,12 @@ select {
 .dir-vals b { color: var(--text); font-weight: 600; }
 .dir-vals .b { text-align: right; }
 
+/* Touch screens have no hover: a tapped marker would leave its tooltip
+   over the map, repeating what the details sheet already shows. */
+@media (hover: none) {
+  .leaflet-tooltip { display: none !important; }
+}
+
 /* ================================================================== phones */
 @media (max-width: 760px) {
   html, body, #root { height: 100%; overflow: hidden; }
@@ -643,6 +649,15 @@ select {
     overflow: hidden;
   }
   .sidebar.open { transform: translateY(0); overflow-y: auto; overscroll-behavior: contain; }
+  /* dragged by the finger: no easing, and the handle claims the gesture */
+  .sidebar.dragging, .details.dragging { transition: none; }
+  .sheet-handle, .dhead { touch-action: none; }
+  .details { transition: transform .2s ease; }
+  .dhead::before {                                  /* grip, as on the settings sheet */
+    content: ''; position: absolute; top: 6px; left: 50%; width: 38px; height: 4px;
+    margin-left: -19px; border-radius: 2px; background: #4a5263;
+  }
+  .dhead { position: relative; padding-top: 1rem; }
 
   .sidebar header { position: sticky; top: 0; z-index: 3; background: #181b21; margin: 0 -.8rem; padding: 0 .8rem; }
   .sidebar header h1, .sidebar header .sub { display: none; }

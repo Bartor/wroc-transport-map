@@ -10,6 +10,7 @@ import {
   HOUR_LABEL as HL, coverageGap, windowKind,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
+import { useSheetDrag } from './sheetDrag'
 
 const SHARE_FILES = canShareImage()
 
@@ -368,6 +369,8 @@ export default function Details({
   markers, family, onSelect, onClose,
 }) {
   const { kind, ref: p } = sel
+  // phones: the panel is a bottom sheet; dragging its header down closes it
+  const sheet = useSheetDrag(true, (open) => { if (!open) onClose() })
   // The drawn node carries the modal split and its transit partner, if any.
   const node = markers ? markerIndex(markers)[`${kind}:${sel.id}`] : null
   const color = LAYERS[kind]?.color || '#f4a261'
@@ -785,8 +788,9 @@ export default function Details({
   }
 
   return (
-    <div className="details">
-      <div className="dhead" style={{ borderColor: color }}>
+    <div className={sheet.dy != null ? 'details dragging' : 'details'}
+      style={sheet.dy != null ? { transform: `translateY(${sheet.dy}px)` } : undefined}>
+      <div className="dhead" style={{ borderColor: color }} {...sheet.handlers}>
         <div>
           <span className="pill" style={{ background: color }}>{pill}</span>
           <h3>{title}</h3>
