@@ -513,6 +513,54 @@ select {
 /* the sheet handle exists only on phones */
 .sheet-handle { display: none; }
 
+/* ------------------------------------------------- point -> section tabs */
+.subnav { margin: -.2rem 0 1rem; }
+.subnav .back {
+  background: none; border: 0; padding: .2rem 0; margin-bottom: .45rem;
+  color: #8fb3ff; font: inherit; font-size: .82rem; cursor: pointer;
+}
+.subnav .back:hover { text-decoration: underline; }
+.subnav .tabs {
+  display: flex; gap: .35rem; overflow-x: auto; padding-bottom: .25rem;
+  scrollbar-width: thin;
+}
+.subnav .tab {
+  flex: 0 0 auto; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto;
+  column-gap: .45rem; align-items: center; min-width: 86px; max-width: 170px;
+  padding: .4rem .6rem; border-radius: 9px; cursor: pointer; text-align: left;
+  background: #232733; border: 1px solid var(--line); color: var(--text); font: inherit;
+}
+.subnav .tab:hover { border-color: #4a5263; }
+.subnav .tab.on { background: #2d3f5f; border-color: #4a6ea9; }
+.subnav .tab b {
+  grid-row: 1 / 3; width: 22px; height: 22px; border-radius: 50%; display: grid;
+  place-items: center; font-size: .78rem; background: #3a4150;
+}
+.subnav .tab.on b { background: #4a6ea9; }
+.subnav .tab span {
+  font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.subnav .tab em { font-style: normal; font-size: .72rem; color: var(--dim); }
+.subnav .tab.on em { color: #cfe0ff; }
+
+.part {
+  margin: 0 0 1.1rem; padding: .7rem .8rem .4rem; border-radius: 10px;
+  background: #1f2430; border: 1px solid #2f3a52;
+}
+.part h4 { margin-top: 0; }
+.part p { margin: .2rem 0 .5rem; font-size: .84rem; line-height: 1.5; }
+.part p b { font-size: 1rem; }
+
+/* sections on the map */
+.sec-dot-icon { background: none; border: 0; }
+.sec-dot {
+  display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--c); color: #fff; font: 700 11px/1 system-ui, sans-serif;
+  border: 2px solid rgba(20, 22, 26, .85); box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+  cursor: pointer;
+}
+.sec-dot.on { border-color: #fff; transform: scale(1.18); box-shadow: 0 0 0 3px rgba(255, 255, 255, .25); }
+
 /* ================================================================== phones */
 @media (max-width: 760px) {
   html, body, #root { height: 100%; overflow: hidden; }

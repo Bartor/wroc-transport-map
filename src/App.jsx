@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   loadAll, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, hoursOf, periodShare, buildMarkers,
+  familyOf,
 } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
@@ -59,6 +60,12 @@ export default function App() {
     [data, visible, hours, metric, areas, aggregate, wholeDay, people, occupancy],
   )
 
+  // The point the selection belongs to, shared by the map and the panel.
+  const family = useMemo(
+    () => (data && selected ? familyOf(data, markers, selected) : null),
+    [data, markers, selected],
+  )
+
   if (error) return <div className="fatal">{error}</div>
   if (!data) return <div className="fatal">Wczytywanie danych…</div>
 
@@ -82,14 +89,14 @@ export default function App() {
         areas={areas} period={period} aggregate={aggregate}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
-        selected={selected} onSelect={select}
+        selected={selected} onSelect={select} family={family}
       />
       {selected && (
         <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`}
           onClose={() => setSelected(null)}>
           <Details data={data} sel={selected} hours={hours} metric={metric}
             period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
-            share={periodShare(data.meta, hours)} markers={markers}
+            share={periodShare(data.meta, hours)} markers={markers} family={family}
             onSelect={select} onClose={() => setSelected(null)} />
         </ErrorBoundary>
       )}

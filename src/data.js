@@ -418,6 +418,26 @@ export const markerIndex = (markers) => {
   return idx
 }
 
+const FAMILY_SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
+
+/**
+ * The measurement point a selection belongs to: its lettered sections and, when
+ * points are drawn whole, the merged node standing for them. Lets the panel and
+ * the map treat a section as part of its point rather than a separate place.
+ * Null for single-section points.
+ */
+export function familyOf(data, markers, sel) {
+  const { kind, ref } = sel || {}
+  if (!FAMILY_SOURCE[kind] || !ref) return null
+  const parent = ref.aggregate ? ref.id : parentOf(kind, ref)
+  const drawn = markerIndex(markers)[`${kind}:${parent}`]
+  const node = drawn?.ref?.aggregate ? drawn : null
+  const members = node ? node.ref.members
+    : data[FAMILY_SOURCE[kind]].filter((x) => parentOf(kind, x) === parent)
+  if (members.length < 2) return null
+  return { kind, parent, node, members, current: ref.aggregate ? null : ref.id }
+}
+
 // ------------------------------------------------------------- modal split
 // What moves through a node, in people. The road survey counts vehicles by
 // category; people are what the modal-split question is about.

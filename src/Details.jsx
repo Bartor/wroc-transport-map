@@ -13,35 +13,66 @@ import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
 
 const SHARE_FILES = canShareImage()
 
-const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
-
 /**
- * The letter in KW_08B is a cross-section within measurement point KW_08.
- * Siblings often sit on the same spot, so spell out what each one covers and
- * make them clickable.
+ * A measurement point is split into lettered sections (KW_08A, KW_08B...): one
+ * approach, carriageway or side of the street each. These tabs move between the
+ * point as a whole and its sections, showing what share of the point each
+ * section carries, so a section reads as part of its point.
  */
-function Sections({ data, kind, p, onSelect }) {
-  if (!SOURCE[kind]) return null
-  const parent = parentOf(kind, p)
-  const sibs = data[SOURCE[kind]].filter((x) => parentOf(kind, x) === parent)
-  if (sibs.length < 2) return null
+function SubNav({ family, shares, onSelect }) {
+  const { kind, node, members, current } = family
+  const toNode = () => onSelect({ kind, id: node.id, ref: node.ref })
   return (
-    <div className="sections">
-      <h4>Punkt {parent} — {sibs.length} przekroje</h4>
-      <p className="hint">
-        Litera oznacza przekrój pomiarowy: osobny wlot, jezdnię lub stronę
-        ulicy w tym samym punkcie. Pomiary są rozłączne, nie powielone.
-      </p>
-      {sibs.map((x) => (
-        <button key={x.id} className={x.id === p.id ? 'sec on' : 'sec'}
-          onClick={() => onSelect({ kind, id: x.id, ref: x })}>
-          <b>{sectionLetter(x.id) || '—'}</b>
-          <span>{sectionOf(kind, x) || x.name}</span>
+    <nav className="subnav" aria-label="Przekroje punktu">
+      {current && node && (
+        <button type="button" className="back" onClick={toNode}>
+          ← cały punkt {family.parent}
         </button>
-      ))}
-    </div>
+      )}
+      <div className="tabs" role="tablist">
+        {node && (
+          <button type="button" role="tab" aria-selected={!current}
+            className={current ? 'tab' : 'tab on'} onClick={toNode}>
+            <b>Σ</b><span>Całość</span><em>100%</em>
+          </button>
+        )}
+        {members.map((m) => (
+          <button key={m.id} type="button" role="tab" aria-selected={current === m.id}
+            className={current === m.id ? 'tab on' : 'tab'}
+            title={`${m.id} · ${sectionOf(kind, m) || m.name}`}
+            onClick={() => onSelect({ kind, id: m.id, ref: m })}>
+            <b>{sectionLetter(m.id) || '—'}</b>
+            <span>{sectionOf(kind, m) || m.name}</span>
+            <em>{shares[m.id] == null ? '—' : `${shares[m.id]}%`}</em>
+          </button>
+        ))}
+      </div>
+    </nav>
   )
 }
+
+/** A section's hourly profile stacked on the rest of its point. */
+const PartProfile = ({ part, whole, hours, color }) => (
+  <ResponsiveContainer width="100%" height={120}>
+    <BarChart data={part.map((v, h) => ({ h, v, rest: Math.max(0, (whole[h] || 0) - v) }))}
+      margin={{ top: 4, right: 4, bottom: 0, left: -22 }}>
+      <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
+      <YAxis tick={{ fontSize: 10 }} width={46} />
+      <RTooltip formatter={(v, n) => [fmt(v), n === 'v' ? 'ten przekrój' : 'reszta punktu']}
+        labelFormatter={(h) => `${HOUR_LABEL(h)}–${HOUR_LABEL((h + 1) % 24)}`} />
+      <Bar dataKey="v" stackId="p">
+        {part.map((_, h) => (
+          <Cell key={h} fill={color} fillOpacity={hours.includes(h) ? 1 : 0.3} />
+        ))}
+      </Bar>
+      <Bar dataKey="rest" stackId="p">
+        {part.map((_, h) => (
+          <Cell key={h} fill="#5b6475" fillOpacity={hours.includes(h) ? 0.55 : 0.2} />
+        ))}
+      </Bar>
+    </BarChart>
+  </ResponsiveContainer>
+)
 
 const Profile = ({ values, hours, color }) => (
   <ResponsiveContainer width="100%" height={130}>
@@ -261,7 +292,7 @@ function unitOf(kind) {
 
 export default function Details({
   data, sel, hours, metric, period, share, wholeDay, people, occupancy,
-  markers, onSelect, onClose,
+  markers, family, onSelect, onClose,
 }) {
   const { kind, ref: p } = sel
   // The drawn node carries the modal split and its transit partner, if any.
@@ -281,6 +312,16 @@ export default function Details({
   const unit = (k) => (k === 'road'
     ? (people ? 'osób w samochodach osobowych' : `pojazdów — ${ROAD_METRICS[metric].label.toLowerCase()}`)
     : unitOf(k))
+
+  // Each section's share of its point in the period, for the tabs and the
+  // section view. Same metric and units as everything else in the panel.
+  const fam = family && onSelect ? family : null
+  const famProfs = fam ? fam.members.map((m) => shape(profileFor(data, kind, m, metric, people))) : []
+  const famVals = famProfs.map((pr) => sumHours(pr, hours))
+  const famSum = famVals.reduce((x, y) => x + y, 0)
+  const shares = fam ? Object.fromEntries(fam.members.map((m, i) => [
+    m.id, famSum ? Math.round((100 * famVals[i]) / famSum) : null])) : {}
+  const at = fam?.current ? fam.members.findIndex((m) => m.id === fam.current) : -1
 
   let body = null
   // what the shareable picture shows when there is no modal split
@@ -372,18 +413,6 @@ export default function Details({
         <h4>Profil dobowy — cały punkt</h4>
         <Profile values={total} hours={hours} color={color} />
         <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
-        {onSelect && (
-          <div className="sections">
-            <h4>Przejdź do przekroju</h4>
-            {p.members.map((m) => (
-              <button key={m.id} className="sec"
-                onClick={() => onSelect({ kind, id: m.id, ref: m })}>
-                <b>{sectionLetter(m.id) || '—'}</b>
-                <span>{sectionOf(kind, m) || m.name}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </>
     )
   } else if (kind === 'road') {
@@ -559,11 +588,21 @@ export default function Details({
         <button onClick={onClose}>×</button>
       </div>
       <div className="dbody">
+        {fam && <SubNav family={fam} shares={shares} onSelect={onSelect} />}
+        {at >= 0 && (
+          <div className="part">
+            <h4>Część punktu {fam.parent}</h4>
+            <p>
+              Przekrój {sectionLetter(fam.current) || fam.current} to{' '}
+              <b>{famSum ? `${shares[fam.current]}%` : '—'}</b> punktu w okresie {period}:
+              {' '}{fmt(famVals[at])} z {fmt(famSum)} ({unit(kind)}).
+            </p>
+            <PartProfile part={famProfs[at]} whole={addProfiles(famProfs)}
+              hours={hours} color={color} />
+          </div>
+        )}
         {node?.split && <ModalSplit node={node} data={data} occupancy={occupancy} />}
         {body}
-        {!p.aggregate && (
-          <Sections data={data} kind={kind} p={p} onSelect={onSelect} />
-        )}
         {scaled && (
           <p className="warn">
             Wartości przeliczone na całą dobę (×{exp.factor},{' '}

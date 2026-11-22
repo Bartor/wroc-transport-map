@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
-  MapContainer, TileLayer, CircleMarker, Marker, Tooltip, LayerGroup, useMap,
+  MapContainer, TileLayer, CircleMarker, Marker, Tooltip, LayerGroup, Polyline, useMap,
   useMapEvents,
 } from 'react-leaflet'
 import L from 'leaflet'
@@ -11,6 +11,7 @@ import { BASEMAPS } from './basemaps'
 import {
   LAYERS, MODES, radius, fmt, fmtEst, expansionOf, coverageGap, BASIS_LABEL, windowKind,
   periodShare, NET_MODES, markerIndex, splitTotal, headline, HOUR_LABEL,
+  sectionLetter, sectionOf, spread,
 } from './data'
 import { pieSvg, labelLines, labelHtml, labelBox } from './pie'
 
@@ -170,9 +171,42 @@ function SplitTooltip({ m, titled }) {
   )
 }
 
+/**
+ * The sections of the selected point, each at its own position, tied to the
+ * node they were merged into. Only drawn when points are shown whole - with
+ * sections drawn separately they are on the map already.
+ */
+function SectionDots({ family, selected, onSelect }) {
+  if (!family?.node) return null
+  const { kind, node, members } = family
+  // sections recorded at one spot would hide each other; fan them out a little
+  const dots = spread(members.filter((m) => m.lat)
+    .map((m) => ({ m, lat: m.lat, lon: m.lon })), 12)
+  return (
+    <LayerGroup>
+      {dots.map(({ m, lat, lon }) => (
+        <Fragment key={m.id}>
+          <Polyline positions={[[node.lat, node.lon], [lat, lon]]} interactive={false}
+            pathOptions={{ color: '#fff', weight: 1.5, opacity: 0.55, dashArray: '3 4' }} />
+          <Marker position={[lat, lon]} zIndexOffset={1000}
+            eventHandlers={{ click: () => onSelect({ kind, id: m.id, ref: m }) }}
+            icon={L.divIcon({
+              className: 'sec-dot-icon',
+              html: `<span class="sec-dot${selected?.id === m.id ? ' on' : ''}" `
+                + `style="--c:${LAYERS[kind].color}">${sectionLetter(m.id) || '·'}</span>`,
+              iconSize: [22, 22], iconAnchor: [11, 11],
+            })}>
+            <Tooltip>{m.id} · {sectionOf(kind, m) || m.name}</Tooltip>
+          </Marker>
+        </Fragment>
+      ))}
+    </LayerGroup>
+  )
+}
+
 export default function MapView({
   data, visible, hours, period, wholeDay, people, net, basemap, sig,
-  markers, labels, selected, onSelect,
+  markers, labels, selected, onSelect, family,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
   // The model was fitted on the 8-hour common window; scale it to whatever
@@ -267,7 +301,9 @@ export default function MapView({
         {Object.entries(markers).map(([kind, list]) => (
           <LayerGroup key={kind}>
             {list.map((m) => {
-              const on = selected && selected.kind === kind && selected.id === m.id
+              // a node stays lit while one of its sections is open
+              const on = selected && selected.kind === kind && (selected.id === m.id
+                || (family?.node === m && family.current))
               const wk = windowKind(kind, m.ref)
               // the pie's total, so the headline and the slices add up
               const all = headline(m, people) !== m.value
