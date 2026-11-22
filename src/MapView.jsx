@@ -11,7 +11,7 @@ import { BASEMAPS } from './basemaps'
 import {
   LAYERS, MODES, radius, fmt, fmtEst, expansionOf, coverageGap, BASIS_LABEL, windowKind,
   periodShare, NET_MODES, markerIndex, splitTotal, headline, HOUR_LABEL,
-  sectionLetter, sectionOf, spread,
+  sectionLetter, sectionOf,
 } from './data'
 import { pieSvg, labelLines, labelHtml, labelBox } from './pie'
 
@@ -172,17 +172,65 @@ function SplitTooltip({ m, titled }) {
   )
 }
 
+const DOT = 22 // section dot size, px
+
+/**
+ * Nudge dots, in screen pixels, until none sits under the node's marker or on
+ * another dot. Positions are good to ten metres or so anyway, and a dot you
+ * cannot see or click is worse than one drawn a few metres off. Done in
+ * pixels, so it holds at every zoom.
+ */
+function dodge(map, node, nodeR, dots) {
+  const c = map.latLngToLayerPoint([node.lat, node.lon])
+  const clear = nodeR + DOT / 2 + 4
+  const pts = dots.map((d, i) => {
+    const p = map.latLngToLayerPoint([d.lat, d.lon])
+    // straight out from the node; dots right on top of it fan out by index
+    let v = p.subtract(c)
+    if (v.x * v.x + v.y * v.y < 1) {
+      const a = (2 * Math.PI * i) / dots.length - Math.PI / 2
+      v = L.point(Math.cos(a), Math.sin(a))
+    }
+    const len = Math.hypot(v.x, v.y)
+    return len < clear ? c.add(v.multiplyBy(clear / len)) : p
+  })
+  // a few passes pushing overlapping dots apart
+  for (let pass = 0; pass < 8; pass++) {
+    let moved = false
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const v = pts[j].subtract(pts[i])
+        const d = Math.hypot(v.x, v.y)
+        if (d >= DOT + 2) continue
+        const u = d < 0.5 ? L.point(1, 0) : v.multiplyBy(1 / d)
+        const push = u.multiplyBy((DOT + 2 - d) / 2)
+        pts[i] = pts[i].subtract(push)
+        pts[j] = pts[j].add(push)
+        moved = true
+      }
+    }
+    if (!moved) break
+  }
+  return dots.map((d, i) => {
+    const ll = map.layerPointToLatLng(pts[i])
+    return { ...d, lat: ll.lat, lon: ll.lng }
+  })
+}
+
 /**
  * The pieces of the selected node, each at its own position and tied to it:
  * road sections as round dots, the paired transit stops as square ones. Only
  * drawn when points are shown whole - drawn apart they are on the map already.
  */
-function SectionDots({ family, selected, onSelect }) {
+function SectionDots({ family, nodeR, selected, onSelect }) {
+  const map = useMap()
+  // re-place on zoom: the dodge is in pixels
+  const [, setZoom] = useState(() => map.getZoom())
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
   if (!family?.node) return null
   const { node, groups } = family
-  // pieces recorded at one spot would hide each other; fan them out a little
-  const dots = spread(groups.flatMap((g) => g.members.filter((m) => m.lat)
-    .map((m) => ({ kind: g.kind, m, lat: m.lat, lon: m.lon }))), 12)
+  const dots = dodge(map, node, nodeR || 10, groups.flatMap((g) => g.members
+    .filter((m) => m.lat).map((m) => ({ kind: g.kind, m, lat: m.lat, lon: m.lon }))))
   return (
     <LayerGroup>
       {dots.map(({ kind, m, lat, lon }) => {
@@ -388,7 +436,8 @@ export default function MapView({
           </LayerGroup>
         ))}
 
-        <SectionDots family={family} selected={selected} onSelect={onSelect} />
+        <SectionDots family={family} selected={selected} onSelect={onSelect}
+          nodeR={family?.node ? radii[`${family.node.kind}:${family.node.id}`] : 0} />
 
         {labels.mode !== 'hover' && (
           <NodeLabels entries={labelEntries} declutter={labels.declutter} />
