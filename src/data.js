@@ -711,6 +711,79 @@ function attachSplits(data, out, { hours, occupancy, pair, off }) {
 
 export const splitTotal = (split) => split.slices.reduce((a, s) => a + s.persons, 0)
 
+// How far to look for a cycle count to set beside a node's road-counted bikes.
+const BIKE_NEAR = 800
+
+const runsText = (hours) => {
+  const runs = []
+  for (const h of [...hours].sort((a, b) => a - b)) {
+    if (runs.length && runs.at(-1)[1] === h - 1) runs.at(-1)[1] = h
+    else runs.push([h, h])
+  }
+  return runs.map(([a, b]) => `${a}–${b + 1}`).join(', ')
+}
+
+/**
+ * What the bike slice of a node's split covers, in words.
+ *
+ * The road survey counted bikes on the roadway and on painted bike lanes at
+ * every section, but bike paths and pavements beside the road only at some
+ * (75 of 244). Where they were not counted the slice is a floor - R1_23 shows
+ * 18 bikes in the morning peak while the cycle count on Dmowskiego, 430 m
+ * away, saw 412. The nearest cycle count point is named for scale, summed
+ * over its sides of the street, in the hours both surveys share.
+ */
+export function bikeNote(data, node, split) {
+  const secs = membersOf(node).filter((r) => data.roadById[r.id])
+  if (!secs.length) return null
+  const withPaths = secs.filter((r) => Object.keys(data.roadById[r.id].off || {}).length)
+  const letters = (rs) => rs.map((r) => sectionLetter(r.id) || r.id).join(', ')
+  let text
+  if (withPaths.length === secs.length) {
+    text = 'Rowery i hulajnogi: na jezdni, pasach rowerowych oraz na drogach '
+      + 'rowerowych i chodnikach obok jezdni.'
+  } else {
+    text = withPaths.length
+      ? 'Rowery i hulajnogi: na jezdni i pasach rowerowych; drogi rowerowe i chodniki '
+        + `obok jezdni liczono tylko na przekrojach ${letters(withPaths)}, więc na `
+        + 'pozostałych to dolna granica.'
+      : 'Rowery i hulajnogi: tylko na jezdni i pasach rowerowych. Na tych przekrojach '
+        + 'nie liczono dróg rowerowych ani chodników obok jezdni, więc to dolna granica '
+        + '— rowerzystów może być znacznie więcej.'
+    const near = nearestBike(data, node, split.hours)
+    if (near) {
+      text += ` Najbliższy pomiar ruchu rowerowego: ${near.id} · ${near.name} `
+        + `(${near.dist} m) — ${near.hours.length
+          ? `${fmt(near.count)} rowerzystów w godz. ${runsText(near.hours)}`
+          : `liczony tylko w godz. ${runsText(near.window)}`}.`
+    }
+  }
+  return text
+}
+
+/** The closest cycle count point to a node, its sides summed. */
+function nearestBike(data, node, hours) {
+  const by = new Map()
+  for (const b of data.bike || []) {
+    if (!b.lat) continue
+    const key = parentOf('bike', b)
+    if (!by.has(key)) by.set(key, [])
+    by.get(key).push(b)
+  }
+  let best = null
+  for (const [id, bs] of by) {
+    const dist = Math.min(...bs.map((b) => metres(node, b)))
+    if (dist <= BIKE_NEAR && (!best || dist < best.dist)) best = { id, bs, dist }
+  }
+  if (!best) return null
+  const window = data.meta.windows?.bike || []
+  const hrs = hours.filter((h) => window.includes(h))
+  return {
+    id: best.id, name: best.bs[0].name, dist: Math.round(best.dist / 10) * 10,
+    hours: hrs, window, count: best.bs.reduce((a, b) => a + sumHours(b.byHour, hrs), 0),
+  }
+}
+
 /** All the vehicles behind a split, for each mode's share of the traffic as
  *  against its share of the people. Zero for a transit-only node. */
 export const splitVehicles = (split) => split.slices.reduce((a, s) => a + (s.vehicles || 0), 0)

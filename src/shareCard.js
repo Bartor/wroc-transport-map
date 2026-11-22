@@ -86,6 +86,7 @@ export function splitNotes(spec) {
       + 'ciężarowe, motocykle i mikrobusy: tylko kierowca. Bez pieszych — nie liczono ich '
       + 'na przekrojach drogowych.')
   }
+  if (spec.bikeNote) n.push(spec.bikeNote)
   if (repeats) {
     n.push('Przekroje leżą po obu stronach jednego skrzyżowania: suma zawyża ruch, '
       + 'udziały pozostają porównywalne.')
