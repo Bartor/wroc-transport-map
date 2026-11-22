@@ -4,7 +4,7 @@
 // dependency, crisp at 2x, and no map tiles - tiles from another origin would
 // taint the canvas and make the copy fail. Light background, because the
 // picture ends up in documents and slides, not in this dark interface.
-import { fmt, fmtEst, splitTotal, HOUR_LABEL } from './data'
+import { fmt, fmtEst, splitTotal, splitVehicles, HOUR_LABEL } from './data'
 
 const W = 1000
 const PAD = 56
@@ -101,7 +101,7 @@ function drawSplit(ctx, spec, y) {
 
   // headline: the vehicle share against the people share, for road nodes
   const car = split.slices.find((s) => s.key === 'car')
-  const vehTotal = split.slices.reduce((a, s) => a + (s.vehicles || 0), 0)
+  const vehTotal = splitVehicles(split)
   if (car && vehTotal > 0 && total > 0) {
     const vp = Math.round((100 * car.vehicles) / vehTotal)
     const pp = Math.round((100 * car.persons) / total)
@@ -141,18 +141,25 @@ function drawSplit(ctx, spec, y) {
   ctx.fillText('osób', cx, cy + 20)
   ctx.textAlign = 'left'
 
-  // table
+  // table: people and their share, then vehicles and theirs; a transit-only
+  // node has no vehicles, and its people columns move right
   const tx = cx + r + 44
   const right = W - PAD
-  const col = { persons: right - 190, pct: right - 105, veh: right }
+  const veh = vehTotal > 0
+  const col = veh
+    ? { persons: right - 214, pct: right - 150, veh: right - 62, vpct: right }
+    : { persons: right - 70, pct: right }
   let ty = y + 6
   ctx.font = font(13, 600)
   ctx.fillStyle = FAINT
   ctx.textBaseline = 'top'
   ctx.textAlign = 'right'
   ctx.fillText('OSOBY', col.persons, ty)
-  ctx.fillText('%', col.pct, ty)
-  if (split.basis !== 'transit') ctx.fillText('POJAZDY', col.veh, ty)
+  ctx.fillText('% OSÓB', col.pct, ty)
+  if (veh) {
+    ctx.fillText('POJAZDY', col.veh, ty)
+    ctx.fillText('% POJ.', col.vpct, ty)
+  }
   ctx.textAlign = 'left'
   ty += 28
   for (const s of rows) {
@@ -162,16 +169,18 @@ function drawSplit(ctx, spec, y) {
     ctx.fill()
     ctx.font = font(17)
     ctx.fillStyle = INK
-    const label = wrap(ctx, s.label, col.persons - 120 - (tx + 24))[0]
+    const label = wrap(ctx, s.label, col.persons - 90 - (tx + 24))[0]
     ctx.fillText(label, tx + 24, ty)
     ctx.textAlign = 'right'
     ctx.fillText(s.est ? fmtEst(s.persons) : fmt(s.persons), col.persons, ty)
     ctx.font = font(17, 700)
     ctx.fillText(`${Math.round((100 * s.persons) / total)}`, col.pct, ty)
-    if (split.basis !== 'transit') {
+    if (veh && s.vehicles != null) {
       ctx.font = font(16)
       ctx.fillStyle = DIM
-      ctx.fillText(s.vehicles == null ? '' : fmt(s.vehicles), col.veh, ty)
+      ctx.fillText(fmt(s.vehicles), col.veh, ty)
+      ctx.font = font(16, 700)
+      ctx.fillText(`${Math.round((100 * s.vehicles) / vehTotal)}`, col.vpct, ty)
     }
     ctx.textAlign = 'left'
     ty += 34

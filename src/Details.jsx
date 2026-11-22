@@ -7,6 +7,7 @@ import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
   HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
+  splitVehicles,
   HOUR_LABEL as HL, coverageGap, windowKind, pieceKey,
 } from './data'
 import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
@@ -316,6 +317,9 @@ const hoursText = (s) => (/^0?0:00\s*-\s*0?0:00$/.test(s.trim()) ? 'całą dobę
 function ModalSplit({ node, data, occupancy }) {
   const { split } = node
   const total = splitTotal(split)
+  // each mode's share of the vehicles beside its share of the people: a car
+  // is most of the traffic and a smaller part of who travels
+  const vehTotal = splitVehicles(split)
   const rows = split.slices.filter((s) => s.persons > 0 || s.vehicles > 0)
   const span = split.hours.length ? `${split.hours.length} godz. (${hourRuns(split.hours)})` : 'brak'
   // the stop survey's load applied beyond the hours it was measured in
@@ -341,15 +345,24 @@ function ModalSplit({ node, data, occupancy }) {
             </PieChart>
             <table className="split-table">
               <thead>
-                <tr><th /><th>{split.basis === 'transit' ? '' : 'pojazdy'}</th><th>osoby</th><th>%</th></tr>
+                <tr>
+                  <th /><th>osoby</th><th>% osób</th>
+                  {vehTotal > 0 && <><th>pojazdy</th><th>% poj.</th></>}
+                </tr>
               </thead>
               <tbody>
                 {[...rows].sort((a, b) => b.persons - a.persons).map((s) => (
                   <tr key={s.key}>
                     <td><i style={{ background: s.color }} />{s.label}</td>
-                    <td>{s.vehicles == null ? '' : fmt(s.vehicles)}</td>
                     <td>{s.est ? fmtEst(s.persons) : fmt(s.persons)}</td>
-                    <td>{Math.round((100 * s.persons) / total)}</td>
+                    <td className="pp">{Math.round((100 * s.persons) / total)}</td>
+                    {vehTotal > 0 && (
+                      <>
+                        <td className="veh">{s.vehicles == null ? '' : fmt(s.vehicles)}</td>
+                        <td className="vp">{s.vehicles == null ? ''
+                          : Math.round((100 * s.vehicles) / vehTotal)}</td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -600,7 +613,8 @@ export default function Details({
     const total = addProfiles(profs)
     cardBig = { value: fmt(sumHours(total, hours)), unit: unit(kind) }
     cardProfile = total
-    if (p.repeatsStreet) {
+    // a split card says it in the split's own notes
+    if (p.repeatsStreet && !node?.split) {
       cardNotes.push('Przekroje leżą po obu stronach jednego skrzyżowania, więc jadący '
         + 'na wprost są liczeni dwa razy — suma zawyża ruch przez węzeł.')
     }

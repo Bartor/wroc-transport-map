@@ -237,8 +237,10 @@ export default function Sidebar({
       const by = {}
       for (const m of drawn) {
         for (const s of m.split?.slices || []) {
-          by[s.key] = by[s.key] || { key: s.key, label: s.label, color: s.color, v: 0, est: false }
+          by[s.key] = by[s.key]
+            || { key: s.key, label: s.label, color: s.color, v: 0, veh: 0, est: false }
           by[s.key].v += s.persons
+          by[s.key].veh += s.vehicles || 0
           by[s.key].est ||= s.est
         }
       }
@@ -254,6 +256,7 @@ export default function Sidebar({
     }))
   }, [V, drawn, markers, people, metric])
   const totalSum = totals.reduce((a, r) => a + r.v, 0)
+  const vehSum = totals.reduce((a, r) => a + (r.veh || 0), 0)
 
   const signalRows = sig.on && data.signals
     ? data.signals.junctions.filter(SIGNAL_FILTERS[sig.filter].test).slice(0, 12)
@@ -438,17 +441,33 @@ export default function Sidebar({
 
       {/* ------------------------------------------------------------ results */}
       <Panel title={`Wyniki — ${period}`}>
-        <div className="totals">
-          {totals.map((r) => (
-            <div key={r.key}>
-              <span><i className="swatch" style={{ background: r.color }} />{r.label}</span>
-              <b>
-                {r.est ? fmtEst(r.v) : fmt(r.v)}
-                {V.split && totalSum > 0 && <em> · {Math.round((100 * r.v) / totalSum)}%</em>}
-              </b>
-            </div>
-          ))}
-        </div>
+        {V.split && totalSum > 0 ? (
+          // modes: people, their share, and the share of vehicles beside it
+          <table className="totals-table">
+            <thead>
+              <tr><th /><th>osoby</th><th>% osób</th>{vehSum > 0 && <th>% poj.</th>}</tr>
+            </thead>
+            <tbody>
+              {totals.map((r) => (
+                <tr key={r.key}>
+                  <td><i className="swatch" style={{ background: r.color }} />{r.label}</td>
+                  <td>{r.est ? fmtEst(r.v) : fmt(r.v)}</td>
+                  <td className="pp">{Math.round((100 * r.v) / totalSum)}%</td>
+                  {vehSum > 0 && <td>{Math.round((100 * r.veh) / vehSum)}%</td>}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="totals">
+            {totals.map((r) => (
+              <div key={r.key}>
+                <span><i className="swatch" style={{ background: r.color }} />{r.label}</span>
+                <b>{r.est ? fmtEst(r.v) : fmt(r.v)}</b>
+              </div>
+            ))}
+          </div>
+        )}
         {V.split && (
           <p className="hint">
             Suma po wszystkich węzłach: kto przejeżdża przez kilka węzłów, jest

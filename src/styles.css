@@ -244,7 +244,8 @@ select option { background: #232733; color: var(--text); }
 .split { margin-bottom: .4rem; }
 .split-body { display: flex; align-items: center; gap: .6rem; }
 .split-table { border-collapse: collapse; font-size: .74rem; flex: 1; }
-.split-table th { color: var(--dim); font-weight: 500; text-align: right; padding: 0 0 .2rem .4rem; }
+.split-table th { color: var(--dim); font-weight: 500; text-align: right; padding: 0 0 .2rem .4rem;
+  white-space: nowrap; }
 .split-table td { padding: .12rem 0 .12rem .4rem; text-align: right; white-space: nowrap; }
 .split-table td:first-child { text-align: left; padding-left: 0; white-space: normal; }
 .split-table td i { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
@@ -622,6 +623,19 @@ select option { background: #232733; color: var(--text); }
 .view small { font-size: .74rem; color: var(--dim); font-variant-numeric: tabular-nums; }
 .totals span .swatch { margin-right: .45rem; }
 .totals b em { font-style: normal; font-weight: 400; color: var(--dim); }
+
+/* per-mode totals in the node view */
+.totals-table { width: 100%; border-collapse: collapse; font-size: .84rem; }
+.totals-table th { color: var(--dim); font-weight: 500; font-size: .72rem;
+  text-align: right; padding: 0 0 .25rem .5rem; }
+.totals-table td { padding: .22rem 0 .22rem .5rem; text-align: right; white-space: nowrap;
+  color: var(--dim); font-variant-numeric: tabular-nums; }
+.totals-table td:first-child { text-align: left; padding-left: 0; white-space: normal; }
+.totals-table td:nth-child(2) { color: var(--text); font-weight: 600; }
+.totals-table td.pp { color: var(--text); }
+.totals-table .swatch { margin-right: .45rem; }
+.split-table td.pp { font-weight: 600; color: #fff; }
+.split-table td.veh, .split-table td.vp { color: var(--dim); }
 
 /* period figures lead; whole-survey figures sit back */
 .details dd.now { color: #fff; font-weight: 600; }
