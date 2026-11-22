@@ -18,6 +18,14 @@ npm run etl
 npm run dev
 ```
 
+Testy obliczeń węzła (podział modalny, pomijanie części, napełnienie, link,
+CSV) na małym ręcznie policzonym zestawie; `npm run deploy` uruchamia je
+przed publikacją:
+
+```bash
+npm test
+```
+
 ETL wymaga Pythona 3.10+ z `openpyxl` i `pyshp`:
 
 ```bash
