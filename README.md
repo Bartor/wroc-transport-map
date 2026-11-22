@@ -31,16 +31,25 @@ Pierwsze uruchomienie ETL pobiera sieć drogową i przystanki z Overpass API
 
 | Warstwa | Punktów | Źródło | Współrzędne |
 |---|---|---|---|
+| Warstwa | Punktów | Źródło | Współrzędne |
+|---|---|---|---|
 | Ruch drogowy | 244 przekroje | Zał. 3.3 | dokładne, z wykazu |
-| Potoki w autobusach i tramwajach | 222 przekroje | Zał. 6.4 | nazwa przystanku → OSM |
+| Potoki w autobusach i tramwajach | 222 przekroje | Zał. 6.4 | słupki przystanków → rozkład GTFS |
 | Ruch rowerowy | 43 przekroje | Zał. 3.4 | geokodowane z opisu odcinka |
 | Ruch pieszy | 17 przekrojów | Zał. 3.5 | geokodowane z opisu odcinka |
-| Potoki w pociągach | 11 kordonów | Zał. 7.1 | stacje z OSM |
+| Potoki w pociągach | 11 kordonów | Zał. 7.1 | przecięcie linii z granicą miasta |
 | Próba ankietowa | 1174 adresy | shapefile | dokładne |
 
-Suwak godziny i predefiniowane okresy (szczyt poranny, popołudniowy,
-międzyszczyt, noc) sterują wielkością znaczników. Dla ruchu drogowego można
-wybrać, co jest liczone — wszystkie pojazdy, tylko osobowe, ciężarowe,
+Mapa pokazuje jedno badanie naraz („Co pokazać"): pomiary drogowe, potoki
+pasażerskie, rowery i piesi albo pociągi. Każde ma własną jednostkę, godziny
+i zasięg, więc wielkości znaczników z różnych badań nie są porównywalne.
+Wyjątkiem są **węzły** — jedyny widok, w którym badania się spotykają, celowo
+i w jednej jednostce (osobach): ruch z przekrojów drogowych z napełnieniem
+pojazdów zmierzonym w badaniu pasażerów (patrz „Podział modalny w węzłach").
+
+Suwak godzin i predefiniowane okresy (szczyt poranny, popołudniowy,
+międzyszczyt, noc) sterują wielkością znaczników. W widoku pomiarów drogowych
+można wybrać, co jest liczone — wszystkie pojazdy, tylko osobowe, ciężarowe,
 komunikacja zbiorowa albo rowery i UTO na jezdni.
 
 Kliknięcie znacznika otwiera panel z profilem dobowym, podziałem na kierunki

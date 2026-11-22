@@ -1,8 +1,7 @@
 import { useMemo, useState } from 'react'
 import {
-  LAYERS, ROAD_METRICS, PRESETS, roadVolume, fmt, sumHours, sameRange,
-  coverageGap, BASIS_LABEL, expand, toPeople, activeCats, NET_MODES, resolveTarget, windowKind,
-  headline, fmtEst,
+  LAYERS, ROAD_METRICS, PRESETS, fmt, sameRange, coverageGap, BASIS_LABEL, NET_MODES,
+  resolveTarget, headline, fmtEst, VIEWS, viewOf,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
 import { SIGNAL_FILTERS } from './SignalsLayer'
@@ -16,6 +15,20 @@ const COUNTS = {
   ped: (d) => d.ped.length,
   rail: (d) => d.rail.length,
   survey: (d) => d.survey?.length ?? 0,
+}
+
+// What a view's totals and ranking are called.
+const TOTAL_LABEL = {
+  pt: 'Pasażerowie na badanych przystankach',
+  bike: 'Rowerzyści',
+  ped: 'Piesi',
+  rail: 'Pasażerowie pociągów na kordonie',
+}
+const RANK_TITLE = {
+  nodes: 'Najwięcej osób w węzłach — wszystkie środki',
+  pt: 'Najwięcej pasażerów',
+  active: 'Najwięcej rowerzystów i pieszych',
+  rail: 'Kordony kolejowe',
 }
 
 // ---------------------------------------------------------------- building blocks
@@ -129,7 +142,7 @@ const activate = (fn) => ({
 })
 
 /** Finding one street is the commonest action, so it stays pinned at the top. */
-function Search({ data, markers, onSelect }) {
+function Search({ data, markers, onSelect, view, setView }) {
   const [q, setQ] = useState('')
   const results = useMemo(() => {
     const needle = q.trim().toLowerCase()
@@ -149,7 +162,19 @@ function Search({ data, markers, onSelect }) {
     return out.slice(0, 20)
   }, [q, data])
 
-  const pick = (r) => { onSelect(resolveTarget(markers, r.kind, r.ref)); setQ('') }
+  // A result from another survey switches to its view; the markers of that
+  // view do not exist yet, so the raw record is selected and found inside
+  // its point by the panel.
+  const pick = (r) => {
+    const next = viewOf(r.kind, view)
+    if (next !== view) {
+      setView(next)
+      onSelect({ kind: r.kind, id: r.id, ref: r.ref })
+    } else {
+      onSelect(resolveTarget(markers, r.kind, r.ref))
+    }
+    setQ('')
+  }
   return (
     <div className="search">
       <input type="text" value={q} aria-label="Szukaj punktu pomiarowego"
@@ -173,13 +198,13 @@ function Search({ data, markers, onSelect }) {
 // ----------------------------------------------------------------------- sidebar
 
 export default function Sidebar({
-  data, visible, setVisible, range, setRange,
+  data, view, setView, visible, survey, setSurvey, range, setRange,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
-  wholeDay, setWholeDay, people, setPeople, occupancy, setOccupancy,
+  wholeDay, setWholeDay, people, roadPeople, setPeople, occupancy, setOccupancy,
   net, setNet, basemap, setBasemap, sig, setSig, labels, setLabels,
   markers, onSelect, selected, sheetOpen, setSheetOpen,
 }) {
-  const catOrder = data.meta.vehCatOrder
+  const V = VIEWS[view]
   // layers whose measurement window does not cover the selected period
   const gaps = ['pt', 'bike', 'ped', 'rail']
     .filter((k) => visible[k] && coverageGap(data.meta, k, hours))
@@ -190,30 +215,39 @@ export default function Sidebar({
   }
   const netMeta = data[NET_MODES[net.mode].file]?.meta
 
-  // The map's own marker objects, so selecting one always highlights its dot.
+  // Everything drawn in this view, as the map draws it: the totals and the
+  // ranking are sums of the markers themselves, so they always agree with it.
+  const drawn = useMemo(() => V.layers.flatMap((k) => markers[k] || []), [V, markers])
+
   // Ranked by the same number the tooltip leads with.
   const top = useMemo(
-    () => [...(markers.road || [])]
-      .sort((a, b) => headline(b, people) - headline(a, people)).slice(0, 12),
-    [markers, people],
+    () => [...drawn].sort((a, b) => headline(b, people) - headline(a, people)).slice(0, 12),
+    [drawn, people],
   )
-  const topAll = top.some((m) => headline(m, people) !== m.value)
 
+  // Per mode across the node pies, or per layer otherwise.
   const totals = useMemo(() => {
-    const cats = activeCats(metric, people)
-    const raw = {
-      // KO sections ran in the peaks only, so they expand on their own factor
-      road: data.points.reduce((a, p) => a + expand(data.meta, windowKind('road', p),
-        roadVolume(data.roadById[p.id], { cats, hours }, catOrder), wholeDay), 0),
-      bike: data.bike.reduce((a, p) => a + sumHours(p.byHour, hours), 0),
-      ped: data.ped.reduce((a, p) => a + sumHours(p.byHour, hours), 0),
-      pt: data.pt.reduce(
-        (a, p) => a + Object.values(p.byHour).reduce((b, arr) => b + sumHours(arr, hours), 0), 0),
+    if (V.split) {
+      const by = {}
+      for (const m of drawn) {
+        for (const s of m.split?.slices || []) {
+          by[s.key] = by[s.key] || { key: s.key, label: s.label, color: s.color, v: 0, est: false }
+          by[s.key].v += s.persons
+          by[s.key].est ||= s.est
+        }
+      }
+      return Object.values(by).filter((r) => r.v > 0).sort((a, b) => b.v - a.v)
     }
-    return Object.fromEntries(Object.entries(raw).map(([k, v]) => [
-      k, toPeople(expand(data.meta, k, v, wholeDay), k, occupancy, people),
-    ]))
-  }, [data, metric, hours, catOrder, wholeDay, people, occupancy])
+    return V.layers.map((k) => ({
+      key: k,
+      label: k === 'road'
+        ? (people ? 'Osoby w samochodach osobowych' : `Pojazdy — ${ROAD_METRICS[metric].label.toLowerCase()}`)
+        : TOTAL_LABEL[k],
+      color: LAYERS[k].color,
+      v: (markers[k] || []).reduce((a, m) => a + m.value, 0),
+    }))
+  }, [V, drawn, markers, people, metric])
+  const totalSum = totals.reduce((a, r) => a + r.v, 0)
 
   const signalRows = sig.on && data.signals
     ? data.signals.junctions.filter(SIGNAL_FILTERS[sig.filter].test).slice(0, 12)
@@ -238,7 +272,7 @@ export default function Sidebar({
         <p className="sub">Pomiary ruchu — przeglądarka map</p>
       </header>
 
-      <Search data={data} markers={markers} onSelect={onSelect} />
+      <Search data={data} markers={markers} onSelect={onSelect} view={view} setView={setView} />
 
       {/* ------------------------------------------------------ main controls */}
       <Panel title="Okres" help={(
@@ -261,8 +295,8 @@ export default function Sidebar({
         {gaps.length > 0 && !wholeDay && (
           <p className="warn">
             {gaps.join(', ')}: pomiar tylko
-            w szczytach — wybrany okres wychodzi poza paski pomiaru, więc sumy
-            nie są porównywalne z ruchem drogowym.{' '}
+            w szczytach — wybrany okres wychodzi poza paski pomiaru, więc część
+            jego godzin nie była mierzona.{' '}
             <button type="button" className="link" onClick={() => setWholeDay(true)}>
               Szacuj całą dobę
             </button>
@@ -270,55 +304,88 @@ export default function Sidebar({
         )}
       </Panel>
 
-      <Panel title="Co pokazać">
-        {Object.entries(LAYERS).filter(([k]) => k !== 'survey' || data.survey).map(([k, v]) => (
-          <Option key={k} checked={!!visible[k]} label={v.label} swatch={v.color}
-            count={COUNTS[k](data)}
-            onChange={() => setVisible({ ...visible, [k]: !visible[k] })} />
-        ))}
+      <Panel title="Co pokazać" help={(
+        <>
+          <p>
+            Każdy widok to jedno badanie KBR: własna jednostka, godziny i zasięg.
+            Liczby z różnych badań nie są porównywalne — pojazdy na przekrojach
+            drogowych to nie pasażerowie na kilku przystankach — więc mapa
+            pokazuje jedno naraz.
+          </p>
+          <p>
+            <b>Węzły</b> to jedyne miejsce, gdzie badania się spotykają, celowo
+            i w jednej jednostce — osobach. Przekroje jednego punktu łączą się
+            w węzeł, a punkt pomiaru komunikacji zbiorowej do 150 m dalej daje
+            mu napełnienie: autobusy i tramwaje to pojazdy z przekrojów
+            drogowych × pasażerowie na pojazd zmierzeni na miejscu (bez pary —
+            średnia z pomiarów KBR).
+          </p>
+          <p>
+            W 10 węzłach przekroje leżą po obu stronach jednego skrzyżowania —
+            tam suma liczy jadących na wprost podwójnie (dymek to sygnalizuje),
+            ale udziały pozostają porównywalne.
+          </p>
+        </>
+      )}>
+        <div className="views" role="radiogroup" aria-label="Widok">
+          {Object.entries(VIEWS).map(([k, v]) => (
+            <label key={k} className={view === k ? 'view on' : 'view'}>
+              <input type="radio" name="view" checked={view === k}
+                onChange={() => setView(k)} />
+              <i className={v.split ? 'view-mark pie' : 'view-mark'}
+                style={{ '--c': v.color }} />
+              <span className="view-text">
+                <b>{v.label}</b>
+                <em>{v.sub}</em>
+              </span>
+              {!v.split && <small>{v.layers.reduce((a, l) => a + COUNTS[l](data), 0)}</small>}
+            </label>
+          ))}
+        </div>
+
+        {/* options that mean something only in the chosen view */}
+        {view === 'road' && (
+          <>
+            <Option checked={roadPeople} onChange={() => setPeople(!roadPeople)}
+              label="Licz osoby w samochodach, nie pojazdy"
+              help={(
+                <>
+                  <p>
+                    Samochody osobowe są mnożone przez napełnienie (domyślnie{' '}
+                    {data.meta.carOccupancy.default} os./poj., zmienisz je
+                    w ustawieniach zaawansowanych).
+                  </p>
+                  <p>
+                    Dostawczych i ciężarowych nie przeliczamy — KBR nie bada ich
+                    napełnienia. Pasażerowie autobusów i tramwajów są w widoku
+                    węzłów.
+                  </p>
+                  <p>{data.meta.carOccupancy.note}</p>
+                </>
+              )} />
+            <Field label="Kategorie pojazdów">
+              <select value={metric} aria-label="Kategorie pojazdów" disabled={roadPeople}
+                onChange={(e) => setMetric(e.target.value)}>
+                {Object.entries(ROAD_METRICS).map(([k, v]) => (
+                  <option key={k} value={k}>{v.label}</option>
+                ))}
+              </select>
+            </Field>
+          </>
+        )}
+        {['road', 'pt', 'active'].includes(view) && (
+          <Option checked={aggregate} onChange={() => setAggregate(!aggregate)}
+            label="Punkty jako całość — sumuj przekroje"
+            help={(
+              <p>
+                Przekroje jednego punktu (KW_08<b>A</b>, KW_08<b>B</b>…) to osobne
+                wloty, jezdnie lub strony ulicy w tym samym miejscu. Razem dają
+                ruch przez punkt; osobno — każdy we własnym położeniu.
+              </p>
+            )} />
+        )}
 
         <div className="divider" />
-
-        <Option checked={people} onChange={() => setPeople(!people)}
-          label="Licz ludzi, nie pojazdy"
-          help={(
-            <>
-              <p>
-                Samochody osobowe są mnożone przez napełnienie (domyślnie{' '}
-                {data.meta.carOccupancy.default} os./poj., zmienisz je
-                w ustawieniach zaawansowanych).
-              </p>
-              <p>
-                Dostawczych i ciężarowych nie przeliczamy — KBR nie bada ich
-                napełnienia. Pasażerowie autobusów i tramwajów są liczeni osobno,
-                w swojej warstwie.
-              </p>
-              <p>{data.meta.carOccupancy.note}</p>
-            </>
-          )} />
-
-        <Option checked={aggregate} onChange={() => setAggregate(!aggregate)}
-          label="Węzły jako całość — podział modalny"
-          help={(
-            <>
-              <p>
-                Przekroje jednego punktu (KW_08<b>A</b>, KW_08<b>B</b>…) łączą się
-                w jeden węzeł, rysowany jako wykres kołowy podziału modalnego
-                w osobach.
-              </p>
-              <p>
-                Węzeł drogowy i punkt pomiaru komunikacji zbiorowej leżące do
-                150 m od siebie łączą się w jeden znacznik. Autobusy i tramwaje to
-                wtedy pojazdy z przekrojów drogowych × napełnienie zmierzone na
-                miejscu; bez pary — średnie napełnienie z pomiarów KBR.
-              </p>
-              <p>
-                W 10 węzłach przekroje leżą po obu stronach jednego skrzyżowania —
-                tam suma liczy jadących na wprost podwójnie (dymek to sygnalizuje),
-                ale udziały pozostają porównywalne.
-              </p>
-            </>
-          )} />
 
         <Field label="Etykiety na mapie" help={(
           <p>
@@ -334,32 +401,53 @@ export default function Sidebar({
             <option value="pct">Zawsze — udziały (%)</option>
           </select>
         </Field>
-        {labels.mode === 'pct' && !aggregate && (
+        {labels.mode === 'pct' && !V.split && (
           <p className="warn">
-            Udziały są liczone dla węzłów.{' '}
-            <button type="button" className="link" onClick={() => setAggregate(true)}>
-              Włącz węzły
+            Udziały opisują podział modalny, więc są tylko w widoku węzłów.{' '}
+            <button type="button" className="link" onClick={() => setView('nodes')}>
+              Pokaż węzły
             </button>
           </p>
+        )}
+
+        {data.survey && (
+          <>
+            <div className="divider" />
+            <Option checked={survey} onChange={() => setSurvey(!survey)}
+              label={LAYERS.survey.label} swatch={LAYERS.survey.color}
+              count={COUNTS.survey(data)} />
+          </>
         )}
       </Panel>
 
       {/* ------------------------------------------------------------ results */}
       <Panel title={`Wyniki — ${period}`}>
         <div className="totals">
-          <div>
-            <span>{people ? 'Osoby w samochodach osobowych' : 'Pojazdy'}</span>
-            <b>{fmt(totals.road)}</b>
-          </div>
-          <div><span>Pasażerowie autobusów i tramwajów</span><b>{fmt(totals.pt)}</b></div>
-          <div><span>Rowerzyści (punkty rowerowe)</span><b>{fmt(totals.bike)}</b></div>
-          <div><span>Piesi (punkty piesze)</span><b>{fmt(totals.ped)}</b></div>
+          {totals.map((r) => (
+            <div key={r.key}>
+              <span><i className="swatch" style={{ background: r.color }} />{r.label}</span>
+              <b>
+                {r.est ? fmtEst(r.v) : fmt(r.v)}
+                {V.split && totalSum > 0 && <em> · {Math.round((100 * r.v) / totalSum)}%</em>}
+              </b>
+            </div>
+          ))}
         </div>
-        <h3>{topAll ? 'Najwięcej osób w węzłach — wszystkie środki' : 'Najwyższe natężenia na drogach'}</h3>
+        {V.split && (
+          <p className="hint">
+            Suma po wszystkich węzłach: kto przejeżdża przez kilka węzłów, jest
+            liczony w każdym z nich.
+          </p>
+        )}
+        <h3>
+          {RANK_TITLE[view]
+            || (people ? 'Najwięcej osób w samochodach' : 'Najwyższe natężenia na drogach')}
+        </h3>
         <ol className="top">
           {top.map((m) => (
-            <li key={m.id} className={selected?.id === m.id ? 'on' : ''}
-              {...activate(() => onSelect({ kind: 'road', id: m.id, ref: m.ref }))}>
+            <li key={`${m.kind}:${m.id}`}
+              className={selected?.kind === m.kind && selected?.id === m.id ? 'on' : ''}
+              {...activate(() => onSelect({ kind: m.kind, id: m.id, ref: m.ref }))}>
               <span>{m.title}</span>
               <em>{m.sub}</em>
               <b>{headline(m, people) !== m.value ? fmtEst(headline(m, people)) : fmt(m.value)}</b>
@@ -538,19 +626,12 @@ export default function Sidebar({
             label="Ukrywaj nakładające się etykiety" />
         )}
 
-        <Field label="Ruch drogowy — co liczyć" help={(
+        <Field label="Obszary — przekroje drogowe" help={(
           <p>
-            Wybór kategorii pojazdów dla warstwy ruchu drogowego. Przy włączonym
-            „Licz ludzi, nie pojazdy" liczone są zawsze samochody osobowe.
-            Obszary poniżej filtrują wyłącznie warstwę ruchu drogowego.
+            Obszary KBR, z których pokazywane są przekroje drogowe — w widoku
+            pomiarów drogowych i w węzłach. Pozostałych badań nie filtrują.
           </p>
         )}>
-          <select value={metric} aria-label="Ruch drogowy — co liczyć" disabled={people}
-            onChange={(e) => setMetric(e.target.value)}>
-            {Object.entries(ROAD_METRICS).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
           <div className="chips tight">
             {data.meta.areas.map((a) => {
               const on = !areas || areas.includes(a)

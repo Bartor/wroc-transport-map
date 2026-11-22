@@ -570,6 +570,30 @@ select {
 .subnav .tab-group.pt .tab b { border-radius: 6px; background: #2b4a5e; }
 .subnav .tab-group.pt .tab.on b { background: #2e86ab; }
 
+/* ----------------------------------------------------------- view picker */
+.views { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .6rem; }
+.view {
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: .65rem;
+  padding: .55rem .7rem; border-radius: 10px; cursor: pointer;
+  background: #1f232c; border: 1px solid var(--line);
+}
+.view:hover { border-color: #4a5263; }
+.view.on { background: #26324a; border-color: #4a6ea9; }
+.view input { position: absolute; opacity: 0; pointer-events: none; }
+.view:has(input:focus-visible) { outline: 2px solid #8fb3ff; outline-offset: 2px; }
+.view-mark {
+  width: 16px; height: 16px; border-radius: 50%; background: var(--c);
+  box-shadow: 0 0 0 2px #14161a, 0 0 0 3px #4a5263;
+}
+.view.on .view-mark { box-shadow: 0 0 0 2px #14161a, 0 0 0 3px #cfe0ff; }
+.view-mark.pie { background: conic-gradient(#e4572e 0 45%, #79c7ee 0 80%, #2e86ab 0 95%, #3fa34d 0); }
+.view-text { display: flex; flex-direction: column; min-width: 0; }
+.view-text b { font-size: .88rem; font-weight: 600; }
+.view-text em { font-style: normal; font-size: .74rem; color: var(--dim); line-height: 1.35; }
+.view small { font-size: .74rem; color: var(--dim); font-variant-numeric: tabular-nums; }
+.totals span .swatch { margin-right: .45rem; }
+.totals b em { font-style: normal; font-weight: 400; color: var(--dim); }
+
 /* ================================================================== phones */
 @media (max-width: 760px) {
   html, body, #root { height: 100%; overflow: hidden; }

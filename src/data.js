@@ -36,6 +36,46 @@ export const LAYERS = {
   survey: { label: 'Adresy z próby ankietowej', color: '#8d99ae', unit: 'adresów' },
 }
 
+// What the map shows: one survey at a time. The layers come from separate
+// surveys with their own units, hours and coverage - vehicles on road
+// cross-sections, passengers at a sample of stops, cyclists and pedestrians in
+// the peaks, trains at the city boundary - so their sizes are not comparable
+// and they are not drawn together. The node view is the one place they meet,
+// on purpose and in one unit: people, from the road counts plus the transit
+// survey's load per vehicle.
+export const VIEWS = {
+  nodes: {
+    label: 'Węzły — podział modalny',
+    sub: 'osoby przez węzeł: ruch drogowy z napełnieniem pojazdów',
+    layers: ['road', 'pt'], split: true, color: '#e4572e',
+  },
+  road: {
+    label: 'Pomiary drogowe',
+    sub: 'pojazdy liczone na przekrojach (zał. 3.3)',
+    layers: ['road'], color: LAYERS.road.color,
+  },
+  pt: {
+    label: 'Potoki pasażerskie',
+    sub: 'pasażerowie na badanych przystankach (zał. 6.4)',
+    layers: ['pt'], color: LAYERS.pt.color,
+  },
+  active: {
+    label: 'Rowery i piesi',
+    sub: 'liczeni w szczytach 6–10 i 15–19 (zał. 3.4, 3.5)',
+    layers: ['bike', 'ped'], color: LAYERS.bike.color,
+  },
+  rail: {
+    label: 'Pociągi — kordon kolejowy',
+    sub: 'pasażerowie w pociągach na granicy miasta (zał. 7.1)',
+    layers: ['rail'], color: LAYERS.rail.color,
+  },
+}
+
+/** The view that shows a given layer best, for search results outside the
+ *  current one. */
+export const viewOf = (kind, current) => (VIEWS[current]?.layers.includes(kind) ? current
+  : { road: 'road', pt: 'pt', bike: 'active', ped: 'active', rail: 'rail' }[kind] || current)
+
 // A period is a range of hour boundaries [from, to), 0..24. from > to wraps
 // over midnight. The presets are just named ranges on the same control.
 export const PRESETS = {
@@ -292,14 +332,13 @@ export function rangeLabel(range) {
  *  a row highlighted nothing.
  */
 export function buildMarkers(data, {
-  visible, hours, metric, areas, aggregate, wholeDay, people, occupancy,
+  visible, hours, metric, areas, aggregate, split, wholeDay, people, occupancy,
 }) {
   const catOrder = data.meta.vehCatOrder
   const out = {}
-  // In node mode a road pie takes its bus and tram passengers from the transit
-  // node next to it, so the transit nodes are needed even when that layer is
-  // hidden - otherwise the same pie would change composition with a checkbox.
-  const want = aggregate && visible.road ? { ...visible, pt: true } : visible
+  // `aggregate` sums a point's sections into one marker; `split` also turns
+  // nodes into modal-split pies, which needs the transit nodes for their load.
+  const want = split && visible.road ? { ...visible, pt: true } : visible
 
   if (want.road) {
     const cats = activeCats(metric, people)
@@ -347,7 +386,7 @@ export function buildMarkers(data, {
     }
     if (aggregate && k !== 'rail') out[k] = mergeToPoints(k, out[k])
   }
-  if (aggregate) {
+  if (split) {
     attachSplits(data, out, {
       hours, occupancy: occupancy ?? data.meta.carOccupancy.default, pair: !!visible.road,
     })
@@ -435,8 +474,9 @@ export function familyOf(data, markers, sel) {
   if (!FAMILY_SOURCE[kind] || !ref) return null
   const parent = ref.aggregate ? ref.id : parentOf(kind, ref)
   const idx = markerIndex(markers)
-  // only pies are nodes; with points drawn apart, markers are plain sections
-  let node = [idx[`${kind}:${parent}`], idx[`${kind}:${ref.id}`]].find((m) => m?.split) || null
+  // a node is a pie or a merged point; drawn apart, markers are plain sections
+  let node = [idx[`${kind}:${parent}`], idx[`${kind}:${ref.id}`]]
+    .find((m) => m?.split || m?.ref?.aggregate) || null
   if (!node && kind === 'pt') {
     node = (markers.road || []).find((r) => r.pair?.refs.some((x) => x.id === ref.id)) || null
   }

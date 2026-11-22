@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   loadAll, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, hoursOf, periodShare, buildMarkers,
-  familyOf,
+  familyOf, VIEWS,
 } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
@@ -12,15 +12,14 @@ import { DEFAULT_BASEMAP } from './basemaps'
 export default function App() {
   const [data, setData] = useState(null)
   const [error, setError] = useState(null)
-  const [visible, setVisible] = useState({
-    road: true, pt: true, bike: false, ped: false, rail: false, survey: false,
-  })
+  const [view, setView] = useState('nodes')         // one survey at a time, see VIEWS
+  const [survey, setSurvey] = useState(false)       // survey addresses overlay
   const [range, setRange] = useState(PRESETS.am.range) // [from, to) hours, may wrap
   const [metric, setMetric] = useState('all')
   const [areas, setAreas] = useState(null) // null = all
-  const [aggregate, setAggregate] = useState(true)     // nodes as modal-split pies
+  const [aggregate, setAggregate] = useState(true)     // a point's sections as one
   const [wholeDay, setWholeDay] = useState(false)   // expand peak-only counts
-  const [people, setPeople] = useState(true)        // people, not vehicles
+  const [roadPeople, setPeople] = useState(true)    // road view: car occupants, not vehicles
   const [occupancy, setOccupancy] = useState(null)  // set from meta on load
   const [net, setNet] = useState({ on: false, mode: 'road', min: 3000 })
   const [basemap, setBasemap] = useState(DEFAULT_BASEMAP)
@@ -51,13 +50,30 @@ export default function App() {
   )
   const period = rangeLabel(range)
 
+  // Everything below follows from the view: which layers are drawn, whether
+  // nodes are pies, and the unit. Pies are always in people.
+  const v = VIEWS[view]
+  const visible = useMemo(() => ({
+    ...Object.fromEntries(Object.keys(LAYERS).map((k) => [k, v.layers.includes(k)])),
+    survey,
+  }), [v, survey])
+  const split = !!v.split
+  const merged = split || aggregate
+  const people = split || roadPeople
+
+  // Switching views drops a selection the new view does not draw.
+  const changeView = (next) => {
+    setView(next)
+    if (selected && !VIEWS[next].layers.includes(selected.kind)) setSelected(null)
+  }
+
   // One marker list for the map and the sidebar, so a click in either always
   // refers to the same object.
   const markers = useMemo(
     () => (data ? buildMarkers(data, {
-      visible, hours, metric, areas, aggregate, wholeDay, people, occupancy,
+      visible, hours, metric, areas, aggregate: merged, split, wholeDay, people, occupancy,
     }) : {}),
-    [data, visible, hours, metric, areas, aggregate, wholeDay, people, occupancy],
+    [data, visible, hours, metric, areas, merged, split, wholeDay, people, occupancy],
   )
 
   // The point the selection belongs to, shared by the map and the panel.
@@ -72,12 +88,13 @@ export default function App() {
   return (
     <div className="app">
       <Sidebar
-        data={data} visible={visible} setVisible={setVisible}
+        data={data} view={view} setView={changeView} visible={visible}
+        survey={survey} setSurvey={setSurvey}
         range={range} setRange={setRange}
         metric={metric} setMetric={setMetric} areas={areas} setAreas={setAreas}
         hours={hours} period={period} aggregate={aggregate} setAggregate={setAggregate}
         wholeDay={wholeDay} setWholeDay={setWholeDay}
-        people={people} setPeople={setPeople}
+        people={people} roadPeople={roadPeople} setPeople={setPeople}
         occupancy={occupancy} setOccupancy={setOccupancy}
         net={net} setNet={setNet} basemap={basemap} setBasemap={setBasemap}
         sig={sig} setSig={setSig} labels={labels} setLabels={setLabels}
@@ -86,7 +103,7 @@ export default function App() {
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
-        areas={areas} period={period} aggregate={aggregate}
+        areas={areas} period={period} aggregate={merged}
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
         selected={selected} onSelect={select} family={family}
