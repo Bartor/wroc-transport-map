@@ -122,6 +122,50 @@ const Breakdown = ({ title, obj, total }) => {
   )
 }
 
+// Direction of travel as recorded: "W>E" (from west to east) or just "E".
+const ARROW = { N: '↑', S: '↓', E: '→', W: '←', NE: '↗', NW: '↖', SE: '↘', SW: '↙' }
+const dirLabel = (d) => {
+  const to = d.includes('>') ? d.split('>')[1] : d
+  return `${ARROW[to] || ''} ${d.replace('>', ' → ')}`.trim()
+}
+
+/**
+ * Each section's directions side by side for the period: one bar per
+ * section, split between its two directions. Shows tidal flows - a street
+ * busy inbound in the morning and outbound in the afternoon - that a single
+ * total hides. One-way sections have a single segment.
+ */
+function DirSplit({ title, rows }) {
+  const shown = rows.filter((r) => r.dirs.some((d) => d.v > 0))
+  if (!shown.length) return null
+  return (
+    <div className="dirsplit">
+      <h4>{title}</h4>
+      {shown.map((r) => {
+        const sum = r.dirs.reduce((a, d) => a + d.v, 0)
+        return (
+          <div key={r.id} className="dir-row">
+            <b>{r.letter}</b>
+            <span className="dir-name" title={r.id}>{r.name}</span>
+            <div className="dir-bar">
+              {r.dirs.map((d, i) => (
+                <i key={d.key} className={i ? 'b' : 'a'} style={{ flexGrow: d.v }} />
+              ))}
+            </div>
+            <div className="dir-vals">
+              {r.dirs.map((d, i) => (
+                <span key={d.key} className={i ? 'b' : 'a'}>
+                  {dirLabel(d.key)} <b>{fmt(d.v)}</b> · {sum ? Math.round((100 * d.v) / sum) : 0}%
+                </span>
+              ))}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 const GEO_NOTE = {
   intersections: 'położenie wyliczone ze skrzyżowań opisanych w kolumnie „Odcinek”',
   'one-intersection': 'położenie przybliżone — rozpoznano jedno skrzyżowanie',
@@ -328,6 +372,47 @@ export default function Details({
     ? (people ? 'osób w samochodach osobowych' : `pojazdów — ${ROAD_METRICS[metric].label.toLowerCase()}`)
     : unitOf(k))
 
+  // A section's directions in the period, in the panel's unit. Road sections
+  // record each direction separately; cyclists and pedestrians by direction
+  // of travel. Transit directions are destinations, not ways along a street,
+  // so they are listed rather than split.
+  const dirsOf = (k, ref) => {
+    if (k === 'road') {
+      const sec = data.roadById[ref.id]
+      if (!sec) return []
+      const cats = activeCats(metric, people)
+      const keep = cats
+        ? cats.map((c) => catOrder.indexOf(c)).filter((i) => i >= 0)
+        : catOrder.map((_, i) => i)
+      return Object.entries(sec.dirs).map(([d, dd]) => ({
+        key: d,
+        v: shown(hours.reduce((a, h) => a + keep.reduce((x, i) => x + (dd.h[h]?.[i] || 0), 0), 0), k),
+      }))
+    }
+    if (k === 'bike' || k === 'ped') {
+      return Object.entries(ref.byHourDir || {}).map(([d, arr]) => ({
+        key: d, v: shown(sumHours(arr, hours), k),
+      }))
+    }
+    return []
+  }
+  const dirRow = (k, m) => ({
+    id: m.id,
+    letter: sectionLetter(m.id) || '—',
+    name: k === 'road' ? m.name : sectionOf(k, m) || m.name,
+    dirs: dirsOf(k, m),
+  })
+  // transit passengers by destination or line, summed over hours and sections
+  const perPeriod = (refs, field) => {
+    const out = {}
+    for (const r of refs) {
+      for (const [key, arr] of Object.entries(r[field] || {})) {
+        out[key] = (out[key] || 0) + shown(sumHours(arr, hours), 'pt')
+      }
+    }
+    return out
+  }
+
   // Each piece's share of its own group in the period, for the tabs and the
   // piece view. Same metric and units as everything else in the panel.
   const fam = family && onSelect ? family : null
@@ -439,6 +524,17 @@ export default function Details({
         <h4>Profil dobowy — cały punkt</h4>
         <Profile values={total} hours={hours} color={color} />
         <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
+        {kind === 'pt' ? (
+          <>
+            <Breakdown title={`Kierunki (pasażerowie) — ${period}`}
+              obj={perPeriod(p.members, 'byHourDir')} />
+            <Breakdown title={`Linie (pasażerowie) — ${period}`}
+              obj={perPeriod(p.members, 'byHourLine')} />
+          </>
+        ) : (
+          <DirSplit title={`Kierunki przekrojów — ${period} (${unit(kind)})`}
+            rows={p.members.map((m) => dirRow(kind, m))} />
+        )}
       </>
     )
   } else if (kind === 'road') {
@@ -451,11 +547,8 @@ export default function Details({
       ? cats.map((c) => catOrder.indexOf(c)).filter((i) => i >= 0)
       : catOrder.map((_, i) => i)
     const byCat = {}
-    const byDir = {}
     if (sec) {
-      for (const [d, dd] of Object.entries(sec.dirs)) {
-        byDir[d.replace('>', ' → ')] = shown(
-          hours.reduce((a, h) => a + keep.reduce((x, i) => x + dd.h[h][i], 0), 0))
+      for (const dd of Object.values(sec.dirs)) {
         for (let h = 0; h < 24; h++) {
           if (!hours.includes(h)) continue
           for (const i of keep) {
@@ -497,7 +590,7 @@ export default function Details({
             : ROAD_METRICS[metric].label.toLowerCase()}
         </h4>
         <Profile values={prof} hours={hours} color={color} />
-        <Breakdown title={`Kierunki — ${period}`} obj={byDir} />
+        <DirSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]} />
         <Breakdown title={`Kategorie pojazdów — ${period}`} obj={byCat} />
         <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
       </>
@@ -519,9 +612,9 @@ export default function Details({
         </dl>
         <h4>Profil dobowy</h4>
         <Profile values={shape(p.byHour)} hours={hours} color={color} />
-        <Breakdown title={`Kierunki — ${period}`} obj={p.byHourDir
-          ? Object.fromEntries(Object.entries(p.byHourDir).map(([d, a]) => [d, shown(sumHours(a, hours))]))
-          : p.byDir} />
+        {p.byHourDir
+          ? <DirSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]} />
+          : <Breakdown title="Kierunki — cały pomiar" obj={p.byDir} />}
         <Breakdown title="Płeć — cały pomiar" obj={p.bySex} />
         {kind === 'bike' && <Breakdown title="Gdzie jadą — cały pomiar" obj={p.byPlace} />}
         {kind === 'bike' && <Breakdown title="Pojazd — cały pomiar" obj={p.byMode} />}
@@ -567,8 +660,8 @@ export default function Details({
         <h4>Profil dobowy — pasażerowie</h4>
         <Profile values={shape(prof)} hours={hours} color={color} />
         <Breakdown title={`Trakcja (liczba pojazdów) — ${period}`} obj={tractionNow} />
-        <Breakdown title="Linie (pasażerowie) — cały pomiar" obj={p.byLine} />
-        <Breakdown title="Kierunki (pasażerowie) — cały pomiar" obj={p.byDir} />
+        <Breakdown title={`Kierunki (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourDir')} />
+        <Breakdown title={`Linie (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourLine')} />
         <Breakdown title="Przewoźnicy (liczba pojazdów) — cały pomiar" obj={p.byCarrier} />
       </>
     )

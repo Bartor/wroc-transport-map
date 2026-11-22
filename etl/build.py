@@ -410,6 +410,7 @@ def stage_pt(idx, sidx):
             "h": collections.Counter(), "hveh": collections.Counter(),
             "traction": collections.Counter(), "line": collections.Counter(),
             "carrier": collections.Counter(), "dir": collections.Counter(),
+            "hdir": collections.Counter(), "hline": collections.Counter(),
             "board": 0, "alight": 0, "exch": 0,
             "pax": 0, "veh": 0, "load": [], "dates": set()})
         h = r[13] if isinstance(r[13], int) else hour_of(r[14])
@@ -425,10 +426,14 @@ def stage_pt(idx, sidx):
         s["traction"][tr] += 1
         if txt(r[17]):
             s["line"][txt(r[17])] += pax
+            if h is not None:
+                s["hline"][(h, txt(r[17]))] += pax
         if txt(r[20]):
             s["carrier"][txt(r[20])] += 1
         if txt(r[19]):
             s["dir"][txt(r[19])] += pax
+            if h is not None:
+                s["hdir"][(h, txt(r[19]))] += pax
         if h is not None:
             s["h"][(h, tr)] += pax
             s["hveh"][(h, tr)] += 1
@@ -440,6 +445,17 @@ def stage_pt(idx, sidx):
             v = num(r[col])
             if v is not None:
                 s[key] += v
+
+    def hourly(by_hour, totals, top):
+        """Passengers per hour for the `top` biggest keys, the rest as "inne",
+        so a period's breakdown adds up to its total."""
+        keep = [k for k, _ in totals.most_common(top)]
+        out = {k: [round(by_hour.get((h, k), 0)) for h in range(24)] for k in keep}
+        rest = [round(sum(v for (hh, k), v in by_hour.items() if hh == h and k not in keep))
+                for h in range(24)]
+        if any(rest):
+            out["inne"] = rest
+        return out
 
     out = []
     for sid, s in sorted(secs.items()):
@@ -458,6 +474,9 @@ def stage_pt(idx, sidx):
             "byCarrier": dict(s["carrier"].most_common(8)),
             "byLine": dict(s["line"].most_common(15)),
             "byDir": dict(s["dir"].most_common(10)),
+            # per hour, so the panel can split the selected period
+            "byHourDir": hourly(s["hdir"], s["dir"], 10),
+            "byHourLine": hourly(s["hline"], s["line"], 15),
             "boarded": round(s["board"]) or None,
             "alighted": round(s["alight"]) or None,
         })
