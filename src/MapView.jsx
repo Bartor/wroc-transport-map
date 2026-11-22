@@ -102,7 +102,7 @@ function NodeLabels({ entries, declutter }) {
 const isPhone = () => typeof window !== 'undefined'
   && window.matchMedia('(max-width: 760px)').matches
 
-function MapLegend({ visible, net, sig, pies }) {
+function MapLegend({ visible, net, sig, pies, people }) {
   // collapsible; on a phone it starts folded, since it would cover the map
   const [open, setOpen] = useState(() => !isPhone())
   const layers = Object.entries(LAYERS).filter(([k]) => visible[k] && k !== 'survey')
@@ -134,7 +134,9 @@ function MapLegend({ visible, net, sig, pies }) {
         <span key={l.label}><i className="line" style={{ background: l.color }} />{l.label}</span>
       ))}
       <span className="legend-note">
-        {pies ? 'wielkość koła = liczba osób w węźle' : 'wielkość znacznika = natężenie'}
+        {pies ? 'wielkość koła = liczba osób w węźle'
+          : people ? 'wielkość znacznika = liczba osób, wspólna skala'
+            : 'wielkość znacznika = natężenie, osobno dla każdej warstwy'}
       </span>
     </div>
   )
@@ -180,22 +182,28 @@ export default function MapView({
   // Radius per marker, needed both to draw it and to offset its label.
   // A pie shows everyone passing the node, so it is sized by everyone - not by
   // the road layer's own value, which in people mode is car occupants only and
-  // made transit-heavy nodes look small. Road and transit pies share one scale
-  // because both are in people.
+  // made transit-heavy nodes look small.
+  //
+  // When counting people every layer is in people, so pies and plain circles
+  // all share one scale. Sized per layer instead, a stop's circle was measured
+  // against the busiest interchange and a road's against the busiest road, and
+  // transit looked small next to roads only to jump in size as a pie.
+  // Counting vehicles, the layers have different units and keep their own.
   const radii = useMemo(() => {
     const r = {}
-    const pieMax = Math.max(1, ...Object.values(markers).flat()
-      .filter((m) => m.split).map((m) => splitTotal(m.split)))
+    const size = (m) => (m.split ? splitTotal(m.split) : m.value)
+    const all = Object.values(markers).flat()
+    const common = Math.max(1, ...all.filter((m) => people || m.split).map(size))
     for (const [kind, list] of Object.entries(markers)) {
-      const max = Math.max(1, ...list.map((m) => m.value))
+      const own = Math.max(1, ...list.map((m) => m.value))
       for (const m of list) {
-        r[`${kind}:${m.id}`] = m.split
-          ? radius(splitTotal(m.split), pieMax, 7, 24)
-          : radius(m.value, max)
+        r[`${kind}:${m.id}`] = people || m.split
+          ? radius(size(m), common, m.split ? 7 : 4, 24)
+          : radius(m.value, own)
       }
     }
     return r
-  }, [markers])
+  }, [markers, people])
 
   const pies = Object.values(markers).some((list) => list.some((m) => m.split))
 
@@ -335,11 +343,13 @@ export default function MapView({
           </LayerGroup>
         ))}
 
+        <SectionDots family={family} selected={selected} onSelect={onSelect} />
+
         {labels.mode !== 'hover' && (
           <NodeLabels entries={labelEntries} declutter={labels.declutter} />
         )}
       </MapContainer>
-      <MapLegend visible={visible} net={net} sig={sig} pies={pies} />
+      <MapLegend visible={visible} net={net} sig={sig} pies={pies} people={people} />
     </div>
   )
 }
