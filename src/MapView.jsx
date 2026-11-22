@@ -34,8 +34,11 @@ function FlyToSelection({ selected, index }) {
     const size = map.getSize()
     if (!size.x || !size.y) return
     // On phones the details sheet covers the bottom of the map, so aim for
-    // the middle of the strip above it.
-    const cover = isPhone() ? document.querySelector('.details')?.offsetHeight || 0 : 0
+    // the middle of the strip above it. The panel loads on its own; when it
+    // is not there yet (a link opened cold), assume its full 72% height.
+    const cover = isPhone()
+      ? document.querySelector('.details')?.offsetHeight || Math.round(window.innerHeight * 0.72)
+      : 0
     const at = map.latLngToContainerPoint([m.lat, m.lon])
     const padX = size.x * 0.15
     const padY = (size.y - cover) * 0.15

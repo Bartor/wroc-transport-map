@@ -38,8 +38,22 @@ const NO_OFF = new Set()
  *
  * Hovering a piece here lights up its dot on the map, and the other way round.
  */
+const PHONE = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches
+
 function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
   const { node, groups, current } = family
+  // On a phone twelve rows fill the sheet before the split is in sight, so
+  // groups start folded - unless they hold the open piece or a left-out one.
+  const [shut, setShut] = useState(() => new Set(PHONE ? groups
+    .filter((g) => current?.kind !== g.kind
+      && !g.members.some((m) => off.has(pieceKey(g.kind, m.id))))
+    .map((g) => g.kind) : []))
+  const fold = (kind) => setShut((s) => {
+    const n = new Set(s)
+    if (n.has(kind)) n.delete(kind)
+    else n.add(kind)
+    return n
+  })
   const toNode = () => onSelect({ kind: node.kind, id: node.id, ref: node.ref })
   const isOn = (kind, id) => current?.kind === kind && current.id === id
   // leaving pieces out only means something when they add up to a node
@@ -69,7 +83,12 @@ function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
           <div key={g.kind} className={`tree-group ${g.kind}${node ? ' nested' : ''}`}>
             {(groups.length > 1 || node) && (
               <h5>
-                <span>{GROUP_LABEL[g.kind]}</span>
+                <button type="button" className="fold" aria-expanded={!shut.has(g.kind)}
+                  onClick={() => fold(g.kind)}>
+                  <i className={shut.has(g.kind) ? 'chevron' : 'chevron open'}>▸</i>
+                  {GROUP_LABEL[g.kind]}
+                  <em>{left < keys.length ? `${left} z ${keys.length}` : keys.length}</em>
+                </button>
                 {can && left < keys.length && (
                   <button type="button" onClick={() => toggleOff(keys, false)}>
                     wlicz wszystkie
@@ -77,7 +96,7 @@ function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
                 )}
               </h5>
             )}
-            <ul>
+            {!shut.has(g.kind) && <ul>
               {g.members.map((m, i) => {
                 const out = can && off.has(keys[i])
                 const last = !out && left === 1 && g.kind === node.kind
@@ -105,7 +124,7 @@ function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
                   </li>
                 )
               })}
-            </ul>
+            </ul>}
           </div>
         )
       })}

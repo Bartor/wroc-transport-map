@@ -555,12 +555,20 @@ select option { background: #232733; color: var(--text); }
   font-size: .68rem; font-weight: 600; letter-spacing: .06em;
   text-transform: uppercase; color: var(--dim);
 }
-.tree-group h5 span { flex: 1; }
-.tree-group h5 button {
+.tree-group h5 .fold {
+  flex: 1; display: flex; align-items: baseline; gap: .4rem; text-align: left;
+  background: none; border: 0; padding: 0; cursor: pointer; color: inherit;
+  font: inherit; letter-spacing: inherit; text-transform: inherit;
+}
+.tree-group h5 .fold em { font-style: normal; color: #6b7385; letter-spacing: 0; }
+.tree-group h5 .chevron { font-style: normal; display: inline-block; transition: transform .15s; }
+.tree-group h5 .chevron.open { transform: rotate(90deg); }
+.tree-group h5 button:not(.fold) {
   background: none; border: 0; padding: 0; cursor: pointer; color: #8fb3ff;
   font-size: .72rem; letter-spacing: 0; text-transform: none; font-weight: 400;
 }
-.tree-group h5 button:hover { text-decoration: underline; }
+.tree-group h5 button:not(.fold):hover { text-decoration: underline; }
+@media (hover: none) { .tree-group h5 .fold { padding: .35rem 0; } }
 .tree ul { list-style: none; margin: 0; padding: 0; }
 .tree li { display: flex; align-items: center; gap: .15rem; }
 .tree li input.check { margin: 0 .15rem 0 .25rem; }
@@ -762,3 +770,7 @@ select option { background: #232733; color: var(--text); }
 
 /* table download under the results */
 .link.csv { display: block; margin: .2rem 0 .8rem; font-size: .8rem; }
+
+/* Recharts makes its SVG focusable and draws a box round it on click; the
+   charts here are not keyboard-operable, so the box only gets in the way */
+.recharts-wrapper:focus, .recharts-wrapper *:focus, .recharts-surface:focus { outline: none; }
