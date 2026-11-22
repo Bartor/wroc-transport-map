@@ -266,7 +266,7 @@ Dwie rzeczy, które łatwo zrobić źle:
   ulicach, a węzeł drogowy 4 przekroje. Strumień definiują przekroje drogowe
   (liczą autobusy i tramwaje jako pojazdy), a punkt KZ dostarcza tylko tego,
   jak bardzo te pojazdy są zapełnione. Przykład: na pl. Legionów w 15–17 punkt
-  KZ ma 19 082 pasażerów, z czego 13 271 na słupkach przy Piłsudskiego — ulicy,
+  KZ ma 19 082 pasażerów, z czego 13 884 na słupkach przy Piłsudskiego — ulicy,
   na której węzeł R1_03 nie ma przekroju. Ponadto pojazd, który zatrzymał się
   na dwóch badanych słupkach jednego punktu, jest w zał. 6.4 dwoma wierszami;
   ETL zapisuje takich pasażerów (`repeatByHour`: ten sam pojazd i linia na
