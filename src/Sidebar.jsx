@@ -9,6 +9,7 @@ import { BASEMAPS } from './basemaps'
 import HourRange from './HourRange'
 import { useSheetDrag } from './sheetDrag'
 import { markersTable, downloadCsv } from './csv'
+import About from './About'
 
 const slug = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
   .replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
@@ -215,6 +216,7 @@ export default memo(function Sidebar({
   net, setNet, nets, loadNet, basemap, setBasemap, sig, setSig, labels, setLabels,
   markers, onSelect, selected, sheetOpen, setSheetOpen,
 }) {
+  const [about, setAbout] = useState(false)   // the "O mapie" dialog
   const V = VIEWS[view]
   // phones: the sidebar is a bottom sheet, dragged by its header
   const sheet = useSheetDrag(sheetOpen, setSheetOpen)
@@ -288,9 +290,16 @@ export default memo(function Sidebar({
           </span>
           <span className={sheetOpen ? 'chevron open' : 'chevron'}>▴</span>
         </button>
-        <h1>KBR Wrocław 2024</h1>
+        <div className="title-row">
+          <h1>KBR Wrocław 2024</h1>
+          <button type="button" className="about-btn" onClick={() => setAbout(true)}
+            aria-haspopup="dialog" title="O mapie: metoda, terminy pomiarów, utrudnienia">
+            <span aria-hidden="true">?</span><em>O mapie i metodzie</em>
+          </button>
+        </div>
         <p className="sub">Pomiary ruchu — przeglądarka map</p>
       </header>
+      {about && <About data={data} onClose={() => setAbout(false)} />}
 
       <Search data={data} markers={markers} onSelect={onSelect} view={view} setView={setView} />
 
