@@ -734,6 +734,8 @@ export default function Details({
   const pill = kind === 'signal' ? (p.kind === 'crossing' ? 'przejście' : 'skrzyżowanie') : p.id
   const title = p.name || p.stop || p.stations?.join(' / ')
     || p.streets?.join(' × ') || 'sygnalizacja'
+  // where the survey's own description is wrong
+  if (p.correction) cardNotes.push(p.correction)
   if (scaled) {
     cardNotes.push(`Wartości przeliczone na całą dobę (×${exp.factor}, `
       + `${BASIS_LABEL[exp.basis]}) — pomiar obejmował tylko szczyty.`)
@@ -796,6 +798,7 @@ export default function Details({
           )}
         </Callout>
       )}
+      {p.correction && <Warn>{p.correction}</Warn>}
       {body}
       {scaled && (
         <Warn>

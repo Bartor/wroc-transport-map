@@ -13,6 +13,14 @@
     "RR_32B": "Kanal Zeglugowy embankment between the two cross streets",
     "RR_33": "snapped onto ul. Bora-Komorowskiego; the junction midpoint fell on al. Sobieskiego"
   },
+  "_movedWhy": "Transit sections 6.4 records at the wrong stop, with the stop they were counted at. R2_10B: filed under ul. Miedzyrzecka, poles 25503/25504 (bus 120 only, the nearest tram track 1.1 km away), but its rows are trams 3 and 5 and buses 114, 82, 810, 820. Their times fit Krakowska (Centrum Handlowe), poles 25003/25004, against three other counts: 1 min before and 2 after Armii Krajowej (R2_09B), 6 from Ksieze Male (R3_11A), 7 each way from pl. Wroblewskiego (R1_10A). The road count beside it, R2_14A, saw 154 trams in the same hours; this one has 135.",
+  "_moved": {
+    "R2_10B": {
+      "poles": ["25003", "25004"], "point": "R2_10B",
+      "stop": "Krakowska (Centrum Handlowe)", "loc": "Krakowska",
+      "note": "W KBR ten pomiar jest opisany jako Międzyrzecka (słupki 25503 i 25504), ale tramwaje tamtędy nie jeżdżą. Linie i godziny przejazdów pasują do przystanku Krakowska (Centrum Handlowe) (słupki 25003 i 25004), więc mapa pokazuje go tam. Autobusy zapisano niemal wyłącznie po południu, więc rano widać same tramwaje."
+    }
+  },
   "RR_08": [51.10497, 17.05151],
   "RR_11A": [51.116951, 17.021543],
   "RR_11B": [51.116951, 17.021543],

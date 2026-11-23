@@ -18,6 +18,12 @@ def load_overrides():
         return {k: v for k, v in json.load(open(OVERRIDES, encoding="utf8")).items() if not k.startswith("_")}
     return {}
 
+
+def load_moved():
+    """Transit sections 6.4 files at the wrong stop, see _movedWhy there."""
+    with open(OVERRIDES, encoding="utf8") as f:
+        return json.load(f).get("_moved", {})
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
 OUT = os.path.join(ROOT, "public", "data")
@@ -371,6 +377,7 @@ def stage_pt(idx, sidx):
     their own stop poles instead of joining on the id.
     """
     ov = load_overrides()
+    moved = load_moved()
     by_code, by_name = gtfs_stops()
 
     def mean(lls):
@@ -382,6 +389,9 @@ def stage_pt(idx, sidx):
         # name put some sections kilometres off.
         if sid in ov:
             return tuple(ov[sid]), "manual"
+        if sid in moved:
+            # no falling back to the recorded name: that is what is wrong
+            return mean([by_code[c] for c in moved[sid]["poles"]]), "moved"
         lls = [by_code[c] for c in s["poles"] if c in by_code]
         if lls:
             return mean(lls), "pole"
@@ -476,10 +486,17 @@ def stage_pt(idx, sidx):
     for sid, s in sorted(secs.items()):
         (lat, lon), how = where(sid, s)
         tract = sorted(s["traction"])
+        stop = s["stop"].most_common(1)[0][0] if s["stop"] else ""
+        point, name, loc, osiedle = s["point"], s["name"], s["loc"], s["osiedle"]
+        fix = moved.get(sid)
+        if fix:
+            # a point of its own: the rest of the recorded one is elsewhere
+            point, name, stop, loc = fix["point"], fix["stop"], fix["stop"], fix["loc"]
+            osiedle = ""
         out.append({
-            "id": sid, "point": s["point"], "name": s["name"], "loc": s["loc"],
-            "stop": s["stop"].most_common(1)[0][0] if s["stop"] else "",
-            "osiedle": s["osiedle"], "lat": lat, "lon": lon, "geo": how,
+            "id": sid, "point": point, "name": name, "loc": loc, "stop": stop,
+            "correction": fix["note"] if fix else None,
+            "osiedle": osiedle, "lat": lat, "lon": lon, "geo": how,
             "dates": sorted(x for x in s["dates"] if x),
             "pax": round(s["pax"]), "veh": s["veh"],
             "avgLoad": round(sum(s["load"]) / len(s["load"]), 4) if s["load"] else None,

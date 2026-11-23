@@ -319,6 +319,16 @@ tak rozwiązać (kładki, wały, promenady), mają współrzędne wpisane ręczn
 `etl/overrides.json` — tam też można poprawić każdy znacznik, który wygląda
 źle, i ponownie uruchomić `npm run etl`.
 
+Jeden pomiar z Zał. 6.4 jest przeniesiony, bo opis w KBR jest błędny: **R2_10B**
+zapisano przy ul. Międzyrzeckiej (słupki 25503/25504), gdzie tramwaje nie
+jeżdżą — do najbliższego torowiska jest 1,1 km — a wiersze zawierają tramwaje
+3 i 5 oraz autobusy 114, 82, 810 i 820. Godziny przejazdów pasują do przystanku
+Krakowska (Centrum Handlowe), słupki 25003/25004: 1 min przed i 2 min po
+pomiarze przy Armii Krajowej, 6 min od Księża Małego, 7 min od pl.
+Wróblewskiego. Przekrój drogowy R2_14A tuż obok zarejestrował w tych samych
+godzinach 154 tramwaje, ten pomiar — 135. Uzasadnienie jest w
+`etl/overrides.json` (`_moved`), a panel punktu o tym informuje.
+
 Numeracja punktów w Zał. 6.4 (komunikacja zbiorowa) jest **niezależna** od
 numeracji przekrojów drogowych mimo tych samych prefiksów: `KW_01` to
 „Pracze Odrzańskie" w pomiarach pasażerskich i „ul. Kamieńskiego" w pomiarach
