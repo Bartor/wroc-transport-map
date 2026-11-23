@@ -37,7 +37,10 @@ function count(n, [one, few, many]) {
 const SECTIONS = ['przekrój', 'przekroje', 'przekrojów']
 const STATIONS = ['stacja', 'stacje', 'stacji']
 
-const points = (kind, list) => new Set(list.map((x) => parentOf(kind, x))).size
+// points as the survey numbers them: a section moved to where it was counted
+// stands apart on the map, but is still a section of its point here
+const points = (kind, list) => new Set(list.map((x) => (x.correction
+  ? x.id.replace(/[A-Z]$/, '') : parentOf(kind, x)))).size
 
 const REPO = 'https://github.com/Bartor/wroc-transport-map'
 
