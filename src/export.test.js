@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { buildMarkers } from './data'
-import { labelLines } from './pie'
+import { labelLines } from './labels'
 import { markersTable } from './csv'
 import { fixture, OPTS } from './fixture.test-data'
 

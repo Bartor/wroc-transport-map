@@ -1,14 +1,7 @@
 // What the map shows, as a table for a spreadsheet: one row per drawn point.
-// Semicolons and decimal commas, with a BOM, so Excel set to Polish opens
-// it as columns without an import dialog.
+import { csvNumber as num } from '@bartor-net/ui-kit'
 import { LAYERS, MODES, splitTotal, splitVehicles, splitShares } from './data'
 
-const num = (v, digits = 0) => (v == null || Number.isNaN(v) ? ''
-  : (digits ? v.toFixed(digits) : String(Math.round(v))).replace('.', ','))
-const cell = (v) => {
-  const s = v == null ? '' : String(v)
-  return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-}
 const sections = (m) => (m.ref.aggregate ? m.ref.members.map((r) => r.id).join(' ') : m.id)
 
 /** Rows of the drawn markers; node pies get a column per mode. */
@@ -61,16 +54,4 @@ export function markersTable({ markers, layers, period, people }) {
     return out
   })
   return [head, ...rows]
-}
-
-export function downloadCsv(table, filename) {
-  const text = `﻿${table.map((r) => r.map(cell).join(';')).join('\r\n')}\r\n`
-  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

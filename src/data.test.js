@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { pieceKey } from '@bartor-net/ui-kit'
 import {
   buildMarkers, familyOf, markerIndex, splitTotal, splitShares, thinText, bikeNote,
-  pieceKey, resolveTarget, PCU, carGap,
+  resolveTarget, PCU, carGap,
 } from './data'
 import { fixture, OPTS } from './fixture.test-data'
 

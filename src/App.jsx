@@ -1,14 +1,14 @@
 import {
   Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState,
 } from 'react'
+import { AppMessage, AppShell, ErrorBoundary, hoursOf } from '@bartor-net/ui-kit'
+import { BASEMAPS, DEFAULT_BASEMAP } from '@bartor-net/ui-kit/map'
 import {
-  loadAll, loadFile, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, hoursOf, periodShare,
+  loadAll, loadFile, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, periodShare,
   buildMarkers, familyOf, VIEWS, markerIndex, NET_MODES,
 } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
-import ErrorBoundary from './ErrorBoundary'
-import { BASEMAPS, DEFAULT_BASEMAP } from './basemaps'
 import { readHash, hashOf, findSelection } from './urlState'
 
 // The panel brings the charts library with it; nobody needs it before the
@@ -159,11 +159,11 @@ export default function App() {
     [data, markers, sel],
   )
 
-  if (error) return <div className="fatal">{error}</div>
-  if (!data) return <div className="fatal">Wczytywanie danych…</div>
+  if (error) return <AppMessage>{error}</AppMessage>
+  if (!data) return <AppMessage>Wczytywanie danych…</AppMessage>
 
   return (
-    <div className="app">
+    <AppShell>
       <Sidebar
         data={data} view={view} setView={changeView} visible={visible}
         survey={survey} setSurvey={setSurvey}
@@ -197,7 +197,7 @@ export default function App() {
           </Suspense>
         </ErrorBoundary>
       )}
-    </div>
+    </AppShell>
   )
 }
 

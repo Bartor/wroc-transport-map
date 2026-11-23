@@ -1,18 +1,18 @@
-import { memo, useMemo, useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import {
-  LAYERS, ROAD_METRICS, PRESETS, fmt, sameRange, coverageGap, BASIS_LABEL, NET_MODES,
-  resolveTarget, headline, fmtEst, VIEWS, viewOf,
+  Chips, Citation, CitePlace, Divider, Field, Hint, HourRange, InfoButton, IS_TOUCH, LegendRow,
+  LinkButton, Pair, Panel, RadioCards, RankList, SearchBox, Select, Sidebar as Shell, Slider,
+  TaggedList, Toggle, Totals, TotalsTable, Warn, downloadCsv, fmt, fmtEst, sameRange, slug,
+} from '@bartor-net/ui-kit'
+import { basemapOptions } from '@bartor-net/ui-kit/map'
+import {
+  LAYERS, ROAD_METRICS, PRESETS, coverageGap, BASIS_LABEL, NET_MODES,
+  resolveTarget, headline, VIEWS, viewOf, hourBands,
 } from './data'
 import { NETWORK_LEGEND } from './NetworkLayer'
-import { SIGNAL_FILTERS } from './SignalsLayer'
-import { BASEMAPS } from './basemaps'
-import HourRange from './HourRange'
-import { useSheetDrag } from './sheetDrag'
-import { markersTable, downloadCsv } from './csv'
+import { SIGNAL_FILTERS, signalId } from './SignalsLayer'
+import { markersTable } from './csv'
 import About from './About'
-
-const slug = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-  .replace(/ł/g, 'l').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 
 const COUNTS = {
   road: (d) => d.points.length,
@@ -22,9 +22,6 @@ const COUNTS = {
   rail: (d) => d.rail.length,
   survey: (d) => d.survey?.length ?? 0,
 }
-
-// Touch screens cannot hover, so hover-only wording is wrong there.
-const TOUCH = typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
 
 // What a view's totals and ranking are called.
 const TOTAL_LABEL = {
@@ -40,130 +37,28 @@ const RANK_TITLE = {
   rail: 'Kordony kolejowe',
 }
 
-// ---------------------------------------------------------------- building blocks
+// the node view's mark: a pie of the modes' own colours
+const PIE_MARK = 'conic-gradient(#e4572e 0 45%, #c98500 0 60%, #3987e5 0 95%, #0ca30c 0)'
 
-/** "?" that reveals the full explanation. The sidebar used to print every
- *  caveat in full, which buried the controls under paragraphs; the text is
- *  still one click away, next to the thing it explains. */
-function HelpButton({ open, onClick }) {
-  return (
-    <button type="button" className={open ? 'help-btn on' : 'help-btn'}
-      aria-expanded={open} aria-label="Wyjaśnienie" title="Wyjaśnienie" onClick={onClick}>
-      ?
-    </button>
-  )
-}
+const BASIS_TONE = { measured: 'good', derived: 'fair', assumed: 'weak' }
 
-function Panel({
-  title, help, collapsible = false, defaultOpen = true, badge, onOpen, children,
-}) {
-  const [open, setOpen] = useState(defaultOpen)
-  const [showHelp, setShowHelp] = useState(false)
-  return (
-    <section className={collapsible ? 'panel collapsible' : 'panel'}>
-      <div className="panel-head">
-        {collapsible ? (
-          <button type="button" className="collapse-head" aria-expanded={open}
-            onClick={() => { if (!open) onOpen?.(); setOpen(!open) }}>
-            <span className={open ? 'chevron open' : 'chevron'}>▸</span>
-            <h2>{title}</h2>
-            {badge != null && <span className="badge">{badge}</span>}
-          </button>
-        ) : <h2>{title}</h2>}
-        {help && <HelpButton open={showHelp} onClick={() => setShowHelp(!showHelp)} />}
-      </div>
-      {showHelp && <div className="info-body">{help}</div>}
-      {open && <div className="panel-body">{children}</div>}
-    </section>
-  )
-}
-
-/** A checkbox row with its own optional "?" explanation.
- *
- *  A layer (it has a colour) is a checkbox filled with that colour, which
- *  doubles as its legend swatch; a setting is drawn as a switch. Telling the two
- *  apart at a glance matters more than it seems: both used to look identical. */
-function Option({ checked, onChange, label, swatch, count, help, children }) {
-  const [showHelp, setShowHelp] = useState(false)
-  return (
-    <div className="opt">
-      <div className="opt-row">
-        <label className="row">
-          <input type="checkbox" checked={checked} onChange={onChange}
-            className={swatch ? 'check' : 'switch'}
-            style={swatch ? { '--c': swatch } : undefined} />
-          <span>{label}</span>
-          {count != null && <b>{count}</b>}
-        </label>
-        {help && <HelpButton open={showHelp} onClick={() => setShowHelp(!showHelp)} />}
-      </div>
-      {showHelp && <div className="info-body">{help}</div>}
-      {children}
-    </div>
-  )
-}
-
-/** A labelled control (select, slider) with its own optional "?". */
-function Field({ label, help, children }) {
-  const [showHelp, setShowHelp] = useState(false)
-  return (
-    <div className="field">
-      <div className="field-head">
-        <span>{label}</span>
-        {help && <HelpButton open={showHelp} onClick={() => setShowHelp(!showHelp)} />}
-      </div>
-      {showHelp && <div className="info-body">{help}</div>}
-      {children}
-    </div>
-  )
-}
-
-/** A styled range input. The filled part of the track is drawn from --pct,
- *  since only Firefox can style a range's progress natively. `idle` greys it
- *  out for a control that is present but not currently in effect. */
-function Range({ value, min, max, idle, ticks, ...rest }) {
-  const lo = Number(min)
-  const hi = Number(max)
-  const pct = hi > lo ? ((Number(value) - lo) / (hi - lo)) * 100 : 0
-  return (
-    <div className={idle ? 'range-wrap idle' : 'range-wrap'}>
-      <input type="range" className="range" value={value} min={min} max={max}
-        style={{ '--pct': `${pct}%` }} {...rest} />
-      {ticks && (
-        <div className="range-ticks" aria-hidden="true">
-          {ticks.map((t) => (
-            // thumb centres travel between 9px and (width - 9px)
-            <span key={t} style={{ left: `calc(9px + (100% - 18px) * ${(t - lo) / (hi - lo)})` }}>
-              {t}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-const activate = (fn) => ({
-  role: 'button',
-  tabIndex: 0,
-  onClick: fn,
-  onKeyDown: (e) => {
-    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fn() }
-  },
-})
+const options = (o, label = (v) => v.label) => Object.entries(o)
+  .map(([value, v]) => ({ value, label: label(v) }))
 
 /** Finding one street is the commonest action, so it stays pinned at the top. */
 function Search({ data, markers, onSelect, view, setView }) {
-  const [q, setQ] = useState('')
-  const results = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    if (needle.length < 2) return []
+  const search = useCallback((needle) => {
     const hit = (p) => [p.name, p.segment, p.stop, p.short, p.loc, p.id]
       .some((f) => (f || '').toLowerCase().includes(needle))
     const out = []
     const add = (rows, kind, label, sub) => {
       for (const p of rows) {
-        if (p.lat && hit(p)) out.push({ kind, id: p.id, ref: p, label: label(p), sub: sub(p) })
+        if (p.lat && hit(p)) {
+          out.push({
+            key: `${kind}:${p.id}`, kind, id: p.id, ref: p, color: LAYERS[kind].color,
+            label: label(p), sub: `${p.id} · ${sub(p)}`,
+          })
+        }
       }
     }
     add(data.points, 'road', (p) => p.name, (p) => p.segment)
@@ -171,7 +66,7 @@ function Search({ data, markers, onSelect, view, setView }) {
     add(data.ped, 'ped', (p) => p.short || p.name, (p) => p.segment)
     add(data.pt, 'pt', (p) => p.stop || p.name, (p) => p.loc)
     return out.slice(0, 20)
-  }, [q, data])
+  }, [data])
 
   // A result from another survey switches to its view; the markers of that
   // view do not exist yet, so the raw record is selected and found inside
@@ -184,29 +79,12 @@ function Search({ data, markers, onSelect, view, setView }) {
     } else {
       onSelect(resolveTarget(markers, r.kind, r.ref))
     }
-    setQ('')
   }
   return (
-    <div className="search">
-      <input type="text" value={q} aria-label="Szukaj punktu pomiarowego"
-        placeholder="Szukaj ulicy, przystanku, numeru…"
-        onChange={(e) => setQ(e.target.value)} />
-      {results.length > 0 && (
-        <ul className="search-results">
-          {results.map((r) => (
-            <li key={`${r.kind}:${r.id}`} {...activate(() => pick(r))}>
-              <i className="swatch" style={{ background: LAYERS[r.kind].color }} />
-              <span>{r.label}</span><em>{r.id} · {r.sub}</em>
-            </li>
-          ))}
-        </ul>
-      )}
-      {q.trim().length >= 2 && !results.length && <p className="hint">Brak dopasowań.</p>}
-    </div>
+    <SearchBox search={search} onPick={pick} label="Szukaj punktu pomiarowego"
+      placeholder="Szukaj ulicy, przystanku, numeru…" />
   )
 }
-
-// ----------------------------------------------------------------------- sidebar
 
 /** Memoised: a hover on the map must not redraw the whole panel. */
 export default memo(function Sidebar({
@@ -218,8 +96,6 @@ export default memo(function Sidebar({
 }) {
   const [about, setAbout] = useState(false)   // the "O mapie" dialog
   const V = VIEWS[view]
-  // phones: the sidebar is a bottom sheet, dragged by its header
-  const sheet = useSheetDrag(sheetOpen, setSheetOpen)
   // layers whose measurement window does not cover the selected period
   const gaps = ['pt', 'bike', 'ped', 'rail']
     .filter((k) => visible[k] && coverageGap(data.meta, k, hours))
@@ -229,6 +105,7 @@ export default memo(function Sidebar({
     gaps.unshift('Ruch drogowy na kordonie obszaru (KO)')
   }
   const netMeta = nets[NET_MODES[net.mode].file]?.meta
+  const occ = data.meta.carOccupancy
 
   // Everything drawn in this view, as the map draws it: the totals and the
   // ranking are sums of the markers themselves, so they always agree with it.
@@ -266,39 +143,33 @@ export default memo(function Sidebar({
   }, [V, drawn, markers, people, metric])
   const totalSum = totals.reduce((a, r) => a + r.v, 0)
   const vehSum = totals.reduce((a, r) => a + (r.veh || 0), 0)
+  const totalText = (r) => (r.est ? fmtEst(r.v) : fmt(r.v))
 
   const signalRows = sig.on && data.signals
     ? data.signals.junctions.filter(SIGNAL_FILTERS[sig.filter].test).slice(0, 12)
     : []
 
+  const toggleArea = (a) => {
+    const cur = areas || data.meta.areas
+    const next = cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a]
+    setAreas(next.length === data.meta.areas.length ? null : next)
+  }
+
   return (
-    <aside className={`sidebar${sheetOpen ? ' open' : ''}${sheet.dy != null ? ' dragging' : ''}`}
-      style={sheet.dy != null ? {
-        transform: sheetOpen ? `translateY(${sheet.dy}px)`
-          : `translateY(calc(100% - 62px + ${sheet.dy}px))`,
-      } : undefined}>
-      {/* On phones the header is the sheet's handle; on desktop the button is
-          hidden and the header is just a title. */}
-      <header>
-        <button type="button" className="sheet-handle" aria-expanded={sheetOpen}
-          aria-label={sheetOpen ? 'Zwiń panel' : 'Rozwiń panel ustawień i wyników'}
-          onClick={() => setSheetOpen(!sheetOpen)} {...sheet.handlers}>
-          <span className="grip" />
-          <span className="sheet-title">
-            <b>KBR Wrocław 2024</b>
-            <em>{sheetOpen ? 'Zwiń' : `${period} · ustawienia i wyniki`}</em>
-          </span>
-          <span className={sheetOpen ? 'chevron open' : 'chevron'}>▴</span>
-        </button>
-        <div className="title-row">
-          <h1>KBR Wrocław 2024</h1>
-          <button type="button" className="about-btn" onClick={() => setAbout(true)}
-            aria-haspopup="dialog" title="O mapie: metoda, terminy pomiarów, utrudnienia">
-            <span aria-hidden="true">?</span><em>O mapie i metodzie</em>
-          </button>
-        </div>
-        <p className="sub">Pomiary ruchu — przeglądarka map</p>
-      </header>
+    <Shell title="KBR Wrocław 2024" subtitle="Pomiary ruchu — przeglądarka map"
+      peek={`${period} · ustawienia i wyniki`} expandLabel="Rozwiń panel ustawień i wyników"
+      open={sheetOpen} setOpen={setSheetOpen}
+      action={(
+        <InfoButton label="O mapie i metodzie" onClick={() => setAbout(true)}
+          title="O mapie: metoda, terminy pomiarów, utrudnienia" />
+      )}
+      footer={(
+        <>
+          Dane: Kompleksowe Badania Ruchu Wrocław 2024, OpenStreetMap, rozkład
+          jazdy GTFS Wrocławia. Punkty rowerowe i piesze są geokodowane z opisu
+          odcinka, więc ich położenie jest przybliżone.
+        </>
+      )}>
       {about && <About data={data} onClose={() => setAbout(false)} />}
 
       <Search data={data} markers={markers} onSelect={onSelect} view={view} setView={setView} />
@@ -312,24 +183,18 @@ export default memo(function Sidebar({
           okres przez północ.
         </p>
       )}>
-        <div className="chips">
-          {Object.entries(PRESETS).map(([k, v]) => (
-            <button key={k} type="button"
-              className={sameRange(range, v.range) ? 'chip on' : 'chip'}
-              onClick={() => setRange(v.range)}>{v.label}</button>
-          ))}
-        </div>
-        <HourRange data={data} visible={visible} range={range} setRange={setRange} />
+        <Chips onPick={(k) => setRange(PRESETS[k].range)}
+          items={Object.entries(PRESETS).map(([key, v]) => (
+            { key, label: v.label, on: sameRange(range, v.range) }))} />
+        <HourRange range={range} setRange={setRange} bands={hourBands(data, visible)} />
         {/* sits by the slider: moving it is what fixes the gap */}
         {gaps.length > 0 && !wholeDay && (
-          <p className="warn">
+          <Warn>
             {gaps.join(', ')}: pomiar tylko
             w szczytach — wybrany okres wychodzi poza paski pomiaru, więc część
             jego godzin nie była mierzona.{' '}
-            <button type="button" className="link" onClick={() => setWholeDay(true)}>
-              Szacuj całą dobę
-            </button>
-          </p>
+            <LinkButton onClick={() => setWholeDay(true)}>Szacuj całą dobę</LinkButton>
+          </Warn>
         )}
       </Panel>
 
@@ -356,32 +221,22 @@ export default memo(function Sidebar({
           </p>
         </>
       )}>
-        <div className="views" role="radiogroup" aria-label="Widok">
-          {Object.entries(VIEWS).map(([k, v]) => (
-            <label key={k} className={view === k ? 'view on' : 'view'}>
-              <input type="radio" name="view" checked={view === k}
-                onChange={() => setView(k)} />
-              <i className={v.split ? 'view-mark pie' : 'view-mark'}
-                style={{ '--c': v.color }} />
-              <span className="view-text">
-                <b>{v.label}</b>
-                <em>{v.sub}</em>
-              </span>
-              {!v.split && <small>{v.layers.reduce((a, l) => a + COUNTS[l](data), 0)}</small>}
-            </label>
-          ))}
-        </div>
+        <RadioCards label="Widok" name="view" value={view} onChange={setView}
+          options={Object.entries(VIEWS).map(([value, v]) => ({
+            value, label: v.label, sub: v.sub, color: v.split ? PIE_MARK : v.color,
+            count: v.split ? null : v.layers.reduce((a, l) => a + COUNTS[l](data), 0),
+          }))} />
 
         {/* options that mean something only in the chosen view */}
         {view === 'road' && (
           <>
-            <Option checked={roadPeople} onChange={() => setPeople(!roadPeople)}
+            <Toggle checked={roadPeople} onChange={setPeople}
               label="Licz osoby w samochodach, nie pojazdy"
               help={(
                 <>
                   <p>
                     Samochody osobowe są mnożone przez napełnienie (domyślnie{' '}
-                    {data.meta.carOccupancy.default} os./poj., zmienisz je
+                    {occ.default} os./poj., zmienisz je
                     w ustawieniach zaawansowanych).
                   </p>
                   <p>
@@ -389,24 +244,19 @@ export default memo(function Sidebar({
                     napełnienia. Pasażerowie autobusów i tramwajów są w widoku
                     węzłów.
                   </p>
-                  <p>{data.meta.carOccupancy.note}</p>
+                  <p>{occ.note}</p>
                 </>
               )} />
             <Field label="Kategorie pojazdów">
               {/* counting people means counting cars; say so rather than
                   leave the last choice showing */}
-              <select value={roadPeople ? 'car' : metric} aria-label="Kategorie pojazdów"
-                disabled={roadPeople}
-                onChange={(e) => setMetric(e.target.value)}>
-                {Object.entries(ROAD_METRICS).map(([k, v]) => (
-                  <option key={k} value={k}>{v.label}</option>
-                ))}
-              </select>
+              <Select value={roadPeople ? 'car' : metric} label="Kategorie pojazdów"
+                disabled={roadPeople} onChange={setMetric} options={options(ROAD_METRICS)} />
             </Field>
           </>
         )}
         {['road', 'pt', 'active'].includes(view) && (
-          <Option checked={aggregate} onChange={() => setAggregate(!aggregate)}
+          <Toggle checked={aggregate} onChange={setAggregate}
             label="Punkty jako całość — sumuj przekroje"
             help={(
               <p>
@@ -417,38 +267,36 @@ export default memo(function Sidebar({
             )} />
         )}
 
-        <div className="divider" />
+        <Divider />
 
         <Field label="Etykiety na mapie" help={(
           <p>
             Etykiety stale widoczne przy punktach. Liczby i udziały można
             włączyć razem. Udziały (%) opisują podział modalny, więc pokazują się
             tylko na węzłach. Bez etykiet szczegóły pojawiają się{' '}
-            {TOUCH ? 'po dotknięciu punktu' : 'po najechaniu na punkt'}. Przy
+            {IS_TOUCH ? 'po dotknięciu punktu' : 'po najechaniu na punkt'}. Przy
             oddaleniu nakładające się etykiety są ukrywane — większe węzły mają
             pierwszeństwo; przybliż mapę, aby zobaczyć więcej.
           </p>
         )}>
-          <div className="pair">
-            <Option checked={labels.num} label="Liczby (#)"
-              onChange={() => setLabels({ ...labels, num: !labels.num })} />
-            <Option checked={labels.pct} label="Udziały (%)"
-              onChange={() => setLabels({ ...labels, pct: !labels.pct })} />
-          </div>
+          <Pair>
+            <Toggle checked={labels.num} label="Liczby (#)"
+              onChange={(num) => setLabels({ ...labels, num })} />
+            <Toggle checked={labels.pct} label="Udziały (%)"
+              onChange={(pct) => setLabels({ ...labels, pct })} />
+          </Pair>
         </Field>
         {labels.pct && !V.split && (
-          <p className="warn">
+          <Warn>
             Udziały opisują podział modalny, więc są tylko w widoku węzłów.{' '}
-            <button type="button" className="link" onClick={() => setView('nodes')}>
-              Pokaż węzły
-            </button>
-          </p>
+            <LinkButton onClick={() => setView('nodes')}>Pokaż węzły</LinkButton>
+          </Warn>
         )}
 
         {data.survey && (
           <>
-            <div className="divider" />
-            <Option checked={survey} onChange={() => setSurvey(!survey)}
+            <Divider />
+            <Toggle checked={survey} onChange={setSurvey}
               label={LAYERS.survey.label} swatch={LAYERS.survey.color}
               count={COUNTS.survey(data)} />
           </>
@@ -459,58 +307,39 @@ export default memo(function Sidebar({
       <Panel title={`Wyniki — ${period}`}>
         {V.split && totalSum > 0 ? (
           // modes: people, their share, and the share of vehicles beside it
-          <table className="totals-table">
-            <thead>
-              <tr><th /><th>osoby</th><th>% osób</th>{vehSum > 0 && <th>% poj.</th>}</tr>
-            </thead>
-            <tbody>
-              {totals.map((r) => (
-                <tr key={r.key}>
-                  <td><i className="swatch" style={{ background: r.color }} />{r.label}</td>
-                  <td>{r.est ? fmtEst(r.v) : fmt(r.v)}</td>
-                  <td className="pp">{Math.round((100 * r.v) / totalSum)}%</td>
-                  {vehSum > 0 && <td>{Math.round((100 * r.veh) / vehSum)}%</td>}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <TotalsTable
+            columns={[{ label: 'osoby' }, { label: '% osób', strong: true },
+              ...(vehSum > 0 ? [{ label: '% poj.' }] : [])]}
+            rows={totals.map((r) => ({
+              key: r.key, label: r.label, color: r.color,
+              cells: [totalText(r), `${Math.round((100 * r.v) / totalSum)}%`,
+                `${Math.round((100 * r.veh) / vehSum)}%`],
+            }))} />
         ) : (
-          <div className="totals">
-            {totals.map((r) => (
-              <div key={r.key}>
-                <span><i className="swatch" style={{ background: r.color }} />{r.label}</span>
-                <b>{r.est ? fmtEst(r.v) : fmt(r.v)}</b>
-              </div>
-            ))}
-          </div>
+          <Totals rows={totals.map((r) => ({ ...r, value: totalText(r) }))} />
         )}
         {V.split && (
-          <p className="hint">
+          <Hint>
             Suma po wszystkich węzłach: kto przejeżdża przez kilka węzłów, jest
             liczony w każdym z nich.
-          </p>
+          </Hint>
         )}
-        <button type="button" className="link csv" onClick={() => downloadCsv(
+        <LinkButton block onClick={() => downloadCsv(
           markersTable({ markers, layers: V.layers, period, people }),
           `kbr-${view}-${slug(period)}.csv`,
         )}>
           Pobierz tabelę wszystkich punktów (CSV)
-        </button>
+        </LinkButton>
         <h3>
           {RANK_TITLE[view]
             || (people ? 'Najwięcej osób w samochodach' : 'Najwyższe natężenia na drogach')}
         </h3>
-        <ol className="top">
-          {top.map((m) => (
-            <li key={`${m.kind}:${m.id}`}
-              className={selected?.kind === m.kind && selected?.id === m.id ? 'on' : ''}
-              {...activate(() => onSelect({ kind: m.kind, id: m.id, ref: m.ref }))}>
-              <span>{m.title}</span>
-              <em>{m.sub}</em>
-              <b>{headline(m, people) !== m.value ? fmtEst(headline(m, people)) : fmt(m.value)}</b>
-            </li>
-          ))}
-        </ol>
+        <RankList items={top.map((m) => ({
+          key: `${m.kind}:${m.id}`, title: m.title, sub: m.sub,
+          value: headline(m, people) !== m.value ? fmtEst(headline(m, people)) : fmt(m.value),
+          on: selected?.kind === m.kind && selected?.id === m.id,
+          onPick: () => onSelect({ kind: m.kind, id: m.id, ref: m.ref }),
+        }))} />
       </Panel>
 
       {/* ------------------------------------------------------ further down */}
@@ -528,31 +357,21 @@ export default memo(function Sidebar({
             <p>{data.signals.meta.note}</p>
           </>
         )}>
-        <Option checked={sig.on} onChange={() => setSig({ ...sig, on: !sig.on })}
+        <Toggle checked={sig.on} onChange={(on) => setSig({ ...sig, on })}
           label="Pokaż skrzyżowania z sygnalizacją"
           count={data.signals?.meta.junctions ?? '—'} />
         {sig.on && data.signals && (
           <>
-            <select value={sig.filter} aria-label="Filtr sygnalizacji"
-              onChange={(e) => setSig({ ...sig, filter: e.target.value })}>
-              {Object.entries(SIGNAL_FILTERS).map(([k, v]) => (
-                <option key={k} value={k}>{v.label}</option>
-              ))}
-            </select>
-            <ol className="top">
-              {signalRows.map((s, i) => (
-                <li key={i}
-                  {...activate(() => onSelect({ kind: 'signal', id: `${s.lat},${s.lon}`, ref: s }))}>
-                  <span>{s.streets.length ? s.streets.join(' × ') : 'bez nazwy'}</span>
-                  <em>
-                    {s.kind === 'crossing' ? 'przejście' : `${s.arms} wloty`}
-                    {s.tram ? ' · tramwaj' : ''}{s.runs ? ` · ${fmt(s.runs)} kursów` : ''}
-                  </em>
-                  <b>{fmt(s.v)}</b>
-                </li>
-              ))}
-            </ol>
-            <p className="hint">Natężenie z modelu — mediana błędu 24%.</p>
+            <Select value={sig.filter} label="Filtr sygnalizacji"
+              onChange={(filter) => setSig({ ...sig, filter })} options={options(SIGNAL_FILTERS)} />
+            <RankList items={signalRows.map((s, i) => ({
+              key: i, title: s.streets.length ? s.streets.join(' × ') : 'bez nazwy',
+              sub: `${s.kind === 'crossing' ? 'przejście' : `${s.arms} wloty`}`
+                + `${s.tram ? ' · tramwaj' : ''}${s.runs ? ` · ${fmt(s.runs)} kursów` : ''}`,
+              value: fmt(s.v),
+              onPick: () => onSelect({ kind: 'signal', id: signalId(s), ref: s }),
+            }))} />
+            <Hint>Natężenie z modelu — mediana błędu 24%.</Hint>
           </>
         )}
       </Panel>
@@ -573,88 +392,73 @@ export default memo(function Sidebar({
             {netMeta?.measured && <p>{netMeta.note} Źródło: {netMeta.source}.</p>}
           </>
         )}>
-        <Option checked={net.on} onChange={() => setNet({ ...net, on: !net.on })}
+        <Toggle checked={net.on} onChange={(on) => setNet({ ...net, on })}
           label="Pokaż szacunek dla wszystkich ulic" count={netMeta?.edges ?? '—'} />
         {net.on && (
           <>
-            <select value={net.mode} aria-label="Co modelować"
-              onChange={(e) => setNet({ ...net, mode: e.target.value })}>
-              {Object.entries(NET_MODES).map(([k, v]) => (
-                <option key={k} value={k} disabled={nets[v.file] === null}>
-                  {v.label}{data[v.file] ? '' : ' — brak modelu'}
-                </option>
-              ))}
-            </select>
-            <label className="slider">
-              <span>
-                Pokazuj powyżej {fmt(net.min)} {NET_MODES[net.mode].unit} w oknie 6–10 i 15–19
-              </span>
-              <Range min="0"
-                max={net.mode === 'road' ? 20000 : 5000}
-                step={net.mode === 'road' ? 500 : 100} value={net.min}
-                aria-label="Próg wyświetlania odcinków"
-                onChange={(e) => setNet({ ...net, min: Number(e.target.value) })} />
-            </label>
-            <div className="legend">
-              {NETWORK_LEGEND.map((l) => (
-                <span key={l.label}><i style={{ background: l.color }} />{l.label}</span>
-              ))}
-            </div>
-            {netMeta?.measured && <p className="hint"><b>Dane rozkładowe, nie model.</b></p>}
-            {netMeta && !netMeta.measured && (
-              <p className={netMeta.r2cv < 0.4 ? 'warn' : 'hint'}>
-                R² {netMeta.r2cv}, mediana błędu {Math.round(netMeta.mapeCv * 100)}%
-                {netMeta.r2cv < 0.4 && ' — model słaby, tylko „gdzie dużo, gdzie mało"'}.
-              </p>
-            )}
+            <Select value={net.mode} label="Co modelować"
+              onChange={(mode) => setNet({ ...net, mode })}
+              options={Object.entries(NET_MODES).map(([value, v]) => ({
+                value, disabled: nets[v.file] === null,
+                label: `${v.label}${data[v.file] ? '' : ' — brak modelu'}`,
+              }))} />
+            <Slider min="0" max={net.mode === 'road' ? 20000 : 5000}
+              step={net.mode === 'road' ? 500 : 100} value={net.min}
+              label="Próg wyświetlania odcinków"
+              caption={<>Pokazuj powyżej {fmt(net.min)} {NET_MODES[net.mode].unit} w oknie 6–10 i 15–19</>}
+              onChange={(min) => setNet({ ...net, min })} />
+            <LegendRow items={NETWORK_LEGEND} />
+            {netMeta?.measured && <Hint><b>Dane rozkładowe, nie model.</b></Hint>}
+            {netMeta && !netMeta.measured && (() => {
+              const weak = netMeta.r2cv < 0.4
+              const Tone = weak ? Warn : Hint
+              return (
+                <Tone>
+                  R² {netMeta.r2cv}, mediana błędu {Math.round(netMeta.mapeCv * 100)}%
+                  {weak && ' — model słaby, tylko „gdzie dużo, gdzie mało"'}.
+                </Tone>
+              )
+            })()}
           </>
         )}
       </Panel>
 
       <Panel title="Ustawienia zaawansowane" collapsible defaultOpen={false}>
         <Field label={`Napełnienie samochodu: ${occupancy?.toFixed(2)} os./poj.`}
-          help={<p>{data.meta.carOccupancy.note}</p>}>
-          <Range min={data.meta.carOccupancy.min * 100}
-            max={data.meta.carOccupancy.max * 100} step="5"
-            value={Math.round((occupancy ?? data.meta.carOccupancy.default) * 100)}
-            aria-label="Napełnienie samochodu"
-            onChange={(e) => setOccupancy(Number(e.target.value) / 100)} />
+          help={<p>{occ.note}</p>}>
+          <Slider min={occ.min * 100} max={occ.max * 100} step="5"
+            value={Math.round((occupancy ?? occ.default) * 100)}
+            label="Napełnienie samochodu"
+            onChange={(v) => setOccupancy(v / 100)} />
           {/* The default is a cited number, so the citation sits with it. */}
-          <figure className="cite">
-            <blockquote>
-              <p>„{data.meta.carOccupancy.table}”</p>
-              <p>
-                „{data.meta.carOccupancy.question}” — średnio{' '}
-                <b>{data.meta.carOccupancy.value}</b>
-              </p>
-              <p>„{data.meta.carOccupancy.basis}”</p>
-            </blockquote>
-            <figcaption>
-              {data.meta.carOccupancy.scope}.{' '}
-              {data.meta.carOccupancy.source}:{' '}
-              <a href={data.meta.carOccupancy.url} target="_blank" rel="noopener noreferrer">
-                strona KBR 2024 w BIP
-              </a>
-              {' · '}
-              <a href={data.meta.carOccupancy.file} target="_blank" rel="noopener noreferrer">
-                pobierz załączniki (zip, 33 MB)
-              </a>
-              <br />
-              <span className="cite-where">{data.meta.carOccupancy.where}</span>
-            </figcaption>
-          </figure>
-          {Math.abs((occupancy ?? 0) - data.meta.carOccupancy.default) > 1e-9 && (
-            <p className="warn">
+          <Citation quote={[
+            <>„{occ.table}”</>,
+            <>„{occ.question}” — średnio{' '}<b>{occ.value}</b></>,
+            <>„{occ.basis}”</>,
+          ]}>
+            {occ.scope}.{' '}
+            {occ.source}:{' '}
+            <a href={occ.url} target="_blank" rel="noopener noreferrer">
+              strona KBR 2024 w BIP
+            </a>
+            {' · '}
+            <a href={occ.file} target="_blank" rel="noopener noreferrer">
+              pobierz załączniki (zip, 33 MB)
+            </a>
+            <br />
+            <CitePlace>{occ.where}</CitePlace>
+          </Citation>
+          {Math.abs((occupancy ?? 0) - occ.default) > 1e-9 && (
+            <Warn>
               Ustawiono ręcznie, inaczej niż w KBR 2024.{' '}
-              <button type="button" className="link"
-                onClick={() => setOccupancy(data.meta.carOccupancy.default)}>
-                Przywróć {String(data.meta.carOccupancy.default).replace('.', ',')}
-              </button>
-            </p>
+              <LinkButton onClick={() => setOccupancy(occ.default)}>
+                Przywróć {String(occ.default).replace('.', ',')}
+              </LinkButton>
+            </Warn>
           )}
         </Field>
 
-        <Option checked={wholeDay} onChange={() => setWholeDay(!wholeDay)}
+        <Toggle checked={wholeDay} onChange={setWholeDay}
           label="Szacuj całą dobę dla pomiarów szczytowych"
           help={(
             <p>
@@ -665,22 +469,17 @@ export default memo(function Sidebar({
             </p>
           )}>
           {wholeDay && (
-            <div className="factors">
-              {Object.entries(data.meta.expansion).map(([k, e]) => (
-                <div key={k} title={e.note}>
-                  <i className="swatch" style={{ background: (LAYERS[k] || LAYERS.road).color }} />
-                  <span>{LAYERS[k]?.label || 'Ruch drogowy — kordon obszaru (KO)'}</span>
-                  <b>×{e.factor}</b>
-                  <em className={`basis ${e.basis}`}>{BASIS_LABEL[e.basis]}</em>
-                </div>
-              ))}
-            </div>
+            <TaggedList items={Object.entries(data.meta.expansion).map(([k, e]) => ({
+              key: k, color: (LAYERS[k] || LAYERS.road).color, title: e.note,
+              label: LAYERS[k]?.label || 'Ruch drogowy — kordon obszaru (KO)',
+              value: `×${e.factor}`, tag: BASIS_LABEL[e.basis], tone: BASIS_TONE[e.basis],
+            }))} />
           )}
-        </Option>
+        </Toggle>
 
         {(labels.num || labels.pct) && (
-          <Option checked={labels.declutter}
-            onChange={() => setLabels({ ...labels, declutter: !labels.declutter })}
+          <Toggle checked={labels.declutter}
+            onChange={(declutter) => setLabels({ ...labels, declutter })}
             label="Ukrywaj nakładające się etykiety" />
         )}
 
@@ -690,36 +489,15 @@ export default memo(function Sidebar({
             pomiarów drogowych i w węzłach. Pozostałych badań nie filtrują.
           </p>
         )}>
-          <div className="chips tight">
-            {data.meta.areas.map((a) => {
-              const on = !areas || areas.includes(a)
-              return (
-                <button key={a} type="button" className={on ? 'chip on' : 'chip'}
-                  onClick={() => {
-                    const cur = areas || data.meta.areas
-                    const next = cur.includes(a) ? cur.filter((x) => x !== a) : [...cur, a]
-                    setAreas(next.length === data.meta.areas.length ? null : next)
-                  }}>{a}</button>
-              )
-            })}
-          </div>
+          <Chips tight onPick={toggleArea} items={data.meta.areas.map((a) => (
+            { key: a, label: a, on: !areas || areas.includes(a) }))} />
         </Field>
 
         <Field label="Podkład mapy">
-          <select value={basemap} aria-label="Podkład mapy"
-            onChange={(e) => setBasemap(e.target.value)}>
-            {Object.entries(BASEMAPS).map(([k, v]) => (
-              <option key={k} value={k}>{v.label}</option>
-            ))}
-          </select>
+          <Select value={basemap} label="Podkład mapy" onChange={setBasemap}
+            options={basemapOptions()} />
         </Field>
       </Panel>
-
-      <footer>
-        Dane: Kompleksowe Badania Ruchu Wrocław 2024, OpenStreetMap, rozkład
-        jazdy GTFS Wrocławia. Punkty rowerowe i piesze są geokodowane z opisu
-        odcinka, więc ich położenie jest przybliżone.
-      </footer>
-    </aside>
+    </Shell>
   )
 })

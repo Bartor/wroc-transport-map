@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
-import { CircleMarker, Tooltip, LayerGroup } from 'react-leaflet'
-import { fmt, fmtEst, radius } from './data'
+import { fmt, fmtEst, ramp, sqrtRadius } from '@bartor-net/ui-kit'
+import { CircleLayer, MapTooltip, TipNote } from '@bartor-net/ui-kit/map'
 
 export const SIGNAL_FILTERS = {
   all: { label: 'Wszystkie', test: () => true },
@@ -14,8 +14,12 @@ export const SIGNAL_FILTERS = {
 
 // Green where little passes through, red where a lot: the map should make the
 // low-traffic signals easy to pick out, since those are the ones worth a look.
-const colourFor = (v) => (v < 4000 ? '#2fbf71' : v < 10000 ? '#e8b04b'
-  : v < 20000 ? '#e8763b' : '#c1392b')
+const RAMP = ramp([
+  [4000, '#2fbf71'], [10000, '#e8b04b'], [20000, '#e8763b'], [Infinity, '#c1392b'],
+])
+
+/** A signal has no number of its own; it goes by its position. */
+export const signalId = (s) => `${s.lat},${s.lon}`
 
 export default function SignalsLayer({ signals, filter, share, onSelect, selected }) {
   const shown = useMemo(
@@ -25,36 +29,29 @@ export default function SignalsLayer({ signals, filter, share, onSelect, selecte
   const max = useMemo(
     () => Math.max(1, ...shown.map((s) => s.v)), [shown],
   )
+  const points = shown.map((s, i) => {
+    const on = selected?.kind === 'signal' && selected.id === signalId(s)
+    return {
+      key: i, lat: s.lat, lon: s.lon, r: sqrtRadius(s.v, max, 4, 16), s,
+      style: {
+        color: on ? '#fff' : '#1b1e26', weight: on ? 2.5 : 1,
+        fillColor: RAMP.color(s.v), fillOpacity: 0.85,
+      },
+    }
+  })
   return (
-    <LayerGroup>
-      {shown.map((s, i) => {
-        const v = s.v * share
-        const on = selected?.kind === 'signal' && selected.id === `${s.lat},${s.lon}`
-        return (
-          <CircleMarker
-            key={i}
-            center={[s.lat, s.lon]}
-            radius={radius(s.v, max, 4, 16)}
-            pathOptions={{
-              color: on ? '#fff' : '#1b1e26', weight: on ? 2.5 : 1,
-              fillColor: colourFor(s.v), fillOpacity: 0.85,
-            }}
-            eventHandlers={{
-              click: () => onSelect({ kind: 'signal', id: `${s.lat},${s.lon}`, ref: s }),
-            }}
-          >
-            <Tooltip>
-              <b>{s.streets.length ? s.streets.join(' × ') : 'sygnalizacja'}</b><br />
-              {s.kind === 'crossing' ? 'przejście z sygnalizacją' : `${s.arms} wloty`}
-              {' · '}{fmtEst(v)} poj.<br />
-              <span className="period">
-                {s.runs ? `${fmt(s.runs)} kursów KZ` : 'brak komunikacji zbiorowej'}
-                {s.tram ? ' · tramwaj' : ''}{s.minor ? ' · ulice lokalne' : ''}
-              </span>
-            </Tooltip>
-          </CircleMarker>
-        )
-      })}
-    </LayerGroup>
+    <CircleLayer points={points}
+      onPick={({ s }) => onSelect({ kind: 'signal', id: signalId(s), ref: s })}
+      tip={({ s }) => (
+        <MapTooltip>
+          <b>{s.streets.length ? s.streets.join(' × ') : 'sygnalizacja'}</b><br />
+          {s.kind === 'crossing' ? 'przejście z sygnalizacją' : `${s.arms} wloty`}
+          {' · '}{fmtEst(s.v * share)} poj.<br />
+          <TipNote>
+            {s.runs ? `${fmt(s.runs)} kursów KZ` : 'brak komunikacji zbiorowej'}
+            {s.tram ? ' · tramwaj' : ''}{s.minor ? ' · ulice lokalne' : ''}
+          </TipNote>
+        </MapTooltip>
+      )} />
   )
 }

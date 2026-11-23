@@ -1,5 +1,7 @@
 // Loading and reshaping of the ETL output. The surveys are small enough to
 // keep in memory, so the map filters client-side.
+import { cameFrom, fmt, hourLabel, pieceKey, sameRange } from '@bartor-net/ui-kit'
+import './kit'
 
 const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail']
 
@@ -89,17 +91,39 @@ export const PRESETS = {
   night: { label: 'Noc 22–6', range: [22, 6] },
 }
 
-export function hoursOf([from, to]) {
+/**
+ * When each visible layer was counted, as bands under the hour slider. Road
+ * varies by cross-section, so it shows a share; the peak-only layers have one
+ * fixed window each.
+ */
+export function hourBands(data, visible) {
+  const windowCells = (w) => Array.from({ length: 24 }, (_, h) => (w.includes(h) ? 1 : 0))
   const out = []
-  if (from < to) for (let h = from; h < to; h++) out.push(h)
-  else {
-    for (let h = from; h < 24; h++) out.push(h)
-    for (let h = 0; h < to; h++) out.push(h)
+  if (visible.road) {
+    out.push({
+      key: 'road', color: LAYERS.road.color, label: LAYERS.road.label,
+      cells: data.roadCoverage.map((f) => (f >= 0.9 ? 1 : f > 0 ? 0.4 : 0)),
+      note: 'część przekrojów liczono 24 h, większość 5:00–21:00',
+    })
+    const ko = data.meta.windows?.roadPeak
+    if (ko) {
+      out.push({
+        key: 'roadPeak', color: LAYERS.road.color, label: 'Kordon obszaru (KO)',
+        cells: windowCells(ko),
+        note: 'przekroje drogowe na kordonie obszaru (KO) liczono tylko w szczytach',
+      })
+    }
+  }
+  for (const k of ['pt', 'bike', 'ped', 'rail']) {
+    const w = data.meta.windows?.[k]
+    if (!visible[k] || !w) continue
+    out.push({
+      key: k, color: LAYERS[k].color, label: LAYERS[k].label, cells: windowCells(w),
+      note: 'liczono tylko w szczytach',
+    })
   }
   return out
 }
-
-export const sameRange = (a, b) => a[0] === b[0] && a[1] === b[1]
 
 /** Road counts per hour: the share of cross-sections with any count. Most ran
  *  5-21, some round the clock, so night hours rest on a fifth of the sites. */
@@ -267,29 +291,6 @@ export function toPeople(value, kind, occupancy, on) {
 export const activeCats = (metric, people) =>
   (people ? CAR_CATS : ROAD_METRICS[metric].cats)
 
-/** Marker radius: sqrt so area, not radius, tracks the volume. */
-export function radius(value, max, min = 3, cap = 22) {
-  if (!value || !max) return min
-  return min + (cap - min) * Math.sqrt(value / max)
-}
-
-export const fmt = (n) =>
-  n == null ? '—' : Math.round(n).toLocaleString('pl-PL')
-
-/**
- * Estimates are printed at two significant figures. The model's median error is
- * 30%, so a digit like the 7 in "6427" is noise pretending to be information.
- */
-export function roundEst(n) {
-  if (!n || n < 100) return Math.round(n / 10) * 10
-  const mag = 10 ** (Math.floor(Math.log10(n)) - 1)
-  return Math.round(n / mag) * mag
-}
-
-export const fmtEst = (n) => `≈${fmt(roundEst(n))}`
-
-export const pct = (n) => (n == null ? '—' : `${(n * 100).toFixed(1)}%`)
-
 /**
  * The network model predicts the 6-10 + 15-19 window, because that is the only
  * window every measured cross-section shares. To show any other period we scale
@@ -316,14 +317,12 @@ export const NET_MODES = {
 
 export const MODEL_WINDOW = [6, 7, 8, 9, 15, 16, 17, 18]
 
-export const HOUR_LABEL = (h) => `${String(h).padStart(2, '0')}:00`
-
 /** What the numbers on the map are summed over, for labelling. */
 export function rangeLabel(range) {
   const named = Object.values(PRESETS).find((p) => sameRange(p.range, range))
   if (named) return named.label.toLowerCase()
-  const end = range[1] === 24 ? '24:00' : HOUR_LABEL(range[1])
-  return `${HOUR_LABEL(range[0])}–${end}`
+  const end = range[1] === 24 ? '24:00' : hourLabel(range[1])
+  return `${hourLabel(range[0])}–${end}`
 }
 
 /** One marker per drawn point: position, the value that sizes it, and what to
@@ -402,9 +401,6 @@ export function buildMarkers(data, {
 
 const NONE = new Set()
 
-/** Key of a section in the set of sections left out of their node. */
-export const pieceKey = (kind, id) => `${kind}:${id}`
-
 /** One marker per measurement point: its cross-sections are separate approaches
  *  of the same place, so their counts add up rather than overlap.
  *
@@ -463,17 +459,14 @@ export function resolveTarget(markers, kind, ref) {
   return { kind, id: ref.id, ref }
 }
 
-// Directions of travel are "from>to" compass keys, "W>E" = heading east.
-// Road counts store them so; bike and pedestrian counts (3.4, 3.5) record only
-// the side people came from, so "E" is someone heading west.
-const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E', NE: 'SW', SW: 'NE', NW: 'SE', SE: 'NW' }
-export const BEARING = { N: 0, NE: 45, E: 90, SE: 135, S: 180, SW: 225, W: 270, NW: 315 }
-export const dirKey = (d) => (OPPOSITE[d] ? `${d}>${OPPOSITE[d]}` : d)
-
-/** A piece's directions as "from>to" keys, in the order the panel lists them. */
+/**
+ * A piece's directions as "from>to" keys, in the order the panel lists them.
+ * Road counts store them so; bike and pedestrian counts (3.4, 3.5) record only
+ * the side people came from, so "E" is someone heading west.
+ */
 export function dirKeys(data, kind, ref) {
   if (kind === 'road') return Object.keys(data.roadById[ref.id]?.dirs || {})
-  if (kind === 'bike' || kind === 'ped') return Object.keys(ref.byHourDir || {}).map(dirKey)
+  if (kind === 'bike' || kind === 'ped') return Object.keys(ref.byHourDir || {}).map(cameFrom)
   return []
 }
 

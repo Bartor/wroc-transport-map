@@ -1,20 +1,17 @@
-import { Fragment, useCallback, useRef, useState } from 'react'
 import {
-  BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, Cell,
-} from 'recharts'
+  Block, Breakdown, Callout, DetailsPanel, DirectionSplit, Donut, Fact, Facts, Footnote,
+  GroupedTable, Hint, Notes, Partial, PieceTree, ShareBars, ShareButtons, SplitBody, SplitTable,
+  StatBlock, Warn, cameFrom, fixed, fmt, fmtEst, hourRuns, pct, pieceKey, shade, usePick,
+} from '@bartor-net/ui-kit'
+import { HourBars, StackedHourBars } from '@bartor-net/ui-kit/charts'
 import {
-  LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles, fmt, pct,
-  HOUR_LABEL, sumHours, parentOf, sectionLetter, sectionOf, fmtEst,
+  LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles,
+  sumHours, sectionLetter, sectionOf,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
   splitVehicles, bikeNote, pedNote, thinText, splitShares, SHARE_ROW, PCU_SOURCE,
-  HOUR_LABEL as HL, coverageGap, windowKind, pieceKey, transitByMode, MODES, nodeSplit,
-  dirKey,
+  coverageGap, windowKind, transitByMode, MODES, nodeSplit,
 } from './data'
-import { copyCard, downloadCard, shareCard, canShareImage } from './shareCard'
-import { useSheetDrag } from './sheetDrag'
-import { inkOn } from './pie'
-
-const SHARE_FILES = canShareImage()
+import { cardFilename, drawCard } from './shareCard'
 
 const GROUP_LABEL = {
   road: 'Przekroje drogowe',
@@ -23,12 +20,18 @@ const GROUP_LABEL = {
   ped: 'Przekroje piesze',
 }
 
-const NO_OFF = new Set()
+const TREE_LABELS = {
+  include: (id) => `Wliczaj ${id} do węzła`,
+  last: 'Węzeł musi mieć co najmniej jeden przekrój',
+  putBack: 'Wlicz do węzła',
+  leaveOut: 'Pomiń w liczbach węzła',
+  hint: 'Pominięte części nie wliczają się do sum węzła, podziału modalnego, '
+    + 'wielkości koła na mapie ani rankingu.',
+}
 
 /**
  * A node is made of pieces: lettered road sections (KW_08A, KW_08B...), and
- * the stops of the transit point paired with it. The tree stays put while
- * moving between the node and its pieces, lighting up the one on show.
+ * the stops of the transit point paired with it.
  *
  * Each piece shows its share of its own group - road and transit count
  * different things, so they are never summed together. Unticking a piece
@@ -36,246 +39,37 @@ const NO_OFF = new Set()
  * interchange, say, to look at one junction of it. The node's own group keeps
  * at least one piece, or it would have nothing to stand on; the paired stops
  * only lend their load per vehicle, and can all go.
- *
- * Hovering a piece here lights up its dot on the map, and the other way round.
  */
-const PHONE = typeof window !== 'undefined' && window.matchMedia('(max-width: 760px)').matches
-// a pointer that can hover; on touch a tap pins instead, and a hover would stick
-const MOUSE = typeof window !== 'undefined' && window.matchMedia('(hover: hover)').matches
-
 function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
   const { node, groups, current } = family
-  // On a phone twelve rows fill the sheet before the split is in sight, so
-  // groups start folded - unless they hold the open piece or a left-out one.
-  const [shut, setShut] = useState(() => new Set(PHONE ? groups
-    .filter((g) => current?.kind !== g.kind
-      && !g.members.some((m) => off.has(pieceKey(g.kind, m.id))))
-    .map((g) => g.kind) : []))
-  const fold = (kind) => setShut((s) => {
-    const n = new Set(s)
-    if (n.has(kind)) n.delete(kind)
-    else n.add(kind)
-    return n
-  })
-  const toNode = () => onSelect({ kind: node.kind, id: node.id, ref: node.ref })
-  const isOn = (kind, id) => current?.kind === kind && current.id === id
-  // leaving pieces out only means something when they add up to a node
-  const can = !!node && !!toggleOff
-  const keysOf = (g) => g.members.map((m) => pieceKey(g.kind, m.id))
-  const nOff = can ? groups.flatMap(keysOf).filter((k) => off.has(k)).length : 0
-  const isHot = (kind, id) => hot?.kind === kind && hot.id === id
-  // a mouse only: on touch a tap would leave the row lit
-  const hover = (kind, id) => (setHot ? {
-    onPointerEnter: (e) => e.pointerType === 'mouse' && setHot({ kind, id }),
-    onPointerLeave: (e) => e.pointerType === 'mouse' && setHot(null),
-  } : {})
   return (
-    <nav className="tree" aria-label="Części węzła">
-      {node && (
-        <button type="button" className={current ? 'tree-root' : 'tree-root on'}
-          aria-current={current ? undefined : 'true'} onClick={toNode}>
-          <b>Σ</b>
-          <span>Cały węzeł {node.id}</span>
-          {nOff > 0 && <em>{nOff} pominięte</em>}
-        </button>
-      )}
-      {groups.map((g) => {
-        const keys = keysOf(g)
-        const left = keys.filter((k) => !off.has(k)).length
-        return (
-          <div key={g.kind} className={`tree-group ${g.kind}${node ? ' nested' : ''}`}>
-            {(groups.length > 1 || node) && (
-              <h5>
-                <button type="button" className="fold" aria-expanded={!shut.has(g.kind)}
-                  onClick={() => fold(g.kind)}>
-                  <i className={shut.has(g.kind) ? 'chevron' : 'chevron open'}>▸</i>
-                  {GROUP_LABEL[g.kind]}
-                  <em>{left < keys.length ? `${left} z ${keys.length}` : keys.length}</em>
-                </button>
-                {can && left < keys.length && (
-                  <button type="button" onClick={() => toggleOff(keys, false)}>
-                    wlicz wszystkie
-                  </button>
-                )}
-              </h5>
-            )}
-            {!shut.has(g.kind) && <ul>
-              {g.members.map((m, i) => {
-                const out = can && off.has(keys[i])
-                const last = !out && left === 1 && g.kind === node.kind
-                const on = isOn(g.kind, m.id)
-                const share = shares[keys[i]]
-                return (
-                  <li key={m.id} {...hover(g.kind, m.id)}
-                    className={`${on ? 'on' : ''}${out ? ' out' : ''}`
-                      + `${isHot(g.kind, m.id) ? ' hot' : ''}`}>
-                    {can && (
-                      <input type="checkbox" className="check" checked={!out} disabled={last}
-                        style={{ '--c': LAYERS[g.kind].color }}
-                        aria-label={`Wliczaj ${m.id} do węzła`}
-                        title={last ? 'Węzeł musi mieć co najmniej jeden przekrój'
-                          : out ? 'Wlicz do węzła' : 'Pomiń w liczbach węzła'}
-                        onChange={(e) => toggleOff(keys[i], !e.target.checked)} />
-                    )}
-                    <button type="button" aria-current={on ? 'true' : undefined}
-                      title={`${m.id} · ${sectionOf(g.kind, m) || m.name}`}
-                      onClick={() => onSelect({ kind: g.kind, id: m.id, ref: m })}>
-                      <b>{sectionLetter(m.id) || '—'}</b>
-                      <span>{(g.kind === 'road' ? m.name : sectionOf(g.kind, m)) || m.name}</span>
-                      <em>{out ? 'pominięty' : share == null ? '—' : `${share}%`}</em>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>}
-          </div>
-        )
-      })}
-      {nOff > 0 && (
-        <p className="hint">
-          Pominięte części nie wliczają się do sum węzła, podziału modalnego,
-          wielkości koła na mapie ani rankingu.
-        </p>
-      )}
-    </nav>
-  )
-}
-
-/**
- * The hour and what was counted in it, spelled out: "3 056 osób w samochodach
- * osobowych", on the dark panel - Recharts' own box was white with a pale
- * grey hour and the data key "v" for a name.
- */
-function HourTip({ active, payload, label, names, colors }) {
-  if (!active || !payload?.length) return null
-  return (
-    <div className="chart-tip">
-      <b>{HOUR_LABEL(label)}–{HOUR_LABEL((label + 1) % 24)}</b>
-      {payload.map((x) => (
-        <div key={x.dataKey}>
-          {colors && <i style={{ background: colors[x.dataKey] }} />}
-          {fmt(x.value)} {names[x.dataKey]}
-        </div>
-      ))}
-    </div>
-  )
-}
-const CURSOR = { fill: 'rgba(255, 255, 255, .06)' }
-// Tooltips sit above the chart, pinned to its top edge and lifted by their own
-// height in CSS, so they never cover the bars they describe.
-const TIP = { position: { y: 0 }, allowEscapeViewBox: { x: false, y: true }, wrapperStyle: { zIndex: 5 } }
-
-// Axis ticks: thousands shortened, so "3800" is not clipped to "800".
-const AXIS_TICK = (v) => (v >= 1000 ? `${(v / 1000).toLocaleString('pl-PL', { maximumFractionDigits: 1 })} tys.` : v)
-const YAX = { tick: { fontSize: 10 }, width: 44, tickFormatter: AXIS_TICK }
-const MARGIN = { top: 4, right: 4, bottom: 0, left: -6 }
-
-// Neighbouring pieces in a stack take alternating shades of the layer colour,
-// with a thin panel-coloured gap between them.
-const SHADES = [0, 0.3, -0.25, 0.5, -0.4]
-function shade(hex, i) {
-  const t = SHADES[i % SHADES.length]
-  const c = [1, 3, 5].map((j) => parseInt(hex.slice(j, j + 2), 16))
-  const to = t > 0 ? 255 : 0
-  const mix = c.map((v) => Math.round(v + (to - v) * Math.abs(t)))
-  return `#${mix.map((v) => v.toString(16).padStart(2, '0')).join('')}`
-}
-
-/** Every piece in an hour, top of the stack first, the pointed one bright. */
-function StackTip({ active, payload, label, pieces, focus, unit }) {
-  if (!active || !payload?.length) return null
-  const val = Object.fromEntries(payload.map((x) => [x.dataKey, x.value]))
-  const total = pieces.reduce((a, s) => a + (s.out ? 0 : val[s.id] || 0), 0)
-  return (
-    <div className="chart-tip stack-tip">
-      <b>{HOUR_LABEL(label)}–{HOUR_LABEL((label + 1) % 24)} · {unit}</b>
-      {[...pieces].reverse().map((s) => (
-        <div key={s.id} className={focus && focus !== s.id ? 'dim' : undefined}>
-          <i style={{ background: s.fill }} />
-          <span>{s.letter} {s.name}{s.out ? ' (pominięty)' : ''}</span>
-          <em>{fmt(val[s.id] || 0)}</em>
-        </div>
-      ))}
-      <div className="sum"><span>razem</span><em>{fmt(total)}</em></div>
-    </div>
-  )
-}
-
-/**
- * A node's hourly profile stacked by its pieces, so one chart serves the node
- * and each of its pieces: with a piece open, its segments stay lit and the
- * rest fade. Hovering a segment names it, and lights its row in the tree and
- * its dot on the map, as hovering those lights it here; a click opens it.
- */
-function StackProfile({ kind, pieces, hours, unit, current, hot, setHot, onSelect }) {
-  const [seg, setSeg] = useState(null)
-  const focus = seg || (hot?.kind === kind ? hot.id : null)
-  const lit = (id) => (!current && !focus) || id === current || id === focus
-  const data = Array.from({ length: 24 }, (_, h) => Object.fromEntries(
-    [['h', h], ...pieces.map((s) => [s.id, s.values[h] || 0])]))
-  return (
-    <ResponsiveContainer width="100%" height={140}>
-      <BarChart data={data} margin={MARGIN}>
-        <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
-        <YAxis {...YAX} />
-        <RTooltip {...TIP} cursor={CURSOR} isAnimationActive={false}
-          content={<StackTip pieces={pieces} focus={focus} unit={unit} />} />
-        {pieces.map((s) => (
-          <Bar key={s.id} dataKey={s.id} stackId="p" isAnimationActive={false} cursor="pointer"
-            onMouseEnter={() => { setSeg(s.id); if (MOUSE) setHot?.({ kind, id: s.id }) }}
-            onMouseLeave={() => { setSeg(null); if (MOUSE) setHot?.(null) }}
-            onClick={() => onSelect?.({ kind, id: s.id, ref: s.ref })}>
-            {data.map((_, h) => (
-              <Cell key={h} fill={s.fill} stroke="var(--panel)" strokeWidth={1}
-                fillOpacity={(hours.includes(h) ? 1 : 0.32) * (lit(s.id) ? 1 : 0.25)
-                  * (s.out ? 0.5 : 1)} />
-            ))}
-          </Bar>
-        ))}
-      </BarChart>
-    </ResponsiveContainer>
-  )
-}
-
-const Profile = ({ values, hours, color, unit }) => (
-  <ResponsiveContainer width="100%" height={130}>
-    <BarChart data={values.map((v, h) => ({ h, v }))} margin={MARGIN}>
-      <XAxis dataKey="h" tickFormatter={HOUR_LABEL} interval={3} tick={{ fontSize: 10 }} />
-      <YAxis {...YAX} />
-      <RTooltip {...TIP} cursor={CURSOR} content={<HourTip names={{ v: unit }} />} />
-      <Bar dataKey="v">
-        {values.map((_, h) => (
-          <Cell key={h} fill={color} fillOpacity={hours.includes(h) ? 1 : 0.28} />
-        ))}
-      </Bar>
-    </BarChart>
-  </ResponsiveContainer>
-)
-
-const Breakdown = ({ title, obj, total }) => {
-  // largest first; the "inne" remainder last, however big
-  const rows = Object.entries(obj || {}).filter(([, v]) => v)
-    .sort((a, b) => (a[0] === 'inne') - (b[0] === 'inne') || b[1] - a[1])
-  if (!rows.length) return null
-  const sum = total || rows.reduce((a, [, v]) => a + v, 0)
-  return (
-    <div className="breakdown">
-      <h4>{title}</h4>
-      {rows.map(([k, v]) => (
-        <div key={k} className="bar">
-          <span>{k}</span>
-          <i style={{ width: `${(100 * v) / sum}%` }} />
-          <b>{fmt(v)}</b>
-        </div>
-      ))}
-    </div>
+    <PieceTree label="Części węzła" labels={TREE_LABELS}
+      root={node && {
+        label: `Cały węzeł ${node.id}`,
+        onPick: () => onSelect({ kind: node.kind, id: node.id, ref: node.ref }),
+      }}
+      groups={groups.map((g) => ({
+        kind: g.kind, label: GROUP_LABEL[g.kind], color: LAYERS[g.kind].color,
+        keepOne: g.kind === node?.kind,
+        // transit stops: square and blue
+        square: g.kind === 'pt', badge: g.kind === 'pt' ? { bg: '#2b4a5e', on: '#2e86ab' } : null,
+        items: g.members.map((m) => {
+          const share = shares[pieceKey(g.kind, m.id)]
+          return {
+            id: m.id, ref: m, letter: sectionLetter(m.id) || '—',
+            label: (g.kind === 'road' ? m.name : sectionOf(g.kind, m)) || m.name,
+            title: `${m.id} · ${sectionOf(g.kind, m) || m.name}`,
+            share: share == null ? null : `${share}%`,
+          }
+        }),
+      }))}
+      current={current} off={off} onToggle={toggleOff} hot={hot} setHot={setHot}
+      onPick={(g, m) => onSelect({ kind: g.kind, id: m.id, ref: m.ref })} />
   )
 }
 
 const TRANSIT_MODES = MODES.filter((m) => m.key === 'bus' || m.key === 'tram')
-const perVehicle = (x) => (x.veh
-  ? (x.pax / x.veh).toLocaleString('pl-PL', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-  : '—')
+const perVehicle = (x) => (x.veh ? fixed(x.pax / x.veh) : '—')
 
 /**
  * What a transit point counted, by mode: the vehicles that stopped at its
@@ -290,128 +84,48 @@ function TransitLoads({ title, refs, all, hours, scale = (v) => v }) {
     .some((r) => transitByMode([r], hours)[m.key].veh > 0))
   if (!modes.length) return null
   const sum = { veh: tot.bus.veh + tot.tram.veh, pax: tot.bus.pax + tot.tram.pax }
+  const cells = (x, share) => [fmt(scale(x.veh)), fmt(scale(x.pax)), perVehicle(x), share]
   return (
-    <div className="tloads">
-      <h4>{title}</h4>
-      <table className="split-table static">
-        <thead>
-          <tr><th /><th>pojazdy</th><th>pasażerowie</th><th>os./poj.</th><th>% pas.</th></tr>
-        </thead>
-        <tbody>
-          {modes.map((m) => (
-            <tr key={m.key}>
-              <td><i style={{ background: m.color }} />{m.label}</td>
-              <td>{fmt(scale(tot[m.key].veh))}</td>
-              <td>{fmt(scale(tot[m.key].pax))}</td>
-              <td className="pp">{perVehicle(tot[m.key])}</td>
-              <td>{sum.pax ? Math.round((100 * tot[m.key].pax) / sum.pax) : '—'}</td>
-            </tr>
-          ))}
-          {modes.length > 1 && (
-            <tr className="sum">
-              <td>Razem</td><td>{fmt(scale(sum.veh))}</td><td>{fmt(scale(sum.pax))}</td>
-              <td className="pp">{perVehicle(sum)}</td><td>100</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+    <StatBlock title={title}>
+      <SplitTable
+        columns={[{ label: 'pojazdy' }, { label: 'pasażerowie' },
+          { label: 'os./poj.', tone: 'strong' }, { label: '% pas.' }]}
+        rows={[
+          ...modes.map((m) => ({
+            key: m.key, label: m.label, color: m.color,
+            cells: cells(tot[m.key], sum.pax ? Math.round((100 * tot[m.key].pax) / sum.pax) : '—'),
+          })),
+          ...(modes.length > 1
+            ? [{ key: 'sum', label: 'Razem', sum: true, cells: cells(sum, 100) }] : []),
+        ]} />
       {poles.length > 1 && (
-        <table className="split-table static poles">
-          <thead>
-            <tr>
-              <th>słupki</th>
-              {modes.map((m) => (
-                <th key={m.key} colSpan={2}><i style={{ background: m.color }} />{m.label.toLowerCase()}</th>
-              ))}
-            </tr>
-            <tr>
-              <th />
-              {modes.map((m) => <Fragment key={m.key}><th>poj.</th><th>os./poj.</th></Fragment>)}
-            </tr>
-          </thead>
-          <tbody>
-            {poles.map((r) => {
-              const t = transitByMode([r], hours)
-              const out = !refs.includes(r)
-              return (
-                <tr key={r.id} className={out ? 'out' : undefined}>
-                  <td>
-                    <b>{sectionLetter(r.id) || r.id}</b> {sectionOf('pt', r) || r.loc}
-                    {out && <span className="partial"> — pominięty</span>}
-                  </td>
-                  {modes.map((m) => (
-                    <Fragment key={m.key}>
-                      <td>{t[m.key].veh ? fmt(scale(t[m.key].veh)) : '—'}</td>
-                      <td className="pp">{t[m.key].veh ? perVehicle(t[m.key]) : ''}</td>
-                    </Fragment>
-                  ))}
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+        <GroupedTable corner="słupki"
+          groups={modes.map((m) => ({
+            key: m.key, label: m.label.toLowerCase(), color: m.color,
+            columns: [{ label: 'poj.' }, { label: 'os./poj.', tone: 'strong' }],
+          }))}
+          rows={poles.map((r) => {
+            const t = transitByMode([r], hours)
+            const out = !refs.includes(r)
+            return {
+              key: r.id, out,
+              head: (
+                <>
+                  <b>{sectionLetter(r.id) || r.id}</b> {sectionOf('pt', r) || r.loc}
+                  {out && <Partial> — pominięty</Partial>}
+                </>
+              ),
+              cells: modes.map((m) => (t[m.key].veh
+                ? [fmt(scale(t[m.key].veh)), perVehicle(t[m.key])] : ['—', ''])),
+            }
+          })} />
       )}
-    </div>
+    </StatBlock>
   )
 }
 
-// Direction of travel, "W>E" = from west to east; the arrow points where they go.
-const ARROW = { N: '↑', S: '↓', E: '→', W: '←', NE: '↗', NW: '↖', SE: '↘', SW: '↙' }
-const dirLabel = (d) => {
-  const to = d.includes('>') ? d.split('>')[1] : d
-  return `${ARROW[to] || ''} ${d.replace('>', ' → ')}`.trim()
-}
-
-/**
- * Each section's directions side by side for the period: one bar per
- * section, split between its two directions. Shows tidal flows - a street
- * busy inbound in the morning and outbound in the afternoon - that a single
- * total hides. One-way sections have a single segment.
- *
- * Hovering a row lights its section on the map, and a direction - its bar
- * segment or figure - draws that way's arrow there; hovering the section on
- * the map lights its row here.
- */
-function DirSplit({ title, rows, hot, setHot }) {
-  const shown = rows.filter((r) => r.dirs.some((d) => d.v > 0))
-  if (!shown.length) return null
-  return (
-    <div className="dirsplit">
-      <h4>{title}</h4>
-      {shown.map((r) => {
-        const sum = r.dirs.reduce((a, d) => a + d.v, 0)
-        const on = hot?.kind === r.kind && hot.id === r.id
-        const cls = (d, i) => `${i ? 'b' : 'a'}${on && hot.dir
-          ? (hot.dir === d.key ? ' lit' : ' dim') : ''}`
-        // a mouse only: on touch a tap would leave the row lit
-        const hover = setHot ? {
-          onPointerOver: (e) => e.pointerType === 'mouse' && setHot({
-            kind: r.kind, id: r.id, dir: e.target.closest('[data-dir]')?.dataset.dir,
-          }),
-          onPointerLeave: (e) => e.pointerType === 'mouse' && setHot(null),
-        } : {}
-        return (
-          <div key={r.id} className={on ? 'dir-row hot' : 'dir-row'} {...hover}>
-            <b>{r.letter}</b>
-            <span className="dir-name" title={r.id}>{r.name}</span>
-            <div className="dir-bar">
-              {r.dirs.map((d, i) => (
-                <i key={d.key} data-dir={d.key} className={cls(d, i)} style={{ flexGrow: d.v }} />
-              ))}
-            </div>
-            <div className="dir-vals">
-              {r.dirs.map((d, i) => (
-                <span key={d.key} data-dir={d.key} className={cls(d, i)}>
-                  {dirLabel(d.key)} <b>{fmt(d.v)}</b> · {sum ? Math.round((100 * d.v) / sum) : 0}%
-                </span>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
+// the ETL's lists close with the remainder, "inne"
+const Parts = (props) => <Breakdown rest="inne" {...props} />
 
 const GEO_NOTE = {
   intersections: 'położenie wyliczone ze skrzyżowań opisanych w kolumnie „Odcinek”',
@@ -451,170 +165,8 @@ const SOURCE_TEXT = {
     + `natężenia ruchu na podstawie ${KBR}.`,
 }
 
-/** Copy the point as a picture, with a download for browsers that will not
- *  put images on the clipboard. */
-function ShareButtons({ spec }) {
-  const [state, setState] = useState(null)
-  const settle = (s) => {
-    setState(s)
-    setTimeout(() => setState(null), 2800)
-  }
-  const copy = async () => {
-    setState('busy')
-    try { settle(await copyCard(spec)) } catch { settle('error') }
-  }
-  const download = async () => {
-    try { await downloadCard(spec); settle('saved') } catch { settle('error') }
-  }
-  const share = async () => {
-    try {
-      const r = await shareCard(spec)
-      if (r === 'shared') settle('shared')
-    } catch { settle('error') }
-  }
-  // the address holds the whole view, this node and its left-out pieces
-  const link = async () => {
-    try {
-      await navigator.clipboard.writeText(window.location.href)
-      settle('linked')
-    } catch { settle('error') }
-  }
-  return (
-    <div className="share">
-      {SHARE_FILES && (
-        <button type="button" className="share-btn primary" onClick={share}>
-          {state === 'shared' ? 'Udostępniono ✓' : 'Udostępnij'}
-        </button>
-      )}
-      <button type="button" className="share-btn" onClick={copy} disabled={state === 'busy'}>
-        {state === 'copied' ? 'Skopiowano ✓' : state === 'busy' ? 'Kopiuję…' : 'Kopiuj obraz'}
-      </button>
-      <button type="button" className="share-btn" onClick={download} title="Pobierz obraz PNG">
-        Pobierz
-      </button>
-      <button type="button" className="share-btn" onClick={link}
-        title="Kopiuj link do tego widoku">
-        {state === 'linked' ? 'Link ✓' : 'Link'}
-      </button>
-      {state === 'downloaded' && <span className="share-msg">schowek niedostępny — pobrano plik</span>}
-      {state === 'saved' && <span className="share-msg">pobrano plik</span>}
-      {state === 'error' && <span className="share-msg err">nie udało się</span>}
-    </div>
-  )
-}
-
-/** Hours as runs, so 6-10 and 15-19 do not read as 6-19: "07:00–09:00, 15:00–17:00". */
-function hourRuns(hours) {
-  const runs = []
-  for (const h of [...hours].sort((a, b) => a - b)) {
-    if (runs.length && runs.at(-1)[1] === h - 1) runs.at(-1)[1] = h
-    else runs.push([h, h])
-  }
-  return runs.map(([a, b]) => `${HL(a)}–${HL((b + 1) % 24)}`).join(', ')
-}
-
 // The survey writes a round-the-clock count as "00:00-00:00".
 const hoursText = (s) => (/^0?0:00\s*-\s*0?0:00$/.test(s.trim()) ? 'całą dobę' : s)
-
-/**
- * People, vehicles and road capacity as three bars of the same modes, so
- * "a fifth of the people, four fifths of the road" reads at a glance. The
- * car share is written on each bar; the rest are in the table above.
- */
-function ShareBars({ split, pick }) {
-  const rows = splitShares(split)
-  // each segment wide enough for its number carries it; the thin ones are in
-  // the table above and in their tooltip
-  const [barW, setBarW] = useState(0)
-  const watch = useRef(null)
-  const measure = useCallback((el) => {
-    watch.current?.disconnect()
-    if (!el) return
-    setBarW(el.clientWidth)
-    watch.current = new ResizeObserver(([e]) => setBarW(e.contentRect.width))
-    watch.current.observe(el)
-  }, [])
-  if (!rows) return null
-  const shown = pick.active.size ? pick.active : new Set(['car'])
-  const dim = (key) => pick.active.size > 0 && !pick.active.has(key)
-  const fits = (p, parts) => {
-    const w = (barW - 2 * (parts.length - 1)) * p.share
-    return w >= `${Math.round(p.share * 100)}%`.length * 6.4 + 6
-  }
-  return (
-    <div className="sharebars" role="table" aria-label="Udziały środków transportu">
-      {rows.map((r) => {
-        const sel = r.parts.filter((p) => shown.has(p.key))
-        const sum = sel.reduce((a, p) => a + p.share, 0)
-        return (
-          <div key={r.key} className="sharebar" role="row">
-            <span role="rowheader">{SHARE_ROW[r.key]}</span>
-            <div className="bar" ref={r.key === 'persons' ? measure : undefined}>
-              {r.parts.filter((p) => p.share > 0).map((p, _, parts) => (
-                <i key={p.key} role="cell" {...pick.on(p.key)}
-                  className={dim(p.key) ? 'dim' : undefined}
-                  style={{ flexGrow: p.share, background: p.color, color: inkOn(p.color) }}
-                  title={`${p.label}: ${Math.round(p.share * 100)}% (${SHARE_ROW[r.key]})`}>
-                  {fits(p, parts) ? `${Math.round(p.share * 100)}%` : ''}
-                </i>
-              ))}
-            </div>
-            <b>
-              {sel.map((p) => <i key={p.key} style={{ background: p.color }} />)}
-              {Math.round(sum * 100)}%
-            </b>
-          </div>
-        )
-      })}
-      <p className="hint">
-        Liczba po prawej: samochody osobowe albo suma środków zaznaczonych na
-        wykresie lub w tabeli — np. autobusy z tramwajami to cała komunikacja
-        zbiorowa. Przepustowość w pojazdach
-        umownych — {PCU_SOURCE}: rower 0,3, samochód 1, dostawczy 1,5,
-        ciężarowy 2,5–3, autobus 2,5, tramwaj 3. To miara zajęcia przepustowości,
-        nie powierzchni; tramwaj liczony jak na jezdni, także gdy ma własne torowisko.
-      </p>
-    </div>
-  )
-}
-
-/**
- * The modal split as a ring, drawn by hand rather than with Recharts so the
- * picked slices can slide out and the rest fade with a CSS transition -
- * Recharts swaps its "active" shape in one frame.
- */
-function Donut({ rows, active, pick }) {
-  const R = 60
-  const r = 30
-  const c = 75
-  const total = rows.reduce((a, s) => a + s.persons, 0)
-  let a0 = -Math.PI / 2
-  const pt = (rad, a) => `${(c + rad * Math.cos(a)).toFixed(2)},${(c + rad * Math.sin(a)).toFixed(2)}`
-  return (
-    <svg className="donut" width={2 * c} height={2 * c} viewBox={`0 0 ${2 * c} ${2 * c}`}
-      role="img" aria-label="Podział modalny — osoby">
-      {rows.filter((s) => s.persons > 0).map((s) => {
-        const a1 = a0 + (2 * Math.PI * s.persons) / total
-        const mid = (a0 + a1) / 2
-        const large = a1 - a0 > Math.PI ? 1 : 0
-        // a whole ring cannot be one arc; stop a hair short
-        const end = a1 - a0 >= 2 * Math.PI - 1e-6 ? a1 - 1e-4 : a1
-        const d = `M${pt(R, a0)} A${R},${R} 0 ${large} 1 ${pt(R, end)} `
-          + `L${pt(r, end)} A${r},${r} 0 ${large} 0 ${pt(r, a0)} Z`
-        a0 = a1
-        const on = active.has(s.key)
-        return (
-          <path key={s.key} d={d} fill={s.color} {...pick.on(s.key)}
-            className={on ? 'on' : active.size ? 'dim' : undefined}
-            style={{ '--dx': `${(6 * Math.cos(mid)).toFixed(2)}px`,
-              '--dy': `${(6 * Math.sin(mid)).toFixed(2)}px` }}>
-            <title>{`${s.label}: ${Math.round((100 * s.persons) / total)}%`}</title>
-          </path>
-        )
-      })}
-    </svg>
-  )
-}
 
 /** Modal split of a node, in people, with the vehicles it came from. */
 function ModalSplit({ node, data, occupancy }) {
@@ -624,82 +176,64 @@ function ModalSplit({ node, data, occupancy }) {
   // is most of the traffic and a smaller part of who travels
   const vehTotal = splitVehicles(split)
   const rows = split.slices.filter((s) => s.persons > 0 || s.vehicles > 0)
+  const shareRows = splitShares(split)
   const span = split.hours.length ? `${split.hours.length} godz. (${hourRuns(split.hours)})` : 'brak'
   // the stop survey's load applied beyond the hours it was measured in
   const beyond = (split.loadHours || []).length
     && split.hours.some((h) => !split.loadHours.includes(h))
   const occ = data.transitOcc
-  // Modes can be picked, several at once: a click or tap adds or drops one,
-  // and hovering previews what a click would add. The donut, the table and
-  // the bars all follow, and the bars sum the picked shares - buses and trams
-  // together are the whole of public transport.
-  const [hover, setHover] = useState(null)
-  const [pinned, setPinned] = useState(() => new Set())
-  const active = MOUSE && hover && !pinned.has(hover) ? new Set([...pinned, hover]) : pinned
-  const toggle = (key) => setPinned((p) => {
-    const n = new Set(p)
-    if (n.has(key)) n.delete(key)
-    else n.add(key)
-    return n
-  })
-  const pick = {
-    active,
-    on: (key) => ({
-      onMouseEnter: MOUSE ? () => setHover(key) : undefined,
-      onMouseLeave: MOUSE ? () => setHover(null) : undefined,
-      onClick: () => toggle(key),
-    }),
-  }
+  // Modes can be picked; the donut, the table and the bars all follow, and the
+  // bars sum the picked shares - buses and trams together are the whole of
+  // public transport.
+  const pick = usePick()
   return (
-    <div className="split">
+    <Block>
       <h4>
         Podział modalny — osoby
         {node.piece && ` · ${node.piece.kind === 'pt' ? 'przystanek' : 'przekrój'} `
           + `${sectionLetter(node.piece.id) || node.piece.id}`}
       </h4>
       {!total ? (
-        <p className="hint">
+        <Hint>
           Brak danych w wybranym okresie
           {split.basis === 'transit' ? ' — pasażerów liczono tylko 5–9 i 14–18.' : '.'}
-        </p>
+        </Hint>
       ) : (
         <>
-          <div className="split-body">
-            <Donut rows={rows} active={active} pick={pick} />
-            <table className="split-table">
-              <thead>
-                <tr>
-                  <th /><th>osoby</th><th>% osób</th>
-                  {vehTotal > 0 && <><th>pojazdy</th><th>% poj.</th></>}
-                </tr>
-              </thead>
-              <tbody>
-                {[...rows].sort((a, b) => b.persons - a.persons).map((s) => (
-                  <tr key={s.key} {...pick.on(s.key)} tabIndex={0} aria-pressed={pinned.has(s.key)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(s.key) }
-                    }}
-                    className={active.has(s.key) ? 'on' : active.size ? 'dim' : undefined}>
-                    <td><i style={{ background: s.color }} />{s.label}</td>
-                    <td>{s.est ? fmtEst(s.persons) : fmt(s.persons)}</td>
-                    <td className="pp">{Math.round((100 * s.persons) / total)}</td>
-                    {vehTotal > 0 && (
-                      <>
-                        <td className="veh">{s.vehicles == null ? '' : fmt(s.vehicles)}</td>
-                        <td className="vp">{s.vehicles == null ? ''
-                          : Math.round((100 * s.vehicles) / vehTotal)}</td>
-                      </>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="hint">Liczone dla {span}.</p>
-          <ShareBars split={split} pick={pick} />
+          <SplitBody>
+            <Donut pick={pick} label="Podział modalny — osoby"
+              rows={rows.map((s) => ({ ...s, value: s.persons }))} />
+            <SplitTable pick={pick}
+              columns={[{ label: 'osoby' }, { label: '% osób', tone: 'strong' },
+                ...(vehTotal > 0
+                  ? [{ label: 'pojazdy', tone: 'dim' }, { label: '% poj.', tone: 'dim' }] : [])]}
+              rows={[...rows].sort((a, b) => b.persons - a.persons).map((s) => ({
+                key: s.key, label: s.label, color: s.color,
+                cells: [
+                  s.est ? fmtEst(s.persons) : fmt(s.persons),
+                  Math.round((100 * s.persons) / total),
+                  s.vehicles == null ? '' : fmt(s.vehicles),
+                  s.vehicles == null ? '' : Math.round((100 * s.vehicles) / vehTotal),
+                ],
+              }))} />
+          </SplitBody>
+          <Hint>Liczone dla {span}.</Hint>
+          {shareRows && (
+            <ShareBars pick={pick} fallback={['car']} label="Udziały środków transportu"
+              rows={shareRows.map((r) => ({ ...r, label: SHARE_ROW[r.key] }))}>
+              <Hint>
+                Liczba po prawej: samochody osobowe albo suma środków zaznaczonych na
+                wykresie lub w tabeli — np. autobusy z tramwajami to cała komunikacja
+                zbiorowa. Przepustowość w pojazdach
+                umownych — {PCU_SOURCE}: rower 0,3, samochód 1, dostawczy 1,5,
+                ciężarowy 2,5–3, autobus 2,5, tramwaj 3. To miara zajęcia przepustowości,
+                nie powierzchni; tramwaj liczony jak na jezdni, także gdy ma własne torowisko.
+              </Hint>
+            </ShareBars>
+          )}
         </>
       )}
-      <ul className="split-notes">
+      <Notes>
         {split.basis === 'measured' && (
           <li>
             Autobusy i tramwaje: pojazdy policzone na przekrojach drogowych ×
@@ -752,12 +286,12 @@ function ModalSplit({ node, data, occupancy }) {
                 + 'między autobus i tramwaj.'}
           </li>
         )}
-      </ul>
+      </Notes>
       {node.pair && split.basis !== 'transit' && split.loadHours?.length > 0 && (
         <TransitLoads refs={node.pair.refs} all={node.pair.all} hours={split.loadHours}
           title={`Słupki punktu KZ ${node.pair.id} — ${hourRuns(split.loadHours)}`} />
       )}
-    </div>
+    </Block>
   )
 }
 
@@ -767,14 +301,11 @@ function unitOf(kind) {
   return { road: 'pojazdów', pt: 'pasażerów', bike: 'rowerzystów', ped: 'pieszych',
     rail: 'pasażerów' }[kind] || ''
 }
-
 export default function Details({
   data, sel, hours, metric, period, share, wholeDay, people, occupancy,
   markers, family, onSelect, onClose, off, toggleOff, hot, setHot,
 }) {
   const { kind, ref: p } = sel
-  // phones: the panel is a bottom sheet; dragging its header down closes it
-  const sheet = useSheetDrag(true, (open) => { if (!open) onClose() })
   // The drawn node carries the modal split and its transit partner, if any.
   const node = markers ? markerIndex(markers)[`${kind}:${sel.id}`] : null
   const color = LAYERS[kind]?.color || '#f4a261'
@@ -814,7 +345,7 @@ export default function Details({
       // 3.4 and 3.5 record the side people came from ("wlot początkowy"), so
       // "E" is someone heading west; spelled as from > to like the road keys
       return Object.entries(ref.byHourDir || {}).map(([d, arr]) => ({
-        key: dirKey(d), v: shown(sumHours(arr, hours), k),
+        key: cameFrom(d), v: shown(sumHours(arr, hours), k),
       }))
     }
     return []
@@ -835,17 +366,14 @@ export default function Details({
   }
   const covered = kind === 'signal' ? hours : coveredOf(kind, p)
   /** The period figure, or why there is none. */
-  const now = (text) => {
-    if (!covered.length) return <dd className="now gap">brak pomiaru w tym okresie</dd>
-    return (
-      <dd className="now">
-        {text}
-        {!scaled && covered.length < hours.length && (
-          <span className="partial"> — zmierzono {covered.length} z {hours.length} godz.</span>
-        )}
-      </dd>
-    )
-  }
+  const now = (text) => (covered.length ? (
+    <Fact label={`W okresie ${period}`} tone="now">
+      {text}
+      {!scaled && covered.length < hours.length && (
+        <Partial> — zmierzono {covered.length} z {hours.length} godz.</Partial>
+      )}
+    </Fact>
+  ) : <Fact label={`W okresie ${period}`} tone="gap">brak pomiaru w tym okresie</Fact>)
   const dirRow = (k, m) => ({
     kind: k, id: m.id,
     letter: sectionLetter(m.id) || '—',
@@ -919,10 +447,10 @@ export default function Details({
       out: !!fam.node && !!off?.has(pieceKey(kind, m.id)),
     }))
   const chart = (values) => (stack ? (
-    <StackProfile kind={kind} pieces={stack} hours={hours} unit={unit(kind)}
+    <StackedHourBars kind={kind} pieces={stack} hours={hours} unit={unit(kind)}
       current={fam.current?.kind === kind ? fam.current.id : null}
-      hot={hot} setHot={setHot} onSelect={onSelect} />
-  ) : <Profile values={values} hours={hours} color={color} unit={unit(kind)} />)
+      hot={hot} setHot={setHot} onPick={(s) => onSelect({ kind, id: s.id, ref: s.ref })} />
+  ) : <HourBars values={values} hours={hours} color={color} unit={unit(kind)} />)
   // a piece's chart is its whole point, so the heading says which is lit
   const chartFor = (what) => (stack && fam.current
     ? `Profil dobowy — ${what}: punkt ${fam.node?.id || fam.parent}, `
@@ -948,38 +476,34 @@ export default function Details({
     )
     body = (
       <>
-        <dl>
-          <dt>Rodzaj</dt>
-          <dd>{p.kind === 'crossing'
+        <Facts>
+          <Fact label="Rodzaj">{p.kind === 'crossing'
             ? 'samodzielne przejście dla pieszych z sygnalizacją'
-            : `skrzyżowanie, ${p.arms} wloty`}</dd>
-          <dt>Ulice</dt><dd>{p.streets.join(', ') || '—'}</dd>
-          <dt>Klasa</dt><dd>{p.c}{p.minor ? ' · same ulice lokalne' : ''}</dd>
-          <dt>Sygnalizatorów</dt><dd>{p.n}</dd>
-          <dt>Ruch (model, {period})</dt>
-          <dd>{fmtEst(p.v * (share ?? 1))} poj.</dd>
-          <dt>Komunikacja zbiorowa</dt>
-          <dd>{p.runs ? `${fmt(p.runs)} kursów w oknie 6–10 i 15–19` : 'brak'}
-            {p.tram ? ' · w tym tramwaj' : ''}</dd>
+            : `skrzyżowanie, ${p.arms} wloty`}</Fact>
+          <Fact label="Ulice">{p.streets.join(', ') || '—'}</Fact>
+          <Fact label="Klasa">{p.c}{p.minor ? ' · same ulice lokalne' : ''}</Fact>
+          <Fact label="Sygnalizatorów">{p.n}</Fact>
+          <Fact label={`Ruch (model, ${period})`}>{fmtEst(p.v * (share ?? 1))} poj.</Fact>
+          <Fact label="Komunikacja zbiorowa">{p.runs ? `${fmt(p.runs)} kursów w oknie 6–10 i 15–19` : 'brak'}
+            {p.tram ? ' · w tym tramwaj' : ''}</Fact>
           {p.near && (
-            <>
-              <dt>Najbliższy pomiar</dt>
-              <dd>ruch {p.near.kind}: {p.near.id}, {fmt(p.near.total)} os.,
-                {' '}{p.near.dist} m stąd</dd>
-            </>
+            <Fact label="Najbliższy pomiar">
+              ruch {p.near.kind}: {p.near.id}, {fmt(p.near.total)} os.,
+              {' '}{p.near.dist} m stąd
+            </Fact>
           )}
-        </dl>
+        </Facts>
         {p.minor && !p.tram && p.kind === 'junction' && (
-          <p className="warn">
+          <Warn>
             Wszystkie wloty to ulice lokalne i nie jeździ tędy tramwaj — warto
             sprawdzić, czy sygnalizacja jest tu potrzebna.
-          </p>
+          </Warn>
         )}
-        <p className="hint">
+        <Hint>
           Natężenie pochodzi z modelu (mediana błędu 24%), nie z pomiaru.
           O możliwości wyłączenia sygnalizacji decydują też widoczność,
           przejścia dla pieszych, priorytet tramwaju i historia zdarzeń.
-        </p>
+        </Hint>
       </>
     )
   } else if (p.aggregate) {
@@ -1004,65 +528,59 @@ export default function Details({
     )
     body = (
       <>
-        <dl>
-          <dt>Przekroje</dt>
-          <dd>
+        <Facts>
+          <Fact label="Przekroje">
             {p.members.map((m) => m.id).join(', ')}
             {p.all.length > p.members.length && (
-              <span className="partial">
+              <Partial>
                 {' '}— pominięte: {p.all.filter((m) => !p.members.includes(m))
                   .map((m) => m.id).join(', ')}
-              </span>
+              </Partial>
             )}
-          </dd>
-          <dt className="now">W okresie {period}</dt>
+          </Fact>
           {now(node?.split && splitTotal(node.split) > 0
             ? `${fmtEst(splitTotal(node.split))} osób — wszystkie środki`
             : `${fmt(sumHours(total, hours))} ${unit(kind)}`)}
           {node?.split && splitTotal(node.split) > 0 && (
-            <>
-              <dt className="whole">w tym ruch drogowy</dt>
-              <dd className="whole">{fmt(sumHours(total, hours))} {unit(kind)}</dd>
-            </>
+            <Fact label="w tym ruch drogowy" tone="whole">{fmt(sumHours(total, hours))} {unit(kind)}</Fact>
           )}
-          <dt className="whole">Cały pomiar</dt>
-          <dd className="whole">{fmt(total.reduce((a, b) => a + b, 0))} {unit(kind)}</dd>
-        </dl>
+          <Fact label="Cały pomiar" tone="whole">{fmt(total.reduce((a, b) => a + b, 0))} {unit(kind)}</Fact>
+        </Facts>
         {kind === 'pt' ? (
-          <p className="hint">
+          <Hint>
             Punkt KZ jako całość: pasażerowie w pojazdach, które zatrzymały się
             na badanych słupkach, zsumowani po słupkach. Słupki stoją przy
             różnych ulicach i w różnych kierunkach, więc ta suma nie odpowiada
             przekrojom drogowym pobliskiego węzła.
             {ptRepeat >= 0.01 && ` Ok. ${Math.round(ptRepeat * 100)}% to pasażerowie pojazdów `
               + 'widzianych na dwóch słupkach tego punktu — liczeni dwa razy.'}
-          </p>
+          </Hint>
         ) : p.repeatsStreet ? (
-          <p className="warn">
+          <Warn>
             Przekroje leżą na tej samej ulicy po obu stronach skrzyżowania, więc
             pojazd jadący na wprost jest liczony dwa razy. Suma zawyża ruch przez
             węzeł; udziały (%) w podziale modalnym pozostają porównywalne.
-          </p>
+          </Warn>
         ) : (
-          <p className="hint">
+          <Hint>
             Punkt pomiarowy widziany jako całość. Przekroje to różne ulice
             przecinające linię pomiaru, więc ich suma to cały ruch przez tę linię.
-          </p>
+          </Hint>
         )}
         <h4>Profil dobowy — cały punkt{stack ? ' po częściach' : ''}</h4>
         {chart(total)}
-        <Breakdown title={`Udział przekrojów — ${period}`} obj={bySection} />
+        <Parts title={`Udział przekrojów — ${period}`} parts={bySection} />
         {kind === 'pt' ? (
           <>
             <TransitLoads refs={p.members} hours={hours} scale={(v) => shown(v, 'pt')}
               title={`Pojazdy i napełnienie — ${period}`} />
-            <Breakdown title={`Kierunki (pasażerowie) — ${period}`}
-              obj={perPeriod(p.members, 'byHourDir')} />
-            <Breakdown title={`Linie (pasażerowie) — ${period}`}
-              obj={perPeriod(p.members, 'byHourLine')} />
+            <Parts title={`Kierunki (pasażerowie) — ${period}`}
+              parts={perPeriod(p.members, 'byHourDir')} />
+            <Parts title={`Linie (pasażerowie) — ${period}`}
+              parts={perPeriod(p.members, 'byHourLine')} />
           </>
         ) : (
-          <DirSplit title={`Kierunki przekrojów — ${period} (${unit(kind)})`}
+          <DirectionSplit title={`Kierunki przekrojów — ${period} (${unit(kind)})`}
             rows={p.members.map((m) => dirRow(kind, m))} hot={hot} setHot={setHot} />
         )}
       </>
@@ -1102,28 +620,26 @@ export default function Details({
     }
     body = (
       <>
-        <dl>
-          <dt>Obszar</dt><dd>{p.area}</dd>
-          <dt>Odcinek</dt><dd>{p.segment}</dd>
-          <dt>Miejsce pomiaru</dt><dd>{p.where}</dd>
-          <dt>Data</dt><dd>{p.date}{p.hours ? ` · ${hoursText(p.hours)}` : ''}</dd>
-          <dt className="now">W okresie {period}</dt>
+        <Facts>
+          <Fact label="Obszar">{p.area}</Fact>
+          <Fact label="Odcinek">{p.segment}</Fact>
+          <Fact label="Miejsce pomiaru">{p.where}</Fact>
+          <Fact label="Data">{p.date}{p.hours ? ` · ${hoursText(p.hours)}` : ''}</Fact>
           {now(`${fmt(sumHours(prof, hours))} ${unit('road')}`)}
-          <dt className="whole">Cały pomiar</dt>
-          <dd className="whole">
+          <Fact label="Cały pomiar" tone="whole">
             {fmt(p.total)} pojazdów, wszystkie kategorie
             {p.window ? ' — tylko 6–10 i 15–19, nie cała doba' : ''}
-          </dd>
-        </dl>
+          </Fact>
+        </Facts>
         <h4>
           {chartFor(people ? 'osoby w samochodach osobowych'
             : ROAD_METRICS[metric].label.toLowerCase())}
         </h4>
         {chart(prof)}
-        <DirSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]}
+        <DirectionSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]}
           hot={hot} setHot={setHot} />
-        <Breakdown title={`Kategorie pojazdów — ${period}`} obj={byCat} />
-        <Breakdown title="Poza jezdnią — rowery i UTO" obj={off} />
+        <Parts title={`Kategorie pojazdów — ${period}`} parts={byCat} />
+        <Parts title="Poza jezdnią — rowery i UTO" parts={off} />
       </>
     )
   } else if (kind === 'bike' || kind === 'ped') {
@@ -1132,28 +648,26 @@ export default function Details({
     if (GEO_NOTE[p.geo]) cardNotes.push(`Położenie: ${GEO_NOTE[p.geo]}.`)
     body = (
       <>
-        <dl>
-          <dt>Odcinek</dt><dd>{p.segment}</dd>
-          {p.where?.length ? <><dt>Miejsce</dt><dd>{p.where.join('; ')}</dd></> : null}
-          {p.date ? <><dt>Pomiar</dt><dd>{p.date}{p.hours ? ` · ${p.hours}` : ''}</dd></> : null}
-          <dt className="now">W okresie {period}</dt>
+        <Facts>
+          <Fact label="Odcinek">{p.segment}</Fact>
+          {p.where?.length ? <Fact label="Miejsce">{p.where.join('; ')}</Fact> : null}
+          {p.date ? <Fact label="Pomiar">{p.date}{p.hours ? ` · ${p.hours}` : ''}</Fact> : null}
           {now(`${fmt(shown(sumHours(p.byHour, hours)))} ${unit(kind)}`)}
-          <dt className="whole">Cały pomiar</dt>
-          <dd className="whole">{fmt(p.total)}{p.hours ? ` (${p.hours})` : ''}</dd>
-        </dl>
+          <Fact label="Cały pomiar" tone="whole">{fmt(p.total)}{p.hours ? ` (${p.hours})` : ''}</Fact>
+        </Facts>
         <h4>{chartFor(unit(kind))}</h4>
         {chart(shape(p.byHour))}
         {p.byHourDir
-          ? <DirSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]}
+          ? <DirectionSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]}
             hot={hot} setHot={setHot} />
-          : <Breakdown title="Kierunki — cały pomiar" obj={p.byDir} />}
-        <Breakdown title="Płeć — cały pomiar" obj={p.bySex} />
-        {kind === 'bike' && <Breakdown title="Gdzie jadą — cały pomiar" obj={p.byPlace} />}
-        {kind === 'bike' && <Breakdown title="Pojazd — cały pomiar" obj={p.byMode} />}
-        {kind === 'bike' && <Breakdown title="Kask — cały pomiar" obj={p.helmet} />}
-        {kind === 'ped' && <Breakdown title="Sprawność — cały pomiar" obj={p.byMobility} />}
-        {kind === 'ped' && <Breakdown title="Cechy dodatkowe — cały pomiar" obj={p.byMobility2} />}
-        {kind === 'ped' && <Breakdown title="Strona ulicy — cały pomiar" obj={p.bySide} />}
+          : <Parts title="Kierunki — cały pomiar" parts={p.byDir} />}
+        <Parts title="Płeć — cały pomiar" parts={p.bySex} />
+        {kind === 'bike' && <Parts title="Gdzie jadą — cały pomiar" parts={p.byPlace} />}
+        {kind === 'bike' && <Parts title="Pojazd — cały pomiar" parts={p.byMode} />}
+        {kind === 'bike' && <Parts title="Kask — cały pomiar" parts={p.helmet} />}
+        {kind === 'ped' && <Parts title="Sprawność — cały pomiar" parts={p.byMobility} />}
+        {kind === 'ped' && <Parts title="Cechy dodatkowe — cały pomiar" parts={p.byMobility2} />}
+        {kind === 'ped' && <Parts title="Strona ulicy — cały pomiar" parts={p.bySide} />}
       </>
     )
   } else if (kind === 'pt') {
@@ -1164,37 +678,31 @@ export default function Details({
     cardProfile = shape(prof)
     body = (
       <>
-        <dl>
-          <dt>Przystanek</dt><dd>{p.stop || '—'}</dd>
-          <dt>Lokalizacja</dt><dd>{p.loc}</dd>
-          <dt>Osiedle</dt><dd>{p.osiedle || '—'}</dd>
-          <dt>Pomiar</dt><dd>{p.dates.join(', ')}</dd>
-          <dt className="now">W okresie {period}</dt>
+        <Facts>
+          <Fact label="Przystanek">{p.stop || '—'}</Fact>
+          <Fact label="Lokalizacja">{p.loc}</Fact>
+          <Fact label="Osiedle">{p.osiedle || '—'}</Fact>
+          <Fact label="Pomiar">{p.dates.join(', ')}</Fact>
           {now(`${fmt(sumHours(shape(prof), hours))} pasażerów w ${fmt(vehNow)} pojazdach`)}
-          <dt className="whole">Cały pomiar</dt>
-          <dd className="whole">
+          <Fact label="Cały pomiar" tone="whole">
             {fmt(p.pax)} pasażerów w {fmt(p.veh)} pojazdach
             {' '}({hourRuns(Array.from({ length: 24 }, (_, h) => h).filter((h) =>
               Object.values(p.vehByHour || {}).some((arr) => arr[h] > 0)))})
-          </dd>
-          <dt className="whole">Średnie wykorzystanie miejsc</dt>
-          <dd className="whole">{pct(p.avgLoad)} — cały pomiar</dd>
+          </Fact>
+          <Fact label="Średnie wykorzystanie miejsc" tone="whole">{pct(p.avgLoad)} — cały pomiar</Fact>
           {p.boarded ? (
-            <>
-              <dt className="whole">Wsiadło / wysiadło</dt>
-              <dd className="whole">
-                {fmt(p.boarded)} / {fmt(p.alighted)} — cały pomiar, tylko część kursów
-              </dd>
-            </>
+            <Fact label="Wsiadło / wysiadło" tone="whole">
+              {fmt(p.boarded)} / {fmt(p.alighted)} — cały pomiar, tylko część kursów
+            </Fact>
           ) : null}
-        </dl>
+        </Facts>
         <h4>{chartFor('pasażerowie')}</h4>
         {chart(shape(prof))}
         <TransitLoads refs={[p]} hours={hours} scale={(v) => shown(v, 'pt')}
           title={`Pojazdy i napełnienie — ${period}`} />
-        <Breakdown title={`Kierunki (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourDir')} />
-        <Breakdown title={`Linie (pasażerowie) — ${period}`} obj={perPeriod([p], 'byHourLine')} />
-        <Breakdown title="Przewoźnicy (liczba pojazdów) — cały pomiar" obj={p.byCarrier} />
+        <Parts title={`Kierunki (pasażerowie) — ${period}`} parts={perPeriod([p], 'byHourDir')} />
+        <Parts title={`Linie (pasażerowie) — ${period}`} parts={perPeriod([p], 'byHourLine')} />
+        <Parts title="Przewoźnicy (liczba pojazdów) — cały pomiar" parts={p.byCarrier} />
       </>
     )
   } else if (kind === 'rail') {
@@ -1204,23 +712,21 @@ export default function Details({
     cardProfile = shape(prof)
     body = (
       <>
-        <dl>
-          <dt>Stacje kordonu</dt><dd>{p.stations.join(', ')}</dd>
-          <dt>Pomiar</dt><dd>{p.dates.join(', ')}</dd>
-          <dt className="now">W okresie {period}</dt>
+        <Facts>
+          <Fact label="Stacje kordonu">{p.stations.join(', ')}</Fact>
+          <Fact label="Pomiar">{p.dates.join(', ')}</Fact>
           {now(`${fmt(sumHours(shape(prof), hours))} pasażerów`)}
-          <dt className="whole">Cały pomiar</dt>
-          <dd className="whole">
+          <Fact label="Cały pomiar" tone="whole">
             {Object.entries(p.pax).map(([d, v]) => `${d}: ${fmt(v)}`).join(' · ')}
             {' '}w {p.trains} pociągach
-          </dd>
-        </dl>
+          </Fact>
+        </Facts>
         <h4>Profil dobowy — pasażerowie</h4>
-        <Profile values={shape(prof)} hours={hours} color={color} unit={unit(kind)} />
-        <Breakdown title={`Kierunek — ${period}`} obj={Object.fromEntries(
+        <HourBars values={shape(prof)} hours={hours} color={color} unit={unit(kind)} />
+        <Parts title={`Kierunek — ${period}`} parts={Object.fromEntries(
           Object.entries(p.byHour).map(([d, arr]) => [d, shown(sumHours(arr, hours))]))} />
-        <Breakdown title="Miejsca w pociągach — cały pomiar" obj={p.seats} />
-        <Breakdown title="Przewoźnicy (kursy) — cały pomiar" obj={p.carriers} />
+        <Parts title="Miejsca w pociągach — cały pomiar" parts={p.seats} />
+        <Parts title="Przewoźnicy (kursy) — cały pomiar" parts={p.carriers} />
       </>
     )
   }
@@ -1258,56 +764,46 @@ export default function Details({
   }
 
   return (
-    <div className={sheet.dy != null ? 'details dragging' : 'details'}
-      style={sheet.dy != null ? { transform: `translateY(${sheet.dy}px)` } : undefined}>
-      <div className="dhead" style={{ borderColor: color }} {...sheet.handlers}>
-        <div>
-          <span className="pill" style={{ background: color }}>{pill}</span>
-          <h3>{title}</h3>
-          <ShareButtons spec={spec} />
-        </div>
-        <button onClick={onClose}>×</button>
-      </div>
-      <div className="dbody">
-        {fam && (
-          <NodeTree family={fam} shares={shares} onSelect={onSelect}
-            off={off || NO_OFF} toggleOff={toggleOff} hot={hot} setHot={setHot} />
-        )}
-        {splitNode && (
-          <ModalSplit key={splitNode.id} node={splitNode} data={data} occupancy={occ} />
-        )}
-        {part && (
-          <div className="part">
-            <h4>
-              Część węzła {fam.node?.id || fam.parent}
-              {' — '}{GROUP_LABEL[part.g.kind].toLowerCase()}
-            </h4>
-            {part.out ? (
-              <p>
-                {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
-                {sectionLetter(fam.current.id) || fam.current.id} jest{' '}
-                <b>pominięty</b> w liczbach węzła. W okresie {period}:{' '}
-                {fmt(part.val)} ({part.unit}), wobec {fmt(part.sum)} w pozostałej części grupy.
-              </p>
-            ) : (
-              <p>
-                {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
-                {sectionLetter(fam.current.id) || fam.current.id} to{' '}
-                <b>{part.sum ? `${part.share}%` : '—'}</b> tej grupy w okresie {period}:
-                {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
-              </p>
-            )}
-          </div>
-        )}
-        {body}
-        {scaled && (
-          <p className="warn">
-            Wartości przeliczone na całą dobę (×{exp.factor},{' '}
-            {BASIS_LABEL[exp.basis]}). Pomiar obejmował tylko szczyty.
-          </p>
-        )}
-        {p.geo && GEO_NOTE[p.geo] && <p className="geo">📍 {GEO_NOTE[p.geo]}</p>}
-      </div>
-    </div>
+    <DetailsPanel pill={pill} title={title} color={color} onClose={onClose}
+      actions={(
+        <ShareButtons render={() => drawCard(spec)} filename={cardFilename(spec)}
+          title={spec.title} text={`KBR Wrocław 2024 — ${spec.title}`} />
+      )}>
+      {fam && (
+        <NodeTree family={fam} shares={shares} onSelect={onSelect}
+          off={off} toggleOff={toggleOff} hot={hot} setHot={setHot} />
+      )}
+      {splitNode && (
+        <ModalSplit key={splitNode.id} node={splitNode} data={data} occupancy={occ} />
+      )}
+      {part && (
+        <Callout title={`Część węzła ${fam.node?.id || fam.parent}`
+          + ` — ${GROUP_LABEL[part.g.kind].toLowerCase()}`}>
+          {part.out ? (
+            <p>
+              {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
+              {sectionLetter(fam.current.id) || fam.current.id} jest{' '}
+              <b>pominięty</b> w liczbach węzła. W okresie {period}:{' '}
+              {fmt(part.val)} ({part.unit}), wobec {fmt(part.sum)} w pozostałej części grupy.
+            </p>
+          ) : (
+            <p>
+              {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
+              {sectionLetter(fam.current.id) || fam.current.id} to{' '}
+              <b>{part.sum ? `${part.share}%` : '—'}</b> tej grupy w okresie {period}:
+              {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
+            </p>
+          )}
+        </Callout>
+      )}
+      {body}
+      {scaled && (
+        <Warn>
+          Wartości przeliczone na całą dobę (×{exp.factor},{' '}
+          {BASIS_LABEL[exp.basis]}). Pomiar obejmował tylko szczyty.
+        </Warn>
+      )}
+      {p.geo && GEO_NOTE[p.geo] && <Footnote>📍 {GEO_NOTE[p.geo]}</Footnote>}
+    </DetailsPanel>
   )
 }

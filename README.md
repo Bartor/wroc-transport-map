@@ -330,7 +330,7 @@ przystanku, a nie po identyfikatorze.
 ```
 data/     surowe załączniki KBR (xlsx, shp) — nie modyfikowane
 etl/      build.py, geocode.py, overrides.json → public/data/*.json
-src/      aplikacja React (Leaflet + Recharts)
+src/      aplikacja React (Leaflet + Recharts); komponenty: github.com/Bartor/ui-kit
 ```
 
 `public/data/` i `etl/cache/` są generowane i nie są śledzone w gicie.
