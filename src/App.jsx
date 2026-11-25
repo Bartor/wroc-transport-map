@@ -17,6 +17,7 @@ import {
   ChangeControls, ChangeMap, SpeedsControls, SpeedsMap, StationsControls, StationsMap, changeLegend,
   speedsLegend, stationsLegend,
 } from './MoreViews'
+import { showing } from './displayed'
 import { CLOSE0, ClosureBar, ClosureControls, ClosureMap, closureLegend, pickIn, useClosure } from './ClosureView'
 import { ASK0 } from './answers'
 import { readDays } from './days'
@@ -374,6 +375,9 @@ export default function App() {
         basemap={basemap} sig={sig} markers={markers} labels={labels}
         selected={sel} onSelect={select} family={family} off={off}
         hot={hot} setHot={setHot} own={own.map} ownLegend={own.legend} ownOverlay={own.overlay}
+        info={showing({ data, view, period, hours, wholeDay, setWholeDay, people, metric, setMetric, areas, setAreas, aggregate, markers, off, setOff,
+          tripsX, trip, setTrip, spots: files.places?.spots, askX, setAsk, closureX, setClosure, selected: sel, close, net, setNet, sig, setSig,
+          ownName: ownId && (view === 'change' ? changed?.find((r) => r.key === ownId)?.name : view === 'stations' ? ownId : files.speeds?.sections.find((q) => q.id === ownId)?.name), clearOwn: () => setOwnId(null) })}
       />
       {selected && (
         <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`} onClose={close}>
