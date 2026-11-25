@@ -14,7 +14,7 @@ import { colorsOf, partsOf } from './Stack'
 import { isSmall, smallText } from './Small'
 import { meanOf, onMean, perPeopleOf, pickWarning, togglePick, valueOf } from './answers'
 import { averages, averagesTable, links, meanFor } from './trips'
-import { arrowed, loop } from './arcs'
+import { arrowed, layout, loop, spread } from './arcs'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
@@ -195,6 +195,16 @@ suite('answers', () => {
     expect(line[0][0]).toBeCloseTo(8)
     expect(line.at(-1)[0]).toBeCloseTo(92)
     expect(arrowed([[0, 0], [9, 0]]).heads).toEqual([])
+    // three that meet at a place end clear of one another there
+    const far = [[0, 0], [0, 2], [0, 4]].map((from, i) => ({ key: i, from, to: [400, 0], w: 5, fw: 5, bw: 0, parts: [{ color: 'a', share: 0.6 }, { color: 'b', share: 0.4 }] }))
+    const out = layout(far, (p) => p, 10)
+    const tips = out.map((o) => o.outlines[0][1])
+    expect(Math.hypot(tips[0][0] - tips[1][0], tips[0][1] - tips[1][1])).toBeGreaterThan(8)
+    expect(out[0].strands.map((s) => s.color)).toEqual(['a', 'b'])
+    expect(out[0].heads).toHaveLength(2)
+    const dirs = [{ angle: 0, need: 1 }, { angle: 0.1, need: 1 }]
+    spread(dirs)
+    expect(dirs[1].angle - dirs[0].angle).toBeGreaterThan(0.95)
     const l = loop([51.1, 17], 1)
     expect(l[0]).toEqual([51.1, 17])
     expect(l.at(-1)[0]).toBeCloseTo(51.1)

@@ -52,37 +52,140 @@ const triangle = (base, tip, half) => {
 }
 
 /**
- * A line in pixels with arrowheads: where it ends and, the other way, where it
- * begins - or a little way off, at `inner` of its length, where many begin.
- * Sizes are lengths of the heads, none for none.
+ * A line in pixels with arrowheads where it ends and, the other way, where it
+ * begins. Sizes are lengths of the heads, none for none.
  */
-export function arrowed(pts, { end = 0, start = 0, inner = 0 } = {}) {
+export function arrowed(pts, { end = 0, start = 0 } = {}) {
   const all = length(pts)
   const e = Math.min(end, all * 0.4)
   const s = Math.min(start, all * 0.3)
-  const heads = []
   let line = pts
+  let tip = null
+  let tail = null
   if (e > 2) {
     const at = along(line, all - e)
-    heads.push(triangle(at.p, pts[pts.length - 1], e * 0.62))
+    tip = triangle(at.p, pts[pts.length - 1], e * 0.62)
     // under the head a little, so that no seam shows
     const stop = along(line, all - e * 0.8)
     line = [...line.slice(0, stop.i), stop.p]
   }
   if (s > 2) {
-    const tip = along(pts, inner * all).p
-    const base = along(pts, inner * all + s)
-    heads.push(triangle(base.p, tip, s * 0.62))
-    if (!inner) { const from = along(line, s * 0.8); line = [from.p, ...line.slice(from.i)] }
+    tail = triangle(along(pts, s).p, pts[0], s * 0.62)
+    const from = along(line, s * 0.8)
+    line = [from.p, ...line.slice(from.i)]
   }
-  return { line, heads }
+  return { line, heads: [tip, tail].filter(Boolean), tip, tail }
 }
 /** How long the heads of a line are, by how much of it runs each way. */
 export function headSizes(f, weight) {
   const all = (f.fw || 0) + (f.bw || 0)
   if (!all) return null
-  const size = (w) => (w / all < 0.12 ? 0 : (6 + 1.35 * weight) * (0.6 + 0.4 * Math.sqrt(w / all)))
-  return { end: size(f.fw), start: size(f.bw), inner: f.inner || 0 }
+  const size = (w) => (w / all < 0.12 ? 0 : (6 + 1.1 * weight) * (0.6 + 0.4 * Math.sqrt(w / all)))
+  return { end: size(f.fw), start: size(f.bw) }
+}
+
+/** A line moved sideways. */
+function aside(pts, d) {
+  if (!d) return pts
+  return pts.map((p, i) => {
+    const q = pts[Math.max(0, i - 1)]
+    const r = pts[Math.min(pts.length - 1, i + 1)]
+    const g = gap(q, r) || 1
+    return [p[0] - ((r[1] - q[1]) / g) * d, p[1] + ((r[0] - q[0]) / g) * d]
+  })
+}
+/** The same curve as `arc`, in pixels. */
+function curve(p, q, bow = 0.16, n = 18) {
+  const c = [(p[0] + q[0]) / 2 + (q[1] - p[1]) * bow, (p[1] + q[1]) / 2 - (q[0] - p[0]) * bow]
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const t = i / n
+    const u = 1 - t
+    return [u * u * p[0] + 2 * u * t * c[0] + t * t * q[0], u * u * p[1] + 2 * u * t * c[1] + t * t * q[1]]
+  })
+}
+
+/** Directions moved apart until each has its room; `need` is in radians. */
+export function spread(list) {
+  const s = [...list].sort((x, y) => x.angle - y.angle)
+  if (s.length < 2) return
+  const sum = s.reduce((k, x) => k + x.need, 0)
+  const fit = Math.min(1, (2 * Math.PI) / sum)
+  for (let pass = 0; pass < 60; pass++) {
+    let moved = 0
+    for (let k = 0; k < s.length; k++) {
+      const x = s[k]
+      const y = s[(k + 1) % s.length]
+      const space = (y.angle - x.angle) + (k === s.length - 1 ? 2 * Math.PI : 0)
+      const short = ((x.need + y.need) / 2) * fit - space
+      if (short > 1e-3) { x.angle -= short / 2; y.angle += short / 2; moved += short }
+    }
+    if (moved < 1e-2) break
+  }
+}
+
+/** A loop large enough for its line to leave a hole. */
+function openLoop(pts, weight) {
+  const [x, y] = pts[0]
+  const high = Math.max(...pts.map((p) => y - p[1]))
+  const k = Math.max(1, (22 + 2.4 * weight) / high)
+  return k === 1 ? pts : pts.map((p) => [x + (p[0] - x) * k, y + (p[1] - y) * k])
+}
+
+const HUB = [5, 38]         // how far from its middle the lines of a place end, px
+/**
+ * Flows as they are drawn, in pixels. A flow with `fw` or `bw` has arrowheads,
+ * and its end at a place keeps clear of the ends of others there; one with
+ * `parts` is so many strands side by side, as wide as their shares.
+ */
+export function layout(flows, project, width = 6) {
+  // what stays is often most of it: it must not make threads of the rest
+  const top = Math.max(1, ...flows.filter((f) => !f.loop).map((f) => f.w))
+  const items = flows.map((f) => {
+    const weight = f.fixed ?? Math.max(f.hotAs ? 2 : 1, width * (f.loop ? 0.7 : 1) * Math.sqrt(Math.min(1, f.w / top))) + (f.strong ? 2 : 0)
+    const heads = f.fixed ? null : headSizes(f, weight)
+    return { f, weight, heads, a: project(f.from), b: project(f.to) }
+  })
+  const hubs = new Map()
+  for (const it of items) {
+    if (!it.heads || it.f.loop || it.f.path) continue
+    const mid = curve(it.a, it.b)
+    const ends = [[it.f.from, it.a, mid[3], 'a', it.heads.start], [it.f.to, it.b, mid[mid.length - 4], 'b', it.heads.end]]
+    for (const [at, p, toward, side, head] of ends) {
+      const key = at.join()
+      if (!hubs.has(key)) hubs.set(key, { p, ends: [] })
+      hubs.get(key).ends.push({ it, side, angle: Math.atan2(toward[1] - p[1], toward[0] - p[0]), px: Math.max(it.weight, head * 1.24) + 1.5 })
+    }
+  }
+  for (const { p, ends } of hubs.values()) {
+    if (ends.length < 2) continue
+    const r = Math.min(HUB[1], Math.max(HUB[0], (ends.reduce((s, e) => s + e.px, 0) / (2 * Math.PI)) * 1.6))
+    for (const e of ends) e.need = e.px / r
+    spread(ends)
+    for (const e of ends) e.it[e.side === 'a' ? 'a2' : 'b2'] = [p[0] + r * Math.cos(e.angle), p[1] + r * Math.sin(e.angle)]
+  }
+  return items.map(({ f, weight, heads, a, b, a2, b2 }) => {
+    const pts = f.path ? f.path.map(project) : f.loop ? openLoop(loop(f.from, f.loop).map(project), weight) : curve(a2 || a, b2 || b)
+    const { line, tip, tail } = arrowed(pts, heads || {})
+    // too thin to tell apart is not told apart
+    let parts = (f.parts || []).filter((p) => p.share * weight >= 0.9)
+    if (parts.length < 2) parts = [{ color: parts.length && f.parts ? parts[0].color : f.color, share: 1 }]
+    const all = parts.reduce((s, p) => s + p.share, 0)
+    let at = 0
+    const strands = []
+    const tops = []
+    for (const p of parts) {
+      const s = p.share / all
+      const u0 = 2 * at - 1
+      const u1 = 2 * (at + s) - 1
+      strands.push({ color: p.color, weight: parts.length > 1 ? Math.max(1, weight * s) + 0.3 : weight, pts: aside(line, ((u0 + u1) / 2) * (weight / 2)) })
+      // the head is sliced the way the line is
+      const slice = ([l, t, r], x, y) => [[r[0] + (l[0] - r[0]) * x, r[1] + (l[1] - r[1]) * x], t, [r[0] + (l[0] - r[0]) * y, r[1] + (l[1] - r[1]) * y]]
+      if (tip) tops.push({ color: p.color, pts: slice(tip, (u0 + 1) / 2, (u1 + 1) / 2) })
+      if (tail) tops.push({ color: p.color, pts: slice(tail, (1 - u1) / 2, (1 - u0) / 2) })
+      at += s
+    }
+    return { f, weight, line, strands, heads: tops, outlines: [tip, tail].filter(Boolean) }
+  })
 }
 
 /** Numbers that look random and are the same every time. */

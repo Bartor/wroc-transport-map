@@ -178,6 +178,8 @@ export function flowLines(x, hot = {}) {
   const { list } = S.levels[t.level]
   const modeW = (f) => (hot.mode != null ? f.modes[hot.mode] : f.w)
   const color = (f) => S.modes[hot.mode != null ? hot.mode : f.mode].color
+  // a strand a mode, unless one of them is pointed at
+  const parts = (f) => (hot.mode != null ? null : Array.from(f.modes, (w, m) => ({ color: S.modes[m].color, share: f.w ? w / f.w : 0 })).filter((p) => p.share > 0))
   if (show === 'trips') {
     const at = new Map()
     return { arcs: sample(idx, MANY_TRIPS).map((i) => {
@@ -197,12 +199,11 @@ export function flowLines(x, hot = {}) {
     const total = all.reduce((s, f) => s + f.w, 0)
     return {
       arcs: [
-        ...out.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `f${f.key}`, pair: f.key, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f),
-          // lines of one place begin together, so the heads back to it stand off
-          faint: f.n < 3, inner: 0.13, many, on: hot.place === f.b.key || hot.pair === f.key,
+        ...out.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `f${f.key}`, pair: f.key, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), parts: parts(f),
+          faint: f.n < 3, many, on: hot.place === f.b.key || hot.pair === f.key,
           // only a place at the other end of a line puts the rest in its shade
           dim: (lit && hot.place !== f.b.key) || (hot.pair != null && hot.pair !== f.key) })),
-        ...loops(all.filter((f) => f.self), modeW, color, total).map((f) => ({ ...f, faint: f.n < 3 })),
+        ...loops(all.filter((f) => f.self), modeW, color, total).map((f) => ({ ...f, parts: parts(f), faint: f.n < 3 })),
       ],
     }
   }
@@ -211,9 +212,9 @@ export function flowLines(x, hot = {}) {
     const lit = hot.place != null && all.some((f) => f.a.key === hot.place || f.b.key === hot.place)
     return {
       arcs: [
-        ...all.filter((f) => !f.self && modeW(f) > 0).map((f) => ({ ...f, pair: f.key, many: true, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), faint: f.n < 5,
+        ...all.filter((f) => !f.self && modeW(f) > 0).map((f) => ({ ...f, pair: f.key, many: true, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), parts: parts(f), faint: f.n < 5,
           on: hot.pair === f.key, dim: (hot.pair != null && hot.pair !== f.key) || (lit && hot.place !== f.a.key && hot.place !== f.b.key) })),
-        ...loops(all.filter((f) => f.self), modeW, color).map((f) => ({ ...f, faint: f.n < 5, dim: lit && hot.place !== f.place.key })),
+        ...loops(all.filter((f) => f.self), modeW, color).map((f) => ({ ...f, parts: parts(f), faint: f.n < 5, dim: lit && hot.place !== f.place.key })),
       ],
     }
   }
@@ -296,11 +297,15 @@ export function TripsMap({ x, dark, onPick, setT }) {
       ...(show === 'areas' && v != null ? [{ text: p0.textOf(k) + (P.fixed ? '' : smallText(counts[k])) }] : partner && partner.n[k] ? [{ text: fmtEst(partner.w[k]) + smallText(partner.n[k]) }] : [])]
     return { key: p.key, lat: p.c[0], lon: p.c[1], r: 0, html: labelHtml(lines0), box: labelBox(lines0), weight: v ?? 0 }
   })), [t.names, show, list, values, p0, partner, counts, P])
+  // made anew, they would all be laid out anew
+  const flows = useMemo(() => [...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), ...(f.place ? { hotAs: HOT_PLACE(f.place.key), onPick: () => onPick(f.place) } : { hotAs: f.many ? HOT_PAIR(f.pair) : HOT_PLACE(f.b.key) }) })), ...chains],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lines, chains, single, onPick])
   const topSpot = perS ? Math.max(1, ...perS.w) : 1
   return (
     <>
       <ZoneLayer items={items} picked={picked} onPick={onPick} tip={tipOf} plain={show !== 'areas'} hot={hot.place} />
-      <Arcs width={single ? 1.6 : 9} flows={[...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), ...(f.place ? { hotAs: HOT_PLACE(f.place.key), onPick: () => onPick(f.place) } : { hotAs: f.many ? HOT_PAIR(f.pair) : HOT_PLACE(f.b.key) }) })), ...chains]} />
+      <Arcs width={single ? 1.6 : 14} flows={flows} />
       {perS && (
         <CircleLayer points={spots.map((s, i) => ({ s, i })).filter(({ i }) => perS.n[i] > 0).sort((a, b) => perS.w[b.i] - perS.w[a.i]).map(({ s, i }) => {
           const on = t.filters.spot?.[0] === i
@@ -341,8 +346,8 @@ export function tripsLegend({ x, dark }) {
       { note: 'wielkość koła = podróże; tylko miejsca, które podało co najmniej 5 badanych' }]
   }
   if (show !== 'areas') {
-    return [{ title: show === 'flows' ? 'Przepływy — najczęstszy środek' : 'Pojedyncze podróże' }, ...modes(S.modes),
-      { note: show === 'flows' ? 'grubość = podróże, strzałka = dokąd, pętla = w obrębie obszaru, blade = mniej niż 5 w próbie'
+    return [{ title: show === 'flows' ? 'Przepływy — środki' : 'Pojedyncze podróże' }, ...modes(S.modes),
+      { note: show === 'flows' ? 'grubość = podróże, pasy = środki, strzałka = dokąd, pętla = w obrębie obszaru, blade = mniej niż 5 w próbie'
         : `do ${MANY_TRIPS} losowych podróży z próby; domy wzdłuż ulicy, rzadkie miejsca w losowym punkcie rejonu` }]
   }
   const to = { from: 'z', to: 'do', any: 'z i do', home: 'mieszkańców —' }[x.way]
@@ -354,7 +359,7 @@ export function tripsLegend({ x, dark }) {
     ...(p0.stat?.opts.length === p0.stat?.d.options.length && p0.stat ? [{ note: '(!) wybrano wszystkie odpowiedzi — wszędzie 100%' }] : p0.legend(dark)),
     ...(p0.stat?.d.key === 'km' ? [{ note: KM_NOTE }] : []),
     ...(p0.stat && !p0.stat.opts.length && !p0.stat.mean ? [{ note: 'kolor = najczęstsza odpowiedź, bledszy = mniejsza przewaga' }] : []),
-    ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek, strzałka = dokąd; pętla = podróże w obrębie' }] : []),
+    ...(partner ? [{ note: 'łuki: pasy = środki, strzałka = dokąd; pętla = podróże w obrębie' }] : []),
     { note: `blade i (!) = mniej niż ${THIN} podróży w próbie` },
   ]
 }

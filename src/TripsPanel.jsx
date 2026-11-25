@@ -125,7 +125,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
     const paint = painted(x)
     return tripsCard({
       x, title, period, paint, wayName: WAY_TEXT[x.way], lines: flowLines(x),
-      legendTitle: show !== 'areas' ? 'Połączenia — kolor: najczęstszy środek' : paint.stat ? paint.title : partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
+      legendTitle: show !== 'areas' ? 'Połączenia — pasy: środki transportu' : paint.stat ? paint.title : partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
       means,
       stacks: (S.freight ? FREIGHT_STACKS : STACKS.slice(0, 2)).map(([key, label]) => stackOf(key, label)).filter(Boolean),
       top: top.slice(0, 12), small, perHead, ranked, note: paint.stat?.d.key === 'km' ? KM_NOTE : null,

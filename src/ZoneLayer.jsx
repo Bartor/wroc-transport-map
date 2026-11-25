@@ -1,7 +1,7 @@
 import { memo, useMemo, useState } from 'react'
 import { ImageOverlay, LayerGroup, Polygon, Polyline, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { arc, arrowed, headSizes, loop } from './arcs'
+import { layout } from './arcs'
 import { diverging } from './answers'
 import { setHot } from './hot'
 
@@ -44,51 +44,48 @@ export function ZoneLayer({ items, picked, onPick, tip, quiet, plain, hot }) {
   )
 }
 
-const Arc = memo(function Arc({ path, color, weight, opacity, tip, hotAs, cased, end, start, inner, zoom, onPick }) {
-  const map = useMap()
-  // the heads are so many pixels long, whatever the zoom
-  const { line, heads } = useMemo(() => {
-    if (!end && !start) return { line: path, heads: [] }
-    const px = (p) => { const q = map.project(p, zoom); return [q.x, q.y] }
-    const back = (p) => { const q = map.unproject(p, zoom); return [q.lat, q.lng] }
-    const out = arrowed(path.map(px), { end, start, inner })
-    return { line: out.line.map(back), heads: out.heads.map((h) => h.map(back)) }
-  }, [map, zoom, path, end, start, inner])
+const Arc = memo(function Arc({ it, tip, hotAs, onPick, opacity, cased, on }) {
   const handlers = useMemo(() => (hotAs ? {
     mouseover: () => setHot(hotAs), mouseout: () => setHot({}), ...(onPick ? { click: onPick } : {}),
   } : undefined), [hotAs, onPick])
+  const edge = on ? '#ffffff' : '#0b1016'
   return (
     <>
-      {/* a dark edge, so that it stands off whatever is under it */}
-      {cased && <Polyline positions={line} interactive={false} pathOptions={{ color: '#0b1016', weight: weight + 2.5, opacity: opacity * 0.55, lineCap: 'round' }} />}
-      {cased && heads.map((h, i) => <Polygon key={i} positions={h} interactive={false} pathOptions={{ color: '#0b1016', weight: 2.5, opacity: opacity * 0.55, fill: false, lineJoin: 'round' }} />)}
-      <Polyline positions={line} interactive={!!hotAs} eventHandlers={handlers}
-        pathOptions={{ color, weight, opacity, lineCap: heads.length ? 'butt' : 'round' }}>
-        {tip}
-      </Polyline>
-      {heads.map((h, i) => <Polygon key={i} positions={h} interactive={false} pathOptions={{ stroke: false, fillColor: color, fillOpacity: opacity }} />)}
+      {/* an edge, so that it stands off whatever is under it */}
+      {(cased || on) && <Polyline positions={it.line} interactive={false} pathOptions={{ color: edge, weight: it.weight + (on ? 4 : 2.5), opacity: on ? 1 : opacity * 0.55, lineCap: it.heads.length ? 'butt' : 'round' }} />}
+      {(cased || on) && it.outlines.map((h, i) => <Polygon key={i} positions={h} interactive={false} pathOptions={{ color: edge, weight: on ? 4 : 2.5, opacity: on ? 1 : opacity * 0.55, fill: false, lineJoin: 'round' }} />)}
+      {it.strands.map((s, i) => <Polyline key={i} positions={s.pts} interactive={false} pathOptions={{ color: s.color, weight: s.weight, opacity, lineCap: it.heads.length ? 'butt' : 'round' }} />)}
+      {it.heads.map((h, i) => <Polygon key={i} positions={h.pts} interactive={false} pathOptions={{ stroke: false, fillColor: h.color, fillOpacity: opacity }} />)}
+      {/* what is pointed at: wider than it looks */}
+      {hotAs && (
+        <Polyline positions={it.line} eventHandlers={handlers} pathOptions={{ color: '#000000', weight: it.weight + 5, opacity: 0, lineCap: 'round' }}>
+          {tip}
+        </Polyline>
+      )}
     </>
   )
 })
 
-/** Curves between places, the wider the more there is of it, with an arrow each
- *  way it runs; a loop where it stays in a place. */
+/** Curves between places, the wider the more there is of it, a strand a mode and
+ *  an arrow each way it runs; a loop where it stays in a place. */
 export function Arcs({ flows, width = 6 }) {
   const map = useMap()
   const [zoom, setZoom] = useState(map.getZoom())
   useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
-  // what stays is often most of it: it must not make threads of the rest
-  const top = Math.max(1, ...flows.filter((f) => !f.loop).map((f) => f.w))
-  const drawn = useMemo(() => flows.map((f) => ({ ...f, path: f.loop ? loop(f.from, f.loop) : arc(f.from, f.to) })), [flows])
+  // strands and heads are so many pixels, whatever the zoom
+  const drawn = useMemo(() => {
+    const px = (p) => { const q = map.project(p, zoom); return [q.x, q.y] }
+    const back = (p) => { const q = map.unproject(p, zoom); return [q.lat, q.lng] }
+    return layout(flows, px, width).map((it) => ({ f: it.f, weight: it.weight, line: it.line.map(back), outlines: it.outlines.map((h) => h.map(back)),
+      strands: it.strands.map((s) => ({ ...s, pts: s.pts.map(back) })), heads: it.heads.map((h) => ({ ...h, pts: h.pts.map(back) })) }))
+  }, [flows, map, zoom, width])
   return (
     <LayerGroup>
-      {drawn.map((f) => {
-        const weight = Math.max(f.hotAs ? 2 : 1, width * Math.sqrt(Math.min(1, f.w / top))) + (f.on ? 1.5 : f.strong ? 2 : 0)
-        const heads = headSizes(f, weight)
+      {drawn.map((it) => {
+        const { f } = it
         return (
-          <Arc key={f.key} path={f.path} color={f.on ? '#ffffff' : f.color} tip={f.tip} hotAs={f.hotAs} onPick={f.onPick}
-            cased={!!f.hotAs && !f.dim} end={heads?.end} start={heads?.start} inner={heads?.inner} zoom={heads ? zoom : 0}
-            weight={weight} opacity={f.on || f.strong ? 1 : f.dim ? 0.2 : f.faint ? (f.hotAs ? 0.6 : 0.45) : 0.9} />
+          <Arc key={f.key} it={it} tip={f.tip} hotAs={f.hotAs} onPick={f.onPick} on={f.on} cased={!!f.hotAs && !f.dim}
+            opacity={f.on || f.strong ? 1 : f.dim ? 0.2 : f.faint ? (f.hotAs ? 0.6 : 0.45) : 0.95} />
         )
       })}
     </LayerGroup>

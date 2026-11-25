@@ -4,7 +4,7 @@ import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui
 import { SENT_COLOR, diverging, fullName, marginOf, meanDigits, meanLabel, meanOf, optionShares, perPeopleOf, pickWarning, rgb, sentimentNote, shareOf, valueOf } from './answers'
 import { ORDERED } from './Stack'
 import { diffColor } from './closureColors'
-import { arc, arrowed, headSizes, loop } from './arcs'
+import { arc, layout } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
 import { THIN, meanNote, meanText, placeName } from './trips'
 
@@ -295,22 +295,20 @@ export const mapBlock = ({ areas, fit, circles = [], arcs = [], heat, legend, ti
     ctx.stroke()
   }
   ctx.lineCap = 'round'
-  const topW = Math.max(1, ...arcs.filter((a) => !a.loop).map((a) => a.w))
-  for (const c of arcs) {
-    const weight = c.fixed ?? Math.max(1, (c.width || 8) * Math.sqrt(Math.min(1, c.w / topW)))
-    const { line, heads } = arrowed(c.path.map((p) => f.at(p)), (!c.fixed && headSizes(c, weight)) || {})
-    ctx.beginPath()
-    line.forEach(([a, b], i) => { if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
-    ctx.strokeStyle = c.color
-    ctx.fillStyle = c.color
-    ctx.globalAlpha = c.fixed ? 1 : c.faint ? 0.35 : 0.7
-    ctx.lineWidth = weight
-    ctx.lineCap = heads.length ? 'butt' : 'round'
-    ctx.stroke()
-    for (const h of heads) {
-      ctx.beginPath()
-      h.forEach(([a, b], i) => { if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
+  const trail = (pts) => { ctx.beginPath(); pts.forEach(([a, b], i) => { if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) }) }
+  for (const it of layout(arcs.map((c) => ({ ...c, from: c.from || c.path[0], to: c.to || c.path[c.path.length - 1] })), f.at, arcs[0]?.width || 8)) {
+    ctx.globalAlpha = it.f.fixed ? 1 : it.f.faint ? 0.4 : 0.85
+    ctx.lineCap = it.heads.length ? 'butt' : 'round'
+    for (const q of it.strands) {
+      trail(q.pts)
+      ctx.strokeStyle = q.color
+      ctx.lineWidth = q.weight
+      ctx.stroke()
+    }
+    for (const h of it.heads) {
+      trail(h.pts)
       ctx.closePath()
+      ctx.fillStyle = h.color
       ctx.fill()
     }
     ctx.globalAlpha = 1
@@ -502,7 +500,7 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
         title: legendTitle, fit: fitOf(list, picked), border: cityBorder(list),
         areas: list.map((p, k) => ({ rings: p.rings, on: picked.has(p.key), c: p.c, color: !painting || value[k] == null ? null : colorAt(k),
           alpha: (0.3 + 0.7 * Math.min(1, n[k] / 20)) * paint.lead(k), ...label(p, k) })),
-        arcs: lines.arcs.map((a) => ({ ...a, path: a.loop ? loop(a.from, a.loop) : arc(a.from, a.to), width: show === 'trips' ? 1.4 : 8 })),
+        arcs: lines.arcs.map((a) => ({ ...a, ...(show === 'trips' ? { path: arc(a.from, a.to) } : {}), width: show === 'trips' ? 1.4 : 12 })),
         legend: painting ? [...paint.legend(false),
           ...(note ? [{ note }] : []), { note: [paint.unit, 'bladsze i (!): mniej niż 20 podróży w próbie'].filter(Boolean).join(' · ') }]
           : S.modes.map((m) => ({ color: m.color, label: m.label })),
