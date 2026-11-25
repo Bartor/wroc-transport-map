@@ -65,8 +65,8 @@ export function Arcs({ flows, width = 6 }) {
     <LayerGroup>
       {drawn.map((f) => (
         <Arc key={f.key} path={f.path} color={f.on ? '#ffffff' : f.color} tip={f.tip} hotAs={f.hotAs}
-          weight={Math.max(f.hotAs ? 1 : 0.8, width * Math.sqrt(f.w / top)) + (f.on ? 1.5 : 0)}
-          opacity={f.on ? 1 : f.dim ? 0.1 : f.faint ? 0.3 : 0.6} />
+          weight={Math.max(f.hotAs ? 1 : 0.8, width * Math.sqrt(f.w / top)) + (f.on ? 1.5 : f.strong ? 2 : 0)}
+          opacity={f.on || f.strong ? 1 : f.dim ? 0.1 : f.faint ? 0.3 : 0.6} />
       ))}
     </LayerGroup>
   )

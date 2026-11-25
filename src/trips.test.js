@@ -9,7 +9,7 @@ import { hashOf, readHash } from './urlState'
 import { everythingTable, filterText, viewTable } from './surveyCards'
 import { fullName } from './answers'
 import { arc, inside, scatter } from './arcs'
-import { dayModes, dayText, daysOf, patterns, readDays } from './days'
+import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days'
 import { colorsOf, partsOf } from './Stack'
 import { crossTab, crossTable, digitsFor, perSpot, perThousand } from './trips'
 
@@ -197,16 +197,26 @@ suite('how it is drawn', () => {
 })
 
 suite('whole days', () => {
-  const D = readDays({ acts: ['dom', 'praca', 'nauka', 'zakupy', 'odwożenie', 'inne'], modes: ['samochód', 'KZ', 'rower', 'pieszo', 'inne'],
-    rows: [[100, [0, 1, 0], [0, 1, 0], [0, 0], [7, 16]], [300, [0, 1, 0, 0], [0, 1, 3, 0], [1, 3, 3], [8, 15, 16]], [50, [1, 0], [1, 0], [3], [9]]] })
-  it('finds the home and the commonest chains', () => {
-    expect(D.rows.map((r) => r.home)).toEqual([0, 0, 0])
-    expect(daysOf(D, new Set([1]))).toHaveLength(0)
-    const p = patterns(D, D.rows)
-    expect(p.list[0]).toMatchObject({ key: '0130', n: 1, label: 'dom → praca → zakupy → dom' })
-    expect(p.more).toBeCloseTo(300 / 450)
-    expect(dayModes(D.rows).only[0]).toBeCloseTo(100 / 450)
-    expect(dayText(D, S.Z.districts, D.rows[0])[1]).toBe('7:00 samochód → praca, Gmina')
+  // two people: out to work and back by car with a walk to the shop; a bus to school
+  const cols = { ...S.T.cols, p: [1, 1, 1, 2, 3], q: [1, 2, 3, 1, 1], pf: [0, -1, 0, -1, -1], pt: [-1, 0, 1, -1, -1] }
+  const X = { ...S, T: { ...S.T, cols } }
+  const days = readDays(X)
+  it('puts trips together in order', () => {
+    expect(days).toHaveLength(3)
+    expect(days[0]).toMatchObject({ key: '0103', home: 1, stops: [1, 0, 1, 1], modes: [0, 0, 3] })
+    expect(days[2].home).toBe(-1)
+  })
+  it('keeps days with a trip that passes, of those who live there', () => {
+    expect(daysOf(days, [0], null).map((r) => r.k)).toEqual([0])
+    expect(daysOf(days, all, [2]).map((r) => r.k)).toEqual([1])
+  })
+  it('says how days go', () => {
+    const p = patterns(days)
+    expect(p.n).toBe(3)
+    expect(p.list.find((y) => y.key === '0103')).toMatchObject({ n: 1, label: 'dom → praca → dom → zakupy' })
+    expect(dayModes(days).reduce((a, y) => a + y.share, 0)).toBeCloseTo(1)
+    expect(dayText(X, [{ name: 'Ulica' }, { name: 'Sklep' }], days[0])).toEqual(['dom, Ulica', '7:00 samochód → praca, Rynek', '16:00 samochód → dom, Ulica', '10:00 pieszo → zakupy, Sklep'])
+    expect(daysTable(X, null, days)).toHaveLength(4)
   })
 })
 

@@ -7,7 +7,7 @@ import {
   SplitBody, SplitTable, StatBlock, Warn, downloadCsv, fixed, fmt, fmtEst, hourRuns,
 } from '@bartor-net/ui-kit'
 import { StackedHourBars } from '@bartor-net/ui-kit/charts'
-import { dayModes, dayText, daysTable, DAY_MODES, patterns } from './days'
+import { dayModes, dayText, daysTable, patterns } from './days'
 import { hotOn, setHot, useHot } from './hot'
 import Stack, { Bar, colorsOf } from './Stack'
 import {
@@ -99,7 +99,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
     const has = (k) => S.D.some((d) => d.key === k)
     return crossTab(S, idx, has(t.rows) ? t.rows : 'mode', has(t.split) ? t.split : 'goal')
   }, [S, idx, t.rows, t.split])
-  const day = useMemo(() => (x.dayRows && x.days ? { ...patterns(x.days, x.dayRows), modes: dayModes(x.dayRows) } : null), [x.dayRows, x.days])
+  const day = useMemo(() => (x.dayRows ? { ...patterns(x.dayRows), modes: dayModes(x.dayRows) } : null), [x.dayRows])
 
   const fname = tripsName(title, period, x.way, t.filters)
   const spec = () => {
@@ -212,10 +212,10 @@ export default function TripsPanel({ x, setT, period, onClose }) {
           {day && day.n > 0 && (
             <StatBlock title="Całe dni — łańcuchy podróży">
               <Hint>
-                {fmt(day.n)} osób z próby{places.length ? ' mieszkających tutaj' : ''}, które wyszły z domu: średnio {fixed(day.trips)} podróży,{' '}
-                {pctText(day.more)} dni to więcej niż tam i z powrotem. Samym samochodem {pctText(day.modes.only[0])}, samym transportem
-                zbiorowym {pctText(day.modes.only[1])}, tylko pieszo {pctText(day.modes.only[3])}, różnie {pctText(day.modes.mixed)}.
+                {fmt(day.n)} osób z próby{places.length ? ' mieszkających tutaj' : ''} z co najmniej jedną podróżą, która spełnia filtry:
+                średnio {fixed(day.trips)} podróży w ciągu dnia, {pctText(day.more)} dni to więcej niż tam i z powrotem.
               </Hint>
+              <Stack parts={day.modes} />
               <HotList hotKey={hot.pattern} items={day.list.slice(0, 12).map((p) => ({
                 key: p.key, title: p.label, sub: `${fmt(p.n)} w próbie`, value: pctText(p.share), on: t.pattern === p.key,
                 hot: show === 'days' ? { pattern: p.key } : null, hotKey: p.key,
@@ -224,11 +224,11 @@ export default function TripsPanel({ x, setT, period, onClose }) {
               {show !== 'days' && <Hint>Naciśnij łańcuch, aby zobaczyć te dni na mapie.</Hint>}
               {show === 'days' && (
                 <HotList hotKey={hot.day} items={x.dayRows.filter((r) => !t.pattern || r.key === t.pattern).slice(0, 25).map((r) => ({
-                  key: r.i, title: dayText(x.days, S.Z.districts, r).join(' · '), sub: `waga ${r.w}`, value: '', hot: { day: r.i }, hotKey: r.i,
+                  key: r.k, title: dayText(S, spots, r).join(' · '), sub: `${S.T.ages[S.T.cols.ag[r.trips[0]]]} lat, ${S.T.jobs[S.T.cols.jb[r.trips[0]]]}`, value: '', hot: { day: r.k }, hotKey: r.k,
                 }))} />
               )}
-              <Hint>Dni nie zależą od filtrów podróży; miejsca są znane z dokładnością do osiedla. {DAY_MODES.length > 0 && 'Osoby, które nie wyszły z domu, są pominięte.'}</Hint>
-              <LinkButton block onClick={() => downloadCsv(daysTable(x.days, S.Z.districts, x.dayRows), `${fname}-dni.csv`)}>
+              <Hint>Osoby, które nie wyszły z domu, są pominięte.</Hint>
+              <LinkButton block onClick={() => downloadCsv(daysTable(S, spots, x.dayRows), `${fname}-dni.csv`)}>
                 Pobierz dni (CSV, {fmt(day.n)} wierszy)
               </LinkButton>
             </StatBlock>
@@ -294,7 +294,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
             <li>Dzienniczki podróży, wtorek–czwartek, kwiecień–czerwiec 2024; wagi KBR odtwarzają opublikowane 1 397 390 podróży mieszkańców Wrocławia na dobę (1 729 009 z gminami).</li>
             <li>„Na mieszkańca” dzieli przez osoby od 6 lat, które reprezentuje próba. Liczba podróży na osobę zależy od ankietera bardziej niż od osiedla (od 1,1 do 2,6), więc różnice między osiedlami do ok. 25% mogą być przypadkiem.</li>
             <li>Mieszkańcy Wrocławia i 9 gmin, od 6 lat. Bez przyjezdnych z dalszych okolic, taksówek pustych i dostaw.</li>
-            <li>Domy nie są dokładniejsze niż rejon; adresy tylko miejsc poza domem, które odwiedziło co najmniej 5 badanych.</li>
+            <li>Miejsca: adres albo ulica w rejonie, jeśli podało je co najmniej 5 badanych (dom — ulica); pozostałe z dokładnością do rejonu.</li>
           </>
         )}
       </Notes>

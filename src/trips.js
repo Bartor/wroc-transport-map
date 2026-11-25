@@ -175,7 +175,7 @@ export function passing(S, { filters, hours }, skip) {
   for (let i = 0; i < T.n; i++) {
     if (inHour && !inHour.has(c.h[i])) continue
     if (wantEasy && !easy(c, i, area)) continue
-    if (spot != null && c.pf[i] !== spot && c.pt[i] !== spot) continue
+    if (spot != null && !(c.pf[i] === spot && c.a0[i]) && !(c.pt[i] === spot && c.a1[i])) continue
     if (on.every((d) => d.has.has(d.of(c, i)))) out.push(i)
   }
   return out
@@ -413,7 +413,7 @@ export function pairs(S, idx, level, top = 40) {
   return [...all.filter((p) => !p.self).slice(0, top), ...all.filter((p) => p.self)]
 }
 
-/** Trips to and from each spot, most of it by which mode. */
+/** Trips to and from each spot - not from home there - most of it by which mode. */
 export function perSpot(S, idx, count) {
   const c = S.T.cols
   const K = S.modes.length
@@ -421,7 +421,9 @@ export function perSpot(S, idx, count) {
   const n = new Int32Array(count)
   const modes = new Float64Array(count * K)
   for (const i of idx) {
-    for (const s of c.pf[i] === c.pt[i] ? [c.pt[i]] : [c.pf[i], c.pt[i]]) {
+    const a = c.a0[i] ? c.pf[i] : -1
+    const b = c.a1[i] ? c.pt[i] : -1
+    for (const s of a === b ? [b] : [a, b]) {
       if (s < 0) continue
       w[s] += c.w[i]
       n[s] += 1

@@ -24,9 +24,7 @@ const pctText = (s) => (s == null ? '—' : `${Math.round(100 * s)}%`)
 export function useAnswers(A, Z, a0) {
   const q = A && (A.questions.find((x) => x.key === a0.q) || A.questions[0])
   const group = q && (q.tab[a0.group] ? a0.group : 'all')
-  // groups of people are published by district only
-  const only = group !== 'all'
-  const a = useMemo(() => (only && a0.level !== 'd' ? { ...a0, level: 'd', place: a0.place?.startsWith('d') ? a0.place : null } : a0), [a0, only])
+  const a = a0
   const opts = useMemo(() => (q ? clampOpts(q, a.opts?.length ? a.opts : startOpts(q)) : []), [q, a.opts])
   const places = Z && (a.level === 'd' ? Z.districts : Z.zones)
   const city = q && rowAt(q, group, 'a', 'wro')
@@ -54,7 +52,8 @@ export function AnswersMap({ x, onPick }) {
   const { a, q, opts, mid, span, vals, heat } = x
   const picked = useMemo(() => new Set(a.place ? [a.place] : []), [a.place])
   const items = useMemo(() => vals.map((v) => ({
-    ...v, color: v.v == null || v.n < enough(a) ? null : rgb(diverging(v.v, mid, span)),
+    ...v, color: v.v == null ? null : rgb(diverging(v.v, mid, span)),
+    alpha: v.v == null ? null : (0.12 + 0.5 * Math.min(1, v.n / enough(a))) * (Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw) ? 0.5 : 1),
     // a difference the sample cannot tell from none
     faint: v.v != null && Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw),
   })), [vals, a, mid, span, q, opts])
@@ -67,7 +66,7 @@ export function AnswersMap({ x, onPick }) {
           {row ? (
             <>
               {optText(q, opts)}: <b>{pctText(v)}</b> ±{Math.round(100 * marginOf(q, row, opts, a.raw))} p.p.<br />
-              <TipNote>{n} {n >= enough(a) ? 'odpowiedzi' : 'odpowiedzi — za mało na kolor'} · Wrocław {pctText(mid)}</TipNote>
+              <TipNote>{n} odpowiedzi · Wrocław {pctText(mid)}</TipNote>
             </>
           ) : <TipNote>za mało odpowiedzi</TipNote>}
         </MapTooltip>
@@ -86,7 +85,7 @@ export function answersLegend({ x }) {
       label: t === 0 ? `${pctText(mid)} — średnia Wrocławia` : `${pctText(Math.max(0, Math.min(1, mid + t * span)))}${Math.abs(t) === 1 ? (t < 0 ? ' i mniej' : ' i więcej') : ''}`,
     })),
     { note: a.level === 'h' ? `wygładzone w promieniu ok. ${String(a.km).replace('.', ',')} km; blade = mało odpowiedzi`
-      : `blade = różnica od średniej w granicach błędu, szare = mniej niż ${enough(a)} odpowiedzi` },
+      : `blade = mało odpowiedzi (pełny kolor od ${enough(a)}) lub różnica w granicach błędu` },
   ]
 }
 
@@ -130,8 +129,7 @@ export function AnswersControls({ x, setA }) {
         <Field label="Widok" help={<p>Rejony i osiedla pokazują same odpowiedzi; mapa wygładzona uśrednia odpowiedzi z okolicy, więc mniej zależy od przypadku, ale rozmywa granice.</p>}>
           <Chips tight label="Widok" onPick={(level) => set({ level, place: null })} items={[
             { key: 'd', label: 'Osiedla', on: a.level === 'd' },
-            ...(group === 'all' ? [{ key: 'z', label: 'Rejony', on: a.level === 'z' }, { key: 'h', label: 'Mapa wygładzona', on: a.level === 'h' }] : [])]} />
-          {group !== 'all' && <Hint>Wybrana grupa — tylko według osiedli: w rejonie jest zbyt mało osób.</Hint>}
+            { key: 'z', label: 'Rejony', on: a.level === 'z' }, { key: 'h', label: 'Mapa wygładzona', on: a.level === 'h' }]} />
         </Field>
         {!!q.opinion && <Toggle checked={!a.raw} onChange={(on) => set({ raw: !on })} label="Skoryguj o ankietera" help={(
           <>
@@ -244,7 +242,7 @@ export function AnswersPanel({ x, setA, onClose }) {
         <li>Udziały ważone wagami KBR. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera; różnice mniejsze niż on mogą być przypadkiem.</li>
         <li>Te same osoby pytały kierowców i niekierowców, więc różnice między grupami są pewniejsze niż same poziomy i niż różnice między osiedlami.</li>
         {p && !a.raw && !!q.opinion && <li>Wartości obszarów po korekcie o ankietera; poziom całego miasta bez niej.</li>}
-        <li>Obszary z mniej niż {A.minN} odpowiedziami nie są pokazywane. Na udział w badaniu zgodziło się ok. 31% gospodarstw; przedziały tego nie obejmują.</li>
+        <li>Obszary z mniej niż {A.minN} odpowiedziami są puste. Na udział w badaniu zgodziło się ok. 31% gospodarstw; przedziały tego nie obejmują.</li>
         <li>KBR 2024, badanie ankietowe w gospodarstwach domowych (zał. do Raportu II).</li>
       </Notes>
     </DetailsPanel>

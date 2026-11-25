@@ -132,7 +132,7 @@ export default function App() {
     loadFile(f).then((j) => setFiles((x) => ({ ...x, [f]: j })))
   }, [])
   useEffect(() => {
-    for (const f of [...(need || []), ...(view === 'trips' ? ['freight', 'places', 'days'] : [])]) fetchFile(f)
+    for (const f of [...(need || []), ...(view === 'trips' ? ['freight', 'places'] : [])]) fetchFile(f)
   }, [need, view, fetchFile])
 
   useEffect(() => {
@@ -218,7 +218,7 @@ export default function App() {
   const people0 = useMemo(() => (files.zones && files.trips ? prepare(files.zones, files.trips) : null), [files.zones, files.trips])
   const freight = useMemo(() => (files.zones && files.freight ? prepareFreight(files.zones, files.freight) : null), [files.zones, files.freight])
   const zones = useMemo(() => (files.zones ? readZones(files.zones) : null), [files.zones])
-  const dayData = useMemo(() => (files.days ? readDays(files.days) : null), [files.days])
+  const dayData = useMemo(() => (people0 ? readDays(people0) : null), [people0])
   const tripsX = useTrips(view === 'trips' ? (trip.set === 'freight' ? freight : people0) : null, trip, hours, files.places?.spots, dayData)
   const askX = useAnswers(view === 'answers' ? files.answers : null, zones, ask)
   const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])

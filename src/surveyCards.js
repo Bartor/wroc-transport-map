@@ -354,7 +354,8 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend }) {
         fit: fitOf(places, picked), legend, heat: heat && { surface: heat, mid, span }, border: cityBorder(places),
         areas: vals.map((t) => ({
           rings: t.p.rings, on: picked.has(t.p.key), c: t.p.c,
-          color: t.v == null || t.n < enough ? null : rgb(diverging(t.v, mid, span)),
+          color: t.v == null ? null : rgb(diverging(t.v, mid, span)),
+          alpha: t.v == null ? null : (0.25 + 0.75 * Math.min(1, t.n / enough)) * (Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw) ? 0.5 : 1),
           faint: t.v != null && Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw),
           name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : pctText(t.v),
           sub: t.v == null ? null : `±${Math.round(100 * marginOf(q, t.row, opts, a.raw))} · n=${t.n}`, weight: t.n,

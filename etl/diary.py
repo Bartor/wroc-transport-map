@@ -4,9 +4,9 @@
 BIP publishes the survey's whole database (Report II, attachment set 1): 10 566
 people's trips on one weekday, with population weights. It also holds each
 respondent's street and house number, their school and workplace, and the exact
-ends of every trip. Nothing here needs those, and they point at people, so they
-are never read out of the file: columns are picked by name below, and the result
-knows zones only. The raw files stay out of git, under data/kbr.
+ends of every trip. The models need none of that: columns are picked by name
+below, and the result knows zones only. The raw files stay out of git, under
+data/kbr.
 
     python etl/diary.py          # data/kbr -> etl/cache/diary.json
 """

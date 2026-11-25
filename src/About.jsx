@@ -206,9 +206,8 @@ export default function About({ data, onClose }) {
           <b>Zmiana środka.</b> Nikogo nie zapytano, czy zrezygnuje z samochodu. Gotowe filtry opisują cechy podróży, a „Co gdyby” to model o słabej i niepewnej reakcji na czas.
         </li>
         <li>
-          <b>Prywatność.</b> Miasto publikuje pełną bazę, z adresami domów. Ta strona nie pokazuje domów dokładniej niż
-          rejon, a adresy tylko miejsc poza domem, które odwiedziło co najmniej 5 badanych. Cechy i waga podróży
-          często pozwalają jednak rozpoznać, które należą do jednej osoby.
+          <b>Miejsca.</b> Adres albo ulica w rejonie, jeśli podało je co najmniej 5 badanych (dom — ulica); pozostałe
+          z dokładnością do rejonu. Na mapie leżą wzdłuż ulicy lub w losowym punkcie rejonu.
         </li>
       </ul>
       <p>

@@ -53,9 +53,8 @@ export function useTrips(S, t, hours, spots, days) {
     () => (S && zones ? perPartner(S, idx, zones, t.level, way) : null),
     [S, idx, zones, t.level, way],
   )
-  // days go by district, whatever is drawn
-  const dayRows = useMemo(() => (days && S && !S.freight
-    ? daysOf(days, zones && new Set(zones.map((k) => S.Z.zones[k].d))) : null), [days, S, zones])
+  // days with a trip that passes, of the people who live in what is picked
+  const dayRows = useMemo(() => (days && S && !S.freight ? daysOf(days, passed, zones) : null), [days, S, passed, zones])
   return useMemo(() => S && { S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows },
     [S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows])
 }
@@ -93,9 +92,15 @@ export function painted({ S, t, sums, partner }) {
 const alphaOf = (n) => 0.14 + 0.5 * Math.min(1, n / THIN)
 
 // -------------------------------------------------------------------- the map
-/** Where a trip's end is drawn: at its spot, or anywhere in its zone. */
+/** Where a trip's end is drawn: at its address, along its street, or anywhere
+ *  in its zone. */
 function endOf(S, spots, zone, spot, seed) {
-  if (spots && spot >= 0) return [spots[spot].lat, spots[spot].lon]
+  if (spots && spot >= 0) {
+    const s = spots[spot]
+    if (!s.street) return [s.lat, s.lon]
+    const r = rng(seed + 11)
+    return [s.lat + (r() - 0.5) * 0.0016, s.lon + (r() - 0.5) * 0.0025]
+  }
   return zone < S.Z.count ? scatter(S.Z.zones[zone], seed) : null
 }
 
@@ -158,19 +163,20 @@ export function flowLines(x, hot = {}) {
 
 /** Whole days as chains of curves. */
 export function dayLines(x, hot = {}) {
-  const { S, t, dayRows } = x
+  const { S, t, dayRows, spots } = x
   const key = hot.pattern || t.pattern
-  const rows = sample((dayRows || []).filter((r) => !key || r.key === key), MANY_DAYS)
-  const D = S.levels.d.list
+  let rows = (dayRows || []).filter((r) => !key || r.key === key)
+  const one = hot.day != null && rows.find((r) => r.k === hot.day)
+  rows = sample(rows, MANY_DAYS)
+  if (one && !rows.includes(one)) rows.push(one)
   return rows.flatMap((r) => {
-    const at = r.d.map((d, i) => {
-      if (d < 0) return null
-      // the same place of the day is the same point: back home is where it began
-      const first = r.d.findIndex((e, k) => e === d && r.a[k] === r.a[i])
-      return scatter(D[d], r.i * 16 + first)
+    // the same place and purpose is the same point: back home is where it began
+    const at = r.stops.map((z, i) => {
+      const first = r.stops.findIndex((e, k) => e === z && r.acts[k] === r.acts[i] && r.spots[k] === r.spots[i])
+      return endOf(S, spots, z, r.spots[i], r.k * 16 + first)
     })
-    return r.m.map((m, i) => at[i] && at[i + 1] && { key: `${r.i}.${i}`, from: at[i], to: at[i + 1], w: 1, color: DAY_MODES[m].color,
-      faint: true, on: hot.day === r.i, dim: hot.day != null && hot.day !== r.i }).filter(Boolean)
+    return r.modes.map((m, i) => at[i] && at[i + 1] && { key: `${r.k}.${i}`, from: at[i], to: at[i + 1], w: 1, color: DAY_MODES[m].color,
+      faint: true, strong: hot.day === r.k, dim: hot.day != null && hot.day !== r.k }).filter(Boolean)
   })
 }
 
@@ -264,7 +270,7 @@ export function tripsLegend({ x, dark }) {
   const modes = (list) => list.map((m) => ({ label: m.label, color: m.color, line: true }))
   if (show === 'days') {
     return [{ title: 'Całe dni — czym' }, ...modes(DAY_MODES),
-      { note: `do ${MANY_DAYS} losowych dni; punkty w osiedlu losowe. Filtry podróży nie działają na całe dni.` }]
+      { note: `do ${MANY_DAYS} losowych dni z podróżą, która spełnia filtry; domy wzdłuż ulicy lub w losowym punkcie rejonu` }]
   }
   if (show === 'spots') {
     return [{ title: 'Cele — najczęstszy środek' }, ...S.modes.map((m) => ({ label: m.label, color: m.color })),
@@ -273,7 +279,7 @@ export function tripsLegend({ x, dark }) {
   if (show !== 'areas') {
     return [{ title: show === 'flows' ? 'Przepływy — najczęstszy środek' : 'Pojedyncze podróże' }, ...modes(S.modes),
       { note: show === 'flows' ? 'grubość = podróże, kółko = w obrębie obszaru, blade = mniej niż 5 w próbie'
-        : `do ${MANY_TRIPS} losowych podróży z próby; domy i rzadkie cele w losowym punkcie rejonu` }]
+        : `do ${MANY_TRIPS} losowych podróży z próby; domy wzdłuż ulicy, rzadkie miejsca w losowym punkcie rejonu` }]
   }
   const sc = scale(breaks(p0.value, p0.share), dark)
   const f = (v) => (p0.share ? `${Math.round(100 * v)}%` : p0.digits ? fixed(v, p0.digits) : fmt(v))

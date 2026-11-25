@@ -1,11 +1,7 @@
 # -*- coding: utf-8 -*-
-"""Where people went, more closely than a zone: addresses that at least MIN_WHO
-of them named as something other than home - malls, offices, schools.
-
-The only step that reads addresses from the survey, and never one of a home: an
-end of a trip counts only when its purpose is not home. An address fewer people
-named is not kept; it falls back to its street within the zone, if that has
-enough, and otherwise stays at the zone.
+"""Where trips start and end, more closely than a zone: addresses that at least
+MIN_WHO people named - malls, offices, schools - or else their street within the
+zone, if that has enough; otherwise the zone. A home goes by its street.
 """
 import collections, json, math, os, re, sys, urllib.parse
 
@@ -16,6 +12,8 @@ import geocode
 MIN_WHO = 5
 KM_LON = math.cos(math.radians(51.11))
 log = diary.log
+SERVERS = ("https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter",
+           "https://overpass.private.coffee/api/interpreter")
 
 # words that say what kind of street or who the patron was
 NOISE = set("ul ulica al aleja aleje pl plac os osiedle gen generala generał generała ks ksiedza księdza "
@@ -45,8 +43,16 @@ def _overpass(name, q):
     path = os.path.join(geocode.CACHE, name)
     if not os.path.exists(path):
         log("querying overpass for", name, "...")
-        raw = geocode._get("https://overpass-api.de/api/interpreter",
-                           data=urllib.parse.urlencode({"data": q}).encode())
+        raw = None
+        for server in SERVERS:
+            try:
+                raw = geocode._get(server, data=urllib.parse.urlencode({"data": q}).encode(), tries=1)
+                break
+            except RuntimeError:
+                continue
+        if raw is None:
+            log("  no server answered; going without")
+            return []
         with open(path, "w", encoding="utf8") as f:
             json.dump(json.loads(raw)["elements"], f)
     with open(path, encoding="utf8") as f:
@@ -56,9 +62,14 @@ def _overpass(name, q):
 def addresses():
     """House numbers from OSM: number -> [(street words, lat, lon)]."""
     out = collections.defaultdict(list)
-    box = "(50.95,16.70,51.35,17.35)"
-    for el in _overpass("overpass_addr.json", '[out:json][timeout:600][maxsize:1073741824];'
-                        'nwr["addr:housenumber"]%s;out tags center qt;' % box):
+    # too much for one query: run this file to fetch it in tiles
+    path = os.path.join(geocode.CACHE, "overpass_addr.json")
+    if not os.path.exists(path):
+        log("  no house numbers cached; streets only (python etl/places.py)")
+        return out
+    with open(path, encoding="utf8") as f:
+        found = json.load(f)
+    for el in found:
         t, c = el.get("tags", {}), el.get("center") or el
         street = t.get("addr:street") or t.get("addr:place")
         if street and "lat" in c:
@@ -102,10 +113,8 @@ def build(d, zones, shapes, inside):
             continue
         pair = []
         for e in ("START", "STOP"):
-            if str(row[head[e + "mot"]]) == "dom":
-                pair.append(None)
-                continue
-            street, nr = row[head[e + "ul"]], number(row[head[e + "nr"]])
+            home = str(row[head[e + "mot"]]) == "dom"
+            street, nr = row[head[e + "ul"]], None if home else number(row[head[e + "nr"]])
             pair.append((str(row[head[e + "rejon"]]), words(street), nr, str(street or "").strip(),
                          row[head["osobaID"]]) if street else None)
         ends.append(pair)
@@ -182,7 +191,44 @@ def build(d, zones, shapes, inside):
         out.append(p)
     n = sum(e is not None for p in ends for e in p)
     hit = [k for p in out for k in p if k >= 0]
-    log("  places: %d (%d by number), %d not found; %d of %d ends away from home placed, %d by number" % (
+    log("  places: %d (%d by number), %d not found; %d of %d ends placed, %d by number" % (
         len(spots), sum(not s["street"] for s in spots), lost, len(hit), n,
         sum(not spots[k]["street"] for k in hit)))
     return spots, out
+
+
+TILES = ([50.95, 51.03, 51.08, 51.11, 51.14, 51.18, 51.24, 51.35],
+         [16.70, 16.90, 16.97, 17.02, 17.06, 17.12, 17.35])
+
+
+def fetch_addresses():
+    """House numbers of the area, a tile at a time; tiles already here are kept."""
+    import time
+    path = os.path.join(geocode.CACHE, "overpass_addr_tiles.json")
+    tiles = json.load(open(path, encoding="utf8")) if os.path.exists(path) else {}
+    la, lo = TILES
+    want = [(i, j) for i in range(len(la) - 1) for j in range(len(lo) - 1)]
+    for turn in range(4):
+        for i, j in want:
+            if "%d,%d" % (i, j) in tiles:
+                continue
+            q = '[out:json][timeout:120];nwr["addr:housenumber"](%f,%f,%f,%f);out tags center qt;' % (
+                la[i], lo[j], la[i + 1], lo[j + 1])
+            try:
+                raw = geocode._get(SERVERS[(i + j + turn) % len(SERVERS)],
+                                   data=urllib.parse.urlencode({"data": q}).encode(), tries=1)
+                tiles["%d,%d" % (i, j)] = json.loads(raw)["elements"]
+                with open(path, "w", encoding="utf8") as f:
+                    json.dump(tiles, f)
+            except Exception:
+                pass
+            time.sleep(1)
+        log("  %d of %d tiles" % (len(tiles), len(want)))
+    if len(tiles) == len(want):
+        seen = {(e["type"], e["id"]): e for t in tiles.values() for e in t}
+        with open(os.path.join(geocode.CACHE, "overpass_addr.json"), "w", encoding="utf8") as f:
+            json.dump(list(seen.values()), f)
+
+
+if __name__ == "__main__":
+    fetch_addresses()

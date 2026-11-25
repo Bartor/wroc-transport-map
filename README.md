@@ -340,13 +340,11 @@ pierwszeństwo; można to wyłączyć.
 ## Badanie mieszkańców
 
 Miasto opublikowało całą bazę ankiety: 10 566 osób, 16 781 podróży, wagi
-i odpowiedzi. `etl/diary.py` czyta z niej wyłącznie wskazane kolumny — nigdy ulic,
-numerów, szkół, miejsc pracy ani pytań otwartych. `etl/trips.py` publikuje podróże
-między rejonami bez identyfikatora osoby i odpowiedzi zsumowane po rejonach (co
-najmniej 10 osób; grupy osób tylko po osiedlach). Cechy i waga często pozwalają mimo
-to powiązać podróże jednej osoby (46% jest niepowtarzalnych) — baza miasta podaje
-znacznie więcej. `etl/places.py` czyta adresy wyłącznie celów innych niż dom i zostawia
-te, które podało co najmniej 5 osób. Wagi odtwarzają opublikowane 1 397 390 podróży na dobę.
+i odpowiedzi. `etl/trips.py` robi z niej podróże między rejonami — z numerem osoby,
+żeby dało się złożyć całe dni — i odpowiedzi zsumowane po rejonach i osiedlach (co
+najmniej 3 osoby). `etl/places.py` umieszcza końce podróży pod adresem albo na ulicy
+w rejonie, jeśli podało je co najmniej 5 osób (dom — na ulicy); `python etl/places.py`
+pobiera numery domów z OSM. Wagi odtwarzają opublikowane 1 397 390 podróży na dobę.
 
 **Na mieszkańca.** Liczby bezwzględne mówią głównie o wielkości obszaru, więc
 domyślnie mapa pokazuje podróże z domu i do domu na mieszkańca od 6 lat (suma wag; przy
