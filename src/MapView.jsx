@@ -217,7 +217,7 @@ export default function MapView({
       <>
         <MapKeys info={info}>
           <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people }),
-            ...(works?.length ? [{ label: 'remont w czasie badań', color: WORKS_COLOR, line: true }] : [])]} />
+            ...(works?.length ? [{ label: 'remont w czasie badań', color: WORKS_COLOR, line: true }, { note: 'remonty: grubo = zamknięte dla aut albo tramwajów, cienko = pas lub noce' }] : [])]} />
         </MapKeys>
         {ownOverlay}
       </>

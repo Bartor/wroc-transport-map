@@ -15,6 +15,7 @@ import { isSmall, smallText } from './Small'
 import { meanOf, onMean, perPeopleOf, pickWarning, togglePick, valueOf } from './answers'
 import { averages, averagesTable, links, meanFor } from './trips'
 import { arrowed, layout, loop, spread } from './arcs'
+import { isoDate, worksIn, worksNear } from './works'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
@@ -381,5 +382,18 @@ suite('the address of a survey view', () => {
     expect({ ...ASK0, ...readHash(hashOf({ ...base, view: 'answers', ask }, d)).ask }).toEqual(ask)
     const none = { ...ASK0, q: 'bike', opts: [] }
     expect(readHash(hashOf({ ...base, view: 'answers', ask: none }, d)).ask.opts).toEqual([])
+  })
+})
+
+suite('roadworks', () => {
+  const w = { id: 'a', name: 'Pomorska', when: 'maj', from: '2024-05-01', to: '2024-06-01', d: [3], g: [[[51.11, 17.03], [51.12, 17.03]]] }
+  it('are those of a district while it was asked, or near a count on its day', () => {
+    expect(worksIn([w], [3])).toEqual([w])
+    expect(worksIn([w], [4])).toEqual([])
+    expect(worksIn([{ ...w, from: '2024-03-01', to: '2024-04-01' }], [3])).toEqual([])
+    expect(isoDate('09.05.2024')).toBe('2024-05-09')
+    expect(worksNear([w], [51.115, 17.033], ['09.05.2024'])).toEqual([w])
+    expect(worksNear([w], [51.115, 17.033], ['2024-04-09'])).toEqual([])
+    expect(worksNear([w], [51.2, 17.033], ['2024-05-09'])).toEqual([])
   })
 })

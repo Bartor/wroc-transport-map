@@ -17,8 +17,10 @@ export function useWorks() {
 
 export const WORKS_COLOR = '#ffb400'
 
-/** Of some districts, by their numbers. */
-export const worksIn = (list, districts) => list.filter((w) => w.d.some((d) => districts.includes(d)))
+// trips were asked about from the day before the first interview to the last
+const ASKED = ['2024-04-05', '2024-06-20']
+/** Of some districts, by their numbers, while people there were asked. */
+export const worksIn = (list, districts) => list.filter((w) => w.to >= ASKED[0] && w.from <= ASKED[1] && w.d.some((d) => districts.includes(d)))
 /** The district of a place of either level. */
 export const districtOf = (p) => (p.level === 'd' ? p.i : p.d)
 

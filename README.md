@@ -40,7 +40,7 @@ python etl/diary.py && python etl/trips.py && python etl/extra.py
 ```
 
 ```bash
-python etl/choice_los.py && python etl/choice.py && python etl/closure.py
+python etl/choice_los.py && python etl/choice.py && python etl/closure.py && python etl/works.py
 ```
 
 Pierwsze uruchomienie ETL pobiera sieć drogową i przystanki z Overpass API
@@ -399,6 +399,15 @@ cen w danych nie ma.
 
 **Model sieci a prawdziwe podróże.** Wprost wstawione podróże z ankiety pogarszają
 model (R² 0,50 wobec 0,63), bo na parę rejonów wypada ok. 1,4 podróży.
+
+## Remonty w czasie badań
+
+`etl/works_list.json` to 27 remontów i zamknięć z czasu pomiarów i ankiet (21 marca –
+20 czerwca 2024), ręcznie spisanych z komunikatów miasta, MPK i prasy, każdy ze źródłem.
+`etl/works.py` dobiera im kształt ze ścieżek OSM i osiedla; mapa pokazuje je przerywaną
+linią, a panele, róg mapy i obrazy wymieniają je przy osiedlach i przy punktach
+policzonych w pobliżu (400 m) w dniach remontu. Lista może nie być pełna, a końce
+drobnych prac są często przybliżone.
 
 ## Zamykanie ulic
 

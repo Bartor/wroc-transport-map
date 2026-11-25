@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 import { Hint, Modal, TextTable } from '@bartor-net/ui-kit'
 import { parentOf } from './data'
+import { WorksBlock } from './WorksLayer'
+import { useWorks } from './works'
 
 // What the map is, how and when the counts were taken, how the map turns
 // them into what it shows, and what was going on in the city meanwhile.
@@ -46,10 +48,8 @@ const REPO = 'https://github.com/Bartor/wroc-transport-map'
 
 const Out = ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>
 
-/** Sources of a paragraph, in smaller print. */
-const Src = ({ children }) => (
-  <span style={{ fontSize: '.76rem', color: 'var(--kit-dim)' }}>{children}</span>
-)
+/** Everything that was dug up or shut at the time. */
+const AllWorks = () => <WorksBlock works={useWorks()} title="" />
 
 /** A survey and the appendix it comes from. */
 const survey = (name, where) => <>{name}<small>{where}</small></>
@@ -226,28 +226,7 @@ export default function About({ data, onClose }) {
       </p>
 
       <h3>Utrudnienia w czasie pomiarów</h3>
-      <ul>
-        <li>
-          <b>ul. Pomorska</b> — przebudowa od sierpnia 2022. Tramwaje nie jeździły nią
-          przez cały okres badań: ulicę otwarto dla aut 1 czerwca 2024, a tramwaje miały
-          wrócić ok. 22 czerwca. Na początku przebudowy linie skierowano m.in. przez
-          Kurkową i Dubois, więc ruch tramwajowy na przekrojach w tej okolicy (np. R1_20
-          Dubois, R1_23 most Mieszczański) może obejmować objazdy, a na Pomorskiej go brak.{' '}
-          <Src>
-            <Out href="https://www.wroclaw.pl/komunikacja/przebudowa-ulicy-pomorskiej-wroclaw-objazdy">wroclaw.pl</Out>,{' '}
-            <Out href="https://gazetawroclawska.pl/po-dwoch-latach-remontu-ulica-pomorska-we-wroclawiu-otwarta-na-tramwaje-jeszcze-poczekamy-zdjecia/ar/c1-18574685">Gazeta Wrocławska</Out>,{' '}
-            <Out href="https://www.rynek-kolejowy.pl/wiadomosci/wroclaw-niebawem-otwarcie-torowiska-na-pomorskiej-144099.html">Rynek Kolejowy</Out>
-          </Src>
-        </li>
-        <li>
-          <b>Krótsze zamknięcia</b> — ZOO–Biskupin 11–12 maja (weekend) i Świdnicka przy
-          DH Renoma 30 maja–2 czerwca — nie trafiły na żaden dzień pomiaru.{' '}
-          <Src>
-            <Out href="https://wroclife.pl/artykul/4874/wroclaw-linie-1-i-4-zawieszone-2-i-10-zmienia-trasy">wroclife.pl</Out>,{' '}
-            <Out href="https://transinfo.pl/infotram/konieczna-naprawa-torowiska-przy-dh-renoma-cztery-linie-tramwajowe-mpk-wroclaw-zmieniaja-trasy/">TransInfo</Out>
-          </Src>
-        </li>
-      </ul>
+      <AllWorks />
       <Hint>
         Lista z komunikatów i doniesień prasowych — może nie być pełna. Znasz inne
         utrudnienia z okresu pomiarów?{' '}

@@ -9,11 +9,11 @@ export function WorksLayer({ works }) {
     <LayerGroup>
       {works.filter((w) => w.g.length).map((w) => (
         <LayerGroup key={w.id}>
-          <Polyline positions={w.g} interactive={false} pathOptions={{ color: '#15181e', weight: 7, opacity: 0.9, lineCap: 'butt' }} />
-          <Polyline positions={w.g} interactive={false} pathOptions={{ color: WORKS_COLOR, weight: 4.5, opacity: 1, dashArray: '7 6', lineCap: 'butt' }} />
+          <Polyline positions={w.g} interactive={false} pathOptions={{ color: '#15181e', weight: w.hard ? 7 : 5, opacity: 0.9, lineCap: 'butt' }} />
+          <Polyline positions={w.g} interactive={false} pathOptions={{ color: WORKS_COLOR, weight: w.hard ? 4.5 : 2.5, opacity: w.hard ? 1 : 0.85, dashArray: w.hard ? '7 6' : '4 6', lineCap: 'butt' }} />
           <Polyline positions={w.g} pathOptions={{ color: '#000000', weight: 14, opacity: 0 }}>
             <MapTooltip sticky>
-              <b>{w.name}</b> <TipNote>remont w czasie badań</TipNote><br />
+              <b>{w.name}</b>{w.where ? `, ${w.where}` : ''} <TipNote>remont w czasie badań</TipNote><br />
               {w.what}<br />
               <TipNote>{w.when}{w.approx ? ' (daty przybliżone)' : ''}</TipNote>
             </MapTooltip>

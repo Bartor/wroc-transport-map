@@ -1,19 +1,882 @@
 [
  {
   "id": "pomorska",
-  "name": "ul. Pomorska",
-  "where": "",
-  "what": "przebudowa: bez samochodów do 1 czerwca, bez tramwajów do ok. 22 czerwca. Na początku przebudowy objazdy m.in. Kurkową i Dubois.",
-  "when": "sierpień 2022 – czerwiec 2024",
-  "from": "2022-08-01",
+  "name": "ul. Pomorska i pl. Staszica",
+  "where": "od Dubois do Reymonta",
+  "what": "przebudowa: zamknięta od końca sierpnia 2022; samochody, autobusy i rowery wróciły 1 czerwca, tramwaje 22 czerwca. Objazd z 2022 r. prowadził m.in. Kurkową i Reymonta, tramwaje skierowano na Trzebnicką.",
+  "when": "27 sierpnia 2022 – 22 czerwca 2024",
+  "from": "2022-08-27",
   "to": "2024-06-22",
-  "approx": 1,
-  "districts": ["Nadodrze", "Kleczków"],
-  "ways": [["Pomorska", [51.1134, 17.03, 51.1224, 17.0323]]],
+  "hard": 1,
+  "approx": 0,
+  "districts": [
+   "Nadodrze",
+   "Kleczków"
+  ],
+  "ways": [
+   [
+    "Pomorska",
+    [
+     51.1166,
+     17.03,
+     51.1224,
+     17.0323
+    ]
+   ],
+   [
+    "plac Stanisława Staszica",
+    [
+     51.119,
+     17.03,
+     51.1245,
+     17.0345
+    ]
+   ]
+  ],
   "sources": [
-   ["wroclaw.pl", "https://www.wroclaw.pl/komunikacja/przebudowa-ulicy-pomorskiej-wroclaw-objazdy"],
-   ["Gazeta Wrocławska", "https://gazetawroclawska.pl/po-dwoch-latach-remontu-ulica-pomorska-we-wroclawiu-otwarta-na-tramwaje-jeszcze-poczekamy-zdjecia/ar/c1-18574685"],
-   ["Rynek Kolejowy", "https://www.rynek-kolejowy.pl/wiadomosci/wroclaw-niebawem-otwarcie-torowiska-na-pomorskiej-144099.html"]
+   [
+    "wroclaw.pl, otwarcie",
+    "https://www.wroclaw.pl/dla-mieszkanca/pomorska-i-plac-staszica-na-nadodrzu-otwarte-mamy-zdjecia"
+   ],
+   [
+    "objazdy",
+    "https://www.wroclaw.pl/komunikacja/przebudowa-ulicy-pomorskiej-wroclaw-objazdy"
+   ],
+   [
+    "tramwaje",
+    "https://www.wroclaw.pl/komunikacja/przejazd-probny-tramwajow-przez-pomorska-skoda-gamma-i-dwie-pesy"
+   ]
+  ]
+ },
+ {
+  "id": "pomorska2",
+  "name": "ul. Pomorska przy mostach Pomorskich",
+  "where": "od Cybulskiego w kierunku Grodzkiej",
+  "what": "naprawa torowiska: bez tramwajów, linia 18 objazdem przez most Sikorskiego. O zamknięciu dla samochodów nie ma mowy.",
+  "when": "26 maja – 21 czerwca 2024 (koniec planowany)",
+  "from": "2024-05-26",
+  "to": "2024-06-21",
+  "hard": 1,
+  "approx": 0,
+  "districts": [
+   "Stare Miasto",
+   "Nadodrze"
+  ],
+  "ways": [
+   [
+    "Pomorska",
+    [
+     51.1134,
+     17.03,
+     51.1152,
+     17.0323
+    ]
+   ],
+   [
+    "Most Pomorski Południowy",
+    null
+   ],
+   [
+    "Most Pomorski Środkowy",
+    null
+   ],
+   [
+    "Most Pomorski Północny",
+    null
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/tramwaj-nr-18-pojedzie-objazdem-remont-przy-mostach-pomorskich"
+   ]
+  ]
+ },
+ {
+  "id": "wilkszynska",
+  "name": "ul. Wilkszyńska",
+  "where": "od Głównej do granicy miasta",
+  "what": "przebudowa: ruch wahadłowy, bez możliwości objazdu.",
+  "when": "22 stycznia 2024 – po badaniach",
+  "from": "2024-01-22",
+  "to": "2024-10-31",
+  "hard": 1,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Wilkszyńska",
+    null
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl, początek",
+    "https://www.wroclaw.pl/dla-mieszkanca/uwaga-kierowcy-w-poniedzialek-rusza-przebudowa-ul-wilkszynskiej"
+   ],
+   [
+    "stan w październiku",
+    "https://www.wroclaw.pl/komunikacja/remont-ul-wilkszynskiej-dlaczego-tak-dlugo-ile-to-jeszcze-potrwa"
+   ]
+  ]
+ },
+ {
+  "id": "sobieskiego",
+  "name": "al. Sobieskiego",
+  "where": "estakada w stronę centrum",
+  "what": "prawy z dwóch pasów zamknięty na ok. 100 m z powodu stanu konstrukcji.",
+  "when": "od 27 grudnia 2023 (nadal w 2026)",
+  "from": "2023-12-27",
+  "to": "2026-01-15",
+  "hard": 0,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "aleja Jana III Sobieskiego",
+    {
+     "near": [
+      "Dobroszycka",
+      60
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/zwezenie-na-al-sobieskiego-zachowaj-ostroznosc-moga-byc-korki"
+   ],
+   [
+    "stan w 2026",
+    "https://www.wroclaw.pl/inwestycje-wroclaw/w-tym-roku-przetarg-na-remont-estakad-na-alei-sobieskiego"
+   ]
+  ]
+ },
+ {
+  "id": "dolnobrzeska",
+  "name": "ul. Dolnobrzeska",
+  "where": "od Krępickiej do Polkowickiej",
+  "what": "przebudowa: jeden kierunek (z Leśnicy do Brzeziny), autobusy 137 i 937 objazdem.",
+  "when": "29 lipca 2023 – 25 maja 2024 (powrót autobusów)",
+  "from": "2023-07-29",
+  "to": "2024-05-25",
+  "hard": 1,
+  "approx": 1,
+  "districts": [
+   "Leśnica"
+  ],
+  "ways": [
+   [
+    "Dolnobrzeska",
+    {
+     "between": [
+      "Krępicka",
+      "Polkowicka"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl, początek",
+    "https://www.wroclaw.pl/komunikacja/remont-ul-dolnobrzeskiej-od-soboty-29-lipca-objazdy-lesnica"
+   ],
+   [
+    "koniec",
+    "https://www.wroclaw.pl/komunikacja/25-maja-koniec-przebudowy-ul-dolnobrzeskiej-zmiany-w-kursowaniu-autobusow"
+   ]
+  ]
+ },
+ {
+  "id": "olszewskiego1",
+  "name": "ul. Olszewskiego, etap 1",
+  "where": "od Gersona do Spółdzielczej",
+  "what": "jezdnia w stronę centrum zamknięta, objazd Bacciarellego. Tramwaje jeździły.",
+  "when": "23 marca – 6 kwietnia 2024",
+  "from": "2024-03-23",
+  "to": "2024-04-06",
+  "hard": 1,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Karola Olszewskiego",
+    {
+     "between": [
+      "Wojciecha Gersona",
+      "Spółdzielcza"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/remont-ul-olszewskiego-objazd-ul-bacciarellego-i-dembowskiego"
+   ],
+   [
+    "koniec",
+    "https://www.wroclaw.pl/komunikacja/remont-olszewskiego-od-soboty-jazda-po-nowym-asfalcie"
+   ]
+  ]
+ },
+ {
+  "id": "olszewskiego2",
+  "name": "ul. Olszewskiego, etap 2",
+  "where": "od Chełmońskiego do Spółdzielczej",
+  "what": "jezdnia w stronę centrum zamknięta, objazd Spółdzielczą i Dembowskiego; autobusy 253, 255 i 345 inaczej. Tramwaje jeździły.",
+  "when": "25 maja 2024 – do końca wakacji (zapowiedź)",
+  "from": "2024-05-25",
+  "to": "2024-08-31",
+  "hard": 1,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Karola Olszewskiego",
+    {
+     "between": [
+      "Józefa Chełmońskiego",
+      "Spółdzielcza"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/remont-olszewskiego-25-maja-utrudnienia-objazdy-co-zrobia-z-debami"
+   ]
+  ]
+ },
+ {
+  "id": "krolewiecka",
+  "name": "ul. Królewiecka",
+  "where": "od al. Śląskiej do Maślickiej",
+  "what": "jeden kierunek, w stronę centrum; objazd Maślicką. Autobusy 101 i 123 inaczej do 31 maja.",
+  "when": "5–29 maja 2024",
+  "from": "2024-05-05",
+  "to": "2024-05-30",
+  "hard": 1,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Królewiecka",
+    {
+     "between": [
+      "aleja Śląska",
+      "Maślicka"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl, objazd",
+    "https://www.wroclaw.pl/komunikacja/remont-ul-krolewieckiej-ktoredy-objazd"
+   ],
+   [
+    "koniec",
+    "https://www.wroclaw.pl/komunikacja/koniec-remontu-krolewiecka-znow-dwukierunkowa"
+   ]
+  ]
+ },
+ {
+  "id": "terenowa",
+  "name": "ul. Terenowa",
+  "where": "wjazd z ronda Wolnej Ukrainy",
+  "what": "budowa trasy na Jagodno: wjazd zamknięty, objazd Buforową i Granitową.",
+  "when": "25 maja – najpóźniej 24 lipca 2024",
+  "from": "2024-05-25",
+  "to": "2024-07-24",
+  "hard": 1,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Terenowa",
+    {
+     "near": [
+      "Buforowa",
+      220
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/budowa-tat-na-jagodno-ulica-terenowa-zamknieta-objazd-mapa"
+   ],
+   [
+    "inwestycja",
+    "https://www.wroclaw.pl/inwestycje-wroclaw/buspas-tramwaj-na-jagodno"
+   ]
+  ]
+ },
+ {
+  "id": "aow",
+  "name": "Autostradowa Obwodnica Wrocławia",
+  "where": "w stronę Warszawy, przy węźle Wrocław Stadion",
+  "what": "prawy pas zamknięty przez uszkodzoną dylatację, duże korki. Źródła różnie podają miejsce.",
+  "when": "początek czerwca 2024 – po badaniach",
+  "from": "2024-06-01",
+  "to": "2024-07-31",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Autostradowa Obwodnica Wrocławia",
+    [
+     51.1375,
+     16.928,
+     51.1475,
+     16.95
+    ]
+   ]
+  ],
+  "sources": [
+   [
+    "Radio Wrocław",
+    "https://www.radiowroclaw.pl/articles/view/141585/Utrudnienia-sa-robotnikow-brak-Co-sie-dzieje-na-AOW"
+   ],
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/uwaga-duzy-korek-na-aow-jeden-pas-ruchu-zablokowany"
+   ]
+  ]
+ },
+ {
+  "id": "peronowa",
+  "name": "ul. Peronowa",
+  "where": "przy Dworcu Głównym",
+  "what": "wymiana szyn w stronę centrum: tramwaje 2, 8, 9, 17 i 18 w jednym kierunku objazdem, autobusy z innych przystanków do 30 marca.",
+  "when": "16–23 marca 2024 (autobusy do 30 marca; zapowiedź)",
+  "from": "2024-03-16",
+  "to": "2024-03-30",
+  "hard": 1,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Peronowa",
+    null
+   ]
+  ],
+  "sources": [
+   [
+    "MPK",
+    "https://mpk.wroc.pl/zmiany-w-komunikacji-miejskiej-na-ul-peronowej"
+   ],
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/16-marca-wymiana-szyn-tramwajowych-na-peronowej-duze-zmiany-w-kursowaniu-tramwajow"
+   ]
+  ]
+ },
+ {
+  "id": "kowale",
+  "name": "pętla tramwajowa Kowale",
+  "where": "od Kromera do Kowal",
+  "what": "bez tramwajów, linia 23 skrócona, autobus 723.",
+  "when": "27–28 kwietnia 2024",
+  "from": "2024-04-27",
+  "to": "2024-04-28",
+  "hard": 1,
+  "approx": 0,
+  "districts": [
+   "Kowale"
+  ],
+  "ways": [],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/zmiany-kowale-bez-tramwajow-a-na-lesnicy-inne-trasy-autobusow"
+   ]
+  ]
+ },
+ {
+  "id": "biskupin",
+  "name": "tramwaj ZOO – Biskupin",
+  "where": "",
+  "what": "bez tramwajów: linie 1 i 4 zawieszone, 2 i 10 inną trasą, autobus 701.",
+  "when": "11–12 maja 2024",
+  "from": "2024-05-11",
+  "to": "2024-05-12",
+  "hard": 1,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Karola Olszewskiego",
+    [
+     51.1005,
+     17.089,
+     51.104,
+     17.1201
+    ]
+   ],
+   [
+    "Zygmunta Wróblewskiego",
+    [
+     51.1035,
+     17.0765,
+     51.1075,
+     17.09
+    ]
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/11-maja-zmiany-w-kursowaniu-tramwajow-na-biskupinie"
+   ]
+  ]
+ },
+ {
+  "id": "renoma",
+  "name": "ul. Świdnicka przy Renomie",
+  "where": "",
+  "what": "bez tramwajów: linie 6, 7, 17 i 20 objazdem.",
+  "when": "30 maja – 2 czerwca 2024",
+  "from": "2024-05-30",
+  "to": "2024-06-02",
+  "hard": 1,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Świdnicka",
+    [
+     51.1015,
+     17.029,
+     51.1052,
+     17.0318
+    ]
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/30-maja-2-czerwca-prace-przy-torowisku-w-ul-swidnickiej"
+   ],
+   [
+    "MPK",
+    "https://mpk.wroc.pl/komunikat/649/2024-06-03-3005-2062024r-remont-torowiska-na-ulicy-swidnickiej"
+   ]
+  ]
+ },
+ {
+  "id": "slezna",
+  "name": "ul. Ślężna",
+  "where": "od Kamiennej do al. Wiśniowej",
+  "what": "wymiana nawierzchni: jeden pas w stronę al. Wiśniowej, korki.",
+  "when": "16 – ok. 31 marca 2024",
+  "from": "2024-03-16",
+  "to": "2024-03-31",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Ślężna",
+    {
+     "between": [
+      "Kamienna",
+      "aleja Wiśniowa"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/szybkie-wymiany-nawierzchni-zobacz-ktore-ulice-naprawi-zdium"
+   ],
+   [
+    "Radio Wrocław",
+    "https://www.radiowroclaw.pl/articles/view/139324/Remonty-i-ogromne-korki-we-Wroclawiu-Ile-to-potrwa"
+   ]
+  ]
+ },
+ {
+  "id": "kamienna",
+  "name": "ul. Kamienna",
+  "where": "od Borowskiej do Drukarskiej",
+  "what": "wymiana nawierzchni: jeden pas w stronę Powstańców Śląskich zamknięty.",
+  "when": "w trakcie 26 marca, skończone przed 6 maja 2024",
+  "from": "2024-03-21",
+  "to": "2024-05-05",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Kamienna",
+    {
+     "between": [
+      "Borowska",
+      "Drukarska"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "Radio Wrocław",
+    "https://www.radiowroclaw.pl/articles/view/139324/Remonty-i-ogromne-korki-we-Wroclawiu-Ile-to-potrwa"
+   ],
+   [
+    "stan 6 maja",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-co-teraz-robia-drogowcy"
+   ]
+  ]
+ },
+ {
+  "id": "hallera",
+  "name": "al. Hallera",
+  "where": "od Mieleckiej do Powstańców Śląskich",
+  "what": "wymiana nawierzchni: jeden pas w stronę Powstańców Śląskich zamknięty.",
+  "when": "w trakcie 19 marca, skończone przed 6 maja 2024",
+  "from": "2024-03-19",
+  "to": "2024-05-05",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "aleja Generała Józefa Hallera",
+    {
+     "between": [
+      "Mielecka",
+      "Powstańców Śląskich"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/szybkie-remonty-ulic-wroclaw"
+   ],
+   [
+    "Radio Wrocław",
+    "https://www.radiowroclaw.pl/articles/view/139324/Remonty-i-ogromne-korki-we-Wroclawiu-Ile-to-potrwa"
+   ]
+  ]
+ },
+ {
+  "id": "pilczycka",
+  "name": "ul. Pilczycka",
+  "where": "Mączna – Koszykarska i Tkacka – Kozanowska",
+  "what": "wymiana nawierzchni nocami (22–6), ruch wahadłowy.",
+  "when": "od 22 kwietnia, kilka dni na odcinek; ostatnia warstwa po 6 maja 2024",
+  "from": "2024-04-22",
+  "to": "2024-05-10",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Pilczycka",
+    {
+     "between": [
+      "Mączna",
+      "Koszykarska"
+     ]
+    }
+   ],
+   [
+    "Pilczycka",
+    {
+     "between": [
+      "Tkacka",
+      "Kozanowska"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/rozpoczyna-sie-remont-pilczyckiej-karkonoskiej-soltysowickiej-i-gazowej"
+   ],
+   [
+    "stan 6 maja",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-co-teraz-robia-drogowcy"
+   ]
+  ]
+ },
+ {
+  "id": "karkonoska",
+  "name": "al. Karkonoska",
+  "where": "od Zwycięskiej do Wyścigowej i dalej do cmentarza",
+  "what": "wymiana nawierzchni w stronę centrum, po jednym pasie.",
+  "when": "22 kwietnia – ok. połowy maja 2024",
+  "from": "2024-04-22",
+  "to": "2024-05-15",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "aleja Karkonoska",
+    {
+     "between": [
+      "Zwycięska",
+      "Wyścigowa"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/rozpoczyna-sie-remont-pilczyckiej-karkonoskiej-soltysowickiej-i-gazowej"
+   ],
+   [
+    "stan 6 maja",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-co-teraz-robia-drogowcy"
+   ]
+  ]
+ },
+ {
+  "id": "soltysowicka",
+  "name": "ul. Sołtysowicka",
+  "where": "od Przejazdowej do Redyckiej",
+  "what": "wymiana nawierzchni, ruch wahadłowy.",
+  "when": "od 22 kwietnia 2024, ok. tygodnia",
+  "from": "2024-04-22",
+  "to": "2024-05-05",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Sołtysowicka",
+    {
+     "between": [
+      "Przejazdowa",
+      "Redycka"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/rozpoczyna-sie-remont-pilczyckiej-karkonoskiej-soltysowickiej-i-gazowej"
+   ],
+   [
+    "stan 6 maja",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-co-teraz-robia-drogowcy"
+   ]
+  ]
+ },
+ {
+  "id": "gazowa",
+  "name": "ul. Gazowa",
+  "where": "od wiaduktu do pętli autobusowej",
+  "what": "wymiana nawierzchni, ruch wahadłowy.",
+  "when": "od 22 kwietnia 2024, ok. 10 dni",
+  "from": "2024-04-22",
+  "to": "2024-05-06",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Gazowa",
+    null
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/rozpoczyna-sie-remont-pilczyckiej-karkonoskiej-soltysowickiej-i-gazowej"
+   ],
+   [
+    "stan 6 maja",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-co-teraz-robia-drogowcy"
+   ]
+  ]
+ },
+ {
+  "id": "litewska",
+  "name": "ul. Litewska",
+  "where": "od Gorlickiej do Żmudzkiej",
+  "what": "wymiana nawierzchni, przeniesiony przystanek.",
+  "when": "od 22 kwietnia 2024, koniec nieznany",
+  "from": "2024-04-22",
+  "to": "2024-05-31",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Litewska",
+    {
+     "between": [
+      "Gorlicka",
+      "Żmudzka"
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/22-kwietnia-remont-nawierzchni-ulicy-litewskiej-przeniesienie-przystanku"
+   ],
+   [
+    "stan 6 maja",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-co-teraz-robia-drogowcy"
+   ]
+  ]
+ },
+ {
+  "id": "zmigrodzka",
+  "name": "ul. Żmigrodzka",
+  "where": "jezdnia wyjazdowa, od Kamieńskiego do torów",
+  "what": "wymiana nawierzchni, po jednym pasie; przerwa 1–5 maja.",
+  "when": "29 kwietnia – ok. połowy maja 2024",
+  "from": "2024-04-29",
+  "to": "2024-05-15",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Żmigrodzka",
+    {
+     "from": [
+      "Henryka Michała Kamieńskiego",
+      900
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/szybka-wymiana-nawierzchni-w-poniedzialek-drogowcy-wejda-na-zmigrodzka"
+   ],
+   [
+    "stan 6 maja",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-co-teraz-robia-drogowcy"
+   ]
+  ]
+ },
+ {
+  "id": "kollataja",
+  "name": "ul. Kołłątaja",
+  "where": "od Podwala do Kościuszki",
+  "what": "wymiana nawierzchni nocami, potem druga strona i fragment Piotra Skargi.",
+  "when": "od 17 maja 2024, ok. dwóch tygodni",
+  "from": "2024-05-17",
+  "to": "2024-06-12",
+  "hard": 0,
+  "approx": 1,
+  "districts": [],
+  "ways": [
+   [
+    "Hugona Kołłątaja",
+    null
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/remont-ul-kollataja-bedzie-szybka-wymiana-nawierzchni"
+   ],
+   [
+    "koniec",
+    "https://www.wroclaw.pl/komunikacja/remonty-ulic-we-wroclawiu-zdium-konczy-jedna-akcje-zapowiada-kolejna"
+   ]
+  ]
+ },
+ {
+  "id": "chrobrego",
+  "name": "skrzyżowania przy mostach Chrobrego",
+  "where": "Swojczycka/Monopolowa i Mickiewicza/Monte Cassino",
+  "what": "naprawa nawierzchni nocami, zwężenia.",
+  "when": "noce 6–9 maja 2024",
+  "from": "2024-05-06",
+  "to": "2024-05-09",
+  "hard": 0,
+  "approx": 0,
+  "districts": [],
+  "ways": [
+   [
+    "Swojczycka",
+    {
+     "near": [
+      "Monopolowa",
+      120
+     ]
+    }
+   ],
+   [
+    "Adama Mickiewicza",
+    {
+     "near": [
+      "Monte Cassino",
+      120
+     ]
+    }
+   ]
+  ],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/utrudnienia-przy-mostach-chrobrego-nowe-ulice-beda-naprawiane"
+   ]
+  ]
+ },
+ {
+  "id": "mokrzanska",
+  "name": "ul. Mokrzańska",
+  "where": "",
+  "what": "roboty kanalizacyjne: autobusy 138, 938, 948 i 958 objazdem. Początek i odcinek nieznane.",
+  "when": "do 27 kwietnia 2024",
+  "from": "2024-04-26",
+  "to": "2024-04-27",
+  "hard": 0,
+  "approx": 1,
+  "districts": [
+   "Leśnica"
+  ],
+  "ways": [],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/zmiany-kowale-bez-tramwajow-a-na-lesnicy-inne-trasy-autobusow"
+   ]
+  ]
+ },
+ {
+  "id": "trzebnica",
+  "name": "kolej Trzebnica – Pasikurowice",
+  "where": "",
+  "what": "autobusy zamiast pociągów.",
+  "when": "9 czerwca – 31 sierpnia 2024",
+  "from": "2024-06-09",
+  "to": "2024-08-31",
+  "hard": 1,
+  "approx": 0,
+  "districts": [
+   "Wisznia Mała",
+   "Długołęka"
+  ],
+  "ways": [],
+  "sources": [
+   [
+    "wroclaw.pl",
+    "https://www.wroclaw.pl/komunikacja/od-9-czerwca-nowy-rozklad-jazdy-pkp-sprawdz-koniecznie"
+   ]
   ]
  }
 ]
