@@ -10,7 +10,7 @@ knows zones only. The raw files stay out of git, under data/kbr.
 
     python etl/diary.py          # data/kbr -> etl/cache/diary.json
 """
-import collections, json, os, sys
+import collections, json, os, re, sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -31,7 +31,7 @@ def find(*parts):
 
 
 # One row per trip, or one for a person who made none. No street, house number,
-# school, workplace, free text or interviewer.
+# school, workplace or free text.
 PERSON = {
     "osobaID": "person", "gospID": "home", "waga_pop": "w", "DOMrejon": "zone",
     "obszar": "area", "wiek": "age", "O2rec": "sex", "O5rec": "job", "O8tryb": "workMode",
@@ -39,6 +39,9 @@ PERSON = {
     "O12": "pass", "O11_1": "mobility", "X3": "typical", "X1": "out", "l_podr_kat": "trips",
     "F1": "carsInCentre", "F2": "tramPriority", "F3": "bikeLanes", "K1": "usual",
     "K3a": "ptRate1", "dzien": "weekday",
+    "DOMtyp": "building", "dzieci": "smallKids", "O11_2": "careChild",
+    # who asked and on which round, as running numbers: answers depend on it
+    "r41": "asker", "wiazka": "round",
 }
 TRIP = {
     "nr_podrozy": "n", "STARTrejon": "from", "STOPrejon": "to", "odleglosc": "km",
@@ -48,7 +51,10 @@ TRIP = {
     "ST3": "leg3", "ST3linia": "line3", "C3": "walkTo", "C4_1": "change1", "C5": "walkFrom",
     "P1": "inCar", "P2": "parked", "l_przesiadek": "changes",
     "Z2_2x1": "whyCar1", "Z2_2x2": "whyCar2",
+    "STARTmot": "act0", "STOPmot": "act1", "STARTgmina": "gmina0", "STOPgmina": "gmina1",
 }
+# The closed questions on opinions and habits; the open ones stay unread.
+ASKED = re.compile(r"(F[1-3]|K1|K2_\d|K[345][a-e]|K6|K7|O1[56]_\d|U[123]_\d+|Z\d(_\d+)?x[12]|X2)$")
 
 
 def num(v):
@@ -80,11 +86,13 @@ def build():
     log("reading", os.path.basename(path), "(a minute or two)...")
     ws = openpyxl.load_workbook(path, read_only=True, data_only=True)["BAZA - DANE OGÓŁEM"]
     it = ws.iter_rows(values_only=True)
-    head = None
+    head, above = None, None
     for row in it:
         if row and row[0] == "podrozID":
             head = {name: i for i, name in enumerate(row) if name}
             break
+        above = row
+    asked = {k: i for k, i in head.items() if ASKED.match(k)}
     missing = [k for k in (*PERSON, *TRIP) if k not in head]
     assert not missing, missing
     people, trips = {}, []
@@ -95,6 +103,7 @@ def build():
         # a person's answers sit on their first row
         if pid not in people:
             people[pid] = {v: row[head[k]] for k, v in PERSON.items()}
+            people[pid]["ans"] = {k: row[i] for k, i in asked.items() if row[i] not in (None, "")}
         if row[head["STARTrejon"]] is None or row[head["STOPrejon"]] is None:
             continue
         t = {v: row[head[k]] for k, v in TRIP.items() if row[head[k]] not in (None, "")}
@@ -104,14 +113,19 @@ def build():
     # running numbers instead of the survey's own ids
     pid = {p: i for i, p in enumerate(people)}
     hid = {}
+    runs = {"asker": {}, "round": {}}
     for p in people.values():
         p["home"] = hid.setdefault(p["home"], len(hid))
+        for k, seen in runs.items():
+            p[k] = seen.setdefault(p[k], len(seen))
         del p["person"]
     for t in trips:
         t["person"] = pid[t["person"]]
-    out = {"people": list(people.values()), "trips": trips}
-    with open(OUT, "w", encoding="utf8") as f:
+    out = {"people": list(people.values()), "trips": trips,
+           "questions": {k: " ".join(str(above[i]).split()) for k, i in asked.items()}}
+    with open(OUT + ".part", "w", encoding="utf8") as f:
         json.dump(out, f, ensure_ascii=False, default=str, separators=(",", ":"))
+    os.replace(OUT + ".part", OUT)
     log("  %d people, %d trips -> %s" % (len(people), len(trips), os.path.relpath(OUT, ROOT)))
     return out
 
