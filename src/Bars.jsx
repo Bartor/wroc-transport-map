@@ -2,8 +2,9 @@
 const row = { display: 'grid', gridTemplateColumns: '1fr auto', columnGap: 8, fontSize: 12, lineHeight: 1.35 }
 const track = { gridColumn: '1 / -1', height: 6, borderRadius: 3, background: 'rgba(127,140,160,.18)', margin: '2px 0 6px' }
 
-export default function Bars({ rows, color = '#3f8bd0', onPick }) {
-  const top = Math.max(0.0001, ...rows.map((r) => r.share))
+/** `whole`: the bar's full length is 100%, not the longest of them. */
+export default function Bars({ rows, color = '#3f8bd0', onPick, whole }) {
+  const top = whole ? 1 : Math.max(0.0001, ...rows.map((r) => r.share))
   return (
     <div role="list">
       {rows.map((r) => (

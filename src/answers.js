@@ -62,6 +62,10 @@ export const clampOpts = (q, opts) => {
   return q.multi ? ok.slice(0, 1) : ok
 }
 
+/** A question's name where its group is not beside it. */
+export const fullName = (q) => (/^Co utrudnia/.test(q.group) ? `${q.group}: ${q.label.toLowerCase()}`
+  : /^Oceny/.test(q.group) ? `Ocena komunikacji zbiorowej: ${q.label.toLowerCase()}` : q.label)
+
 /** Every option's share in one place, for bars. */
 export const optionShares = (q, row, raw) => q.options.map((label, i) => ({
   i, label, share: shareOf(row, [i], raw) ?? 0,

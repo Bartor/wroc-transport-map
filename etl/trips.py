@@ -205,7 +205,15 @@ def dissolve(shapes):
             ring.append(b)
         if len(ring) > 3:
             rings.append(ring)
-    return rings
+    # borders that do not match leave pieces that do not add up; then the
+    # shapes themselves, with the lines between them
+    area = lambda rs: sum(_signed(r) for r in rs)
+    own = [_open(r) for s in shapes for r in s]
+    return rings if abs(area(rings) - area(own)) < 0.005 * abs(area(own)) else own
+
+
+def _signed(r):
+    return sum(x0 * y1 - x1 * y0 for (y0, x0), (y1, x1) in zip(r, r[1:] + r[:1])) / 2
 
 
 def code(rings):

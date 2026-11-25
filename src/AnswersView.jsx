@@ -2,20 +2,21 @@
 import { useMemo } from 'react'
 import {
   Block, Chips, DetailsPanel, Fact, Facts, Field, Hint, LinkButton, Notes, Panel, RankList,
-  Select, Slider, StatBlock, Toggle, Warn, downloadCsv, fmt, slug,
+  Select, ShareButtons, Slider, StatBlock, Toggle, Warn, downloadCsv, fmt, slug,
 } from '@bartor-net/ui-kit'
 import { MapTooltip, TipNote } from '@bartor-net/ui-kit/map'
 import { HeatImage, ZoneLayer } from './ZoneLayer'
 import Bars from './Bars'
+import { answersCard, answersName, draw, everythingTable, viewTable } from './surveyCards'
 import {
-  answersTable, clampOpts, diverging, marginOf, optionShares, rgb, rowAt, shareOf, spanOf, startOpts,
+  answersTable, clampOpts, diverging, fullName, marginOf, optionShares, rgb, rowAt, shareOf, spanOf, startOpts,
   surface, valuesOf,
 } from './answers'
 
 // Too few answers for a colour of its own.
 const ENOUGH = { d: 40, z: 15 }
 // the city and what is just around it
-const BOX = [51.03, 16.84, 51.22, 17.18]
+const BOX = [51.02, 16.79, 51.23, 17.2]
 
 const pctText = (s) => (s == null ? '—' : `${Math.round(100 * s)}%`)
 
@@ -69,7 +70,7 @@ export function AnswersMap({ x, onPick }) {
 export function answersLegend({ x }) {
   const { a, q, opts, mid, span } = x
   return [
-    { title: q.label },
+    { title: fullName(q) },
     { note: optText(q, opts) },
     ...[-1, -0.5, 0, 0.5, 1].map((t) => ({
       color: rgb(diverging(mid + t * span, mid, span)),
@@ -160,9 +161,12 @@ export function AnswersPanel({ x, setA, onClose }) {
     return r && { g, r, v: shareOf(r, opts, a.raw) }
   }).filter(Boolean)
   const around = !p && rowAt(q, group, 'a', 'out')
+  const name = answersName(x, p)
+  const spec = () => answersCard({ x, p, row, by, gname, ranked, legend: answersLegend({ x }).filter((l) => l.color) })
   return (
     <DetailsPanel pill={p ? (p.level === 'z' ? `rejon ${p.id}` : p.city ? 'osiedle' : 'gmina') : 'ankieta'} color="#d6541c"
-      title={q.label} subtitle={`${p ? p.name : 'Mieszkańcy Wrocławia'} · ${gname}`} onClose={onClose}>
+      title={fullName(q)} subtitle={`${p ? p.name : 'Mieszkańcy Wrocławia'} · ${gname}`} onClose={onClose}
+      actions={row && <ShareButtons render={() => draw(spec())} filename={`${name}.png`} title={fullName(q)} text={`KBR Wrocław 2024 — ${fullName(q)}`} />}>
       <Facts>
         <Fact label={optText(q, opts)} tone="now">{pctText(v)}{row && v != null ? ` ±${mg(row)} p.p.` : ''}</Fact>
         <Fact label="Odpowiedzi w próbie">{row ? fmt(row[0]) : '—'}</Fact>
@@ -173,7 +177,7 @@ export function AnswersPanel({ x, setA, onClose }) {
       <Block>
         <h4>Wszystkie odpowiedzi{q.multi ? ' (można było wskazać kilka)' : ''}</h4>
         {row ? (
-          <Bars color="#d6541c" onPick={(r) => set({ opts: q.multi ? [+r.key] : opts.includes(+r.key) && opts.length > 1 ? opts.filter((o) => o !== +r.key) : [...new Set([...opts, +r.key])].sort() })}
+          <Bars whole color="#d6541c" onPick={(r) => set({ opts: q.multi ? [+r.key] : opts.includes(+r.key) && opts.length > 1 ? opts.filter((o) => o !== +r.key) : [...new Set([...opts, +r.key])].sort() })}
             rows={(q.multi ? optionShares(q, row, a.raw).sort((s, t) => t.share - s.share) : optionShares(q, row, a.raw)).map((o) => ({
               key: String(o.i), label: o.label, share: o.share, on: opts.includes(o.i), dim: !opts.includes(o.i),
               note: p && city ? `(Wrocław ${pctText(shareOf(city, [o.i]))})` : null,
@@ -183,7 +187,7 @@ export function AnswersPanel({ x, setA, onClose }) {
       {by.length > 1 && (
         <Block>
           <h4>{optText(q, opts)} — kto tak odpowiada</h4>
-          <Bars color="#3f8bd0" onPick={(r) => set({ group: r.key })} rows={by.map(({ g, r, v: s }) => ({
+          <Bars whole color="#3f8bd0" onPick={(r) => set({ group: r.key })} rows={by.map(({ g, r, v: s }) => ({
             key: g.key, label: g.label, share: s, on: g.key === group, note: `±${mg(r)} · n=${fmt(r[0])}`,
           }))} />
         </Block>
@@ -198,8 +202,14 @@ export function AnswersPanel({ x, setA, onClose }) {
       </StatBlock>
       {p && <LinkButton block onClick={() => set({ place: null })}>Pokaż cały Wrocław</LinkButton>}
       <LinkButton block onClick={() => downloadCsv(
-        answersTable(q, A.groups, group, level === 'd' ? Z.districts : Z.zones, level, a.raw), `kbr-ankieta-${slug(q.label)}-${group}.csv`,
+        viewTable(q, A.groups, p ? level : 'a', p ? p.i : 'wro', a.raw), `${name}.csv`,
+      )}>Pobierz te odpowiedzi (CSV)</LinkButton>
+      <LinkButton block onClick={() => downloadCsv(
+        answersTable(q, A.groups, group, level === 'd' ? Z.districts : Z.zones, level, a.raw), `kbr-ankieta-${slug(fullName(q))}-${group}.csv`,
       )}>Pobierz odpowiedzi według obszarów (CSV)</LinkButton>
+      <LinkButton block onClick={() => downloadCsv(
+        everythingTable(A, Z, group, a.raw), `kbr2024-ankieta-wszystkie-pytania-${group}.csv`,
+      )}>Pobierz wszystkie pytania — osiedla (CSV)</LinkButton>
       <Notes>
         <li>Udziały ważone wagami KBR. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera; różnice mniejsze niż on mogą być przypadkiem.</li>
         <li>Te same osoby pytały kierowców i niekierowców, więc różnice między grupami są pewniejsze niż same poziomy i niż różnice między osiedlami.</li>

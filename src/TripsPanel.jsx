@@ -1,13 +1,14 @@
 // What the filtered trips are, in numbers.
 import { useMemo, useState } from 'react'
 import {
-  Block, DataTable, DetailsPanel, Donut, Fact, Facts, Hint, LinkButton, Notes, RankList, SplitBody,
-  SplitTable, StatBlock, Warn, downloadCsv, fixed, fmt, fmtEst, hourRuns, slug, usePick,
+  Block, DataTable, DetailsPanel, Donut, Fact, Facts, Hint, LinkButton, Notes, RankList, ShareButtons,
+  SplitBody, SplitTable, StatBlock, Warn, downloadCsv, fixed, fmt, fmtEst, hourRuns, usePick,
 } from '@bartor-net/ui-kit'
 import { StackedHourBars } from '@bartor-net/ui-kit/charts'
 import Bars from './Bars'
 import { FEW, THIN, placeName, placesTable, shares, tripRow, tripsTable } from './trips'
-import { WAYS, pctText, unitOf } from './TripsView'
+import { draw, tripsCard, tripsName } from './surveyCards'
+import { WAYS, WAY_TEXT, painted, pctText, unitOf } from './TripsView'
 
 const MANY = 200      // rows of single trips to show
 const BARS = [['goal', 'Cel podróży'], ['why', 'Motyw (tam i z powrotem)'], ['km', 'Długość'], ['min', 'Czas podróży'],
@@ -37,7 +38,16 @@ export default function TripsPanel({ x, setT, period, onClose }) {
       .sort((a, b) => (perHead ? b.rate - a.rate : b.w - a.w))
   }, [partner, drawn, sums, x.way, perHead])
   const own = places.length && places.every((q) => q.pop) ? places.reduce((a, q) => a + q.pop, 0) : 0
-  const fname = `kbr-podroze-${slug(title)}-${slug(period)}`
+  const fname = tripsName(title, period, x.way, t.filters)
+  const wayName = WAY_TEXT[x.way]
+  const spec = () => {
+    const paint = painted(x)
+    return tripsCard({
+      x, title, period, paint, wayName,
+      legendTitle: partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
+      goals: shares(S, idx, 'goal').filter((o) => o.n > 0).sort((a, b) => b.w - a.w).map((o) => ({ label: o.label, share: o.share, note: `${o.n} w próbie` })),
+    })
+  }
   const pickPlace = (p) => p && setT({ ...t, picked: [p.key] })
   const thin = stats.n < 100
   const many = S.freight ? 'przejazdów' : 'podróży'
@@ -46,6 +56,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
   return (
     <DetailsPanel pill={one ? (one.level === 'z' ? `rejon ${one.id}` : one.city ? 'osiedle' : 'gmina') : S.freight ? 'towary' : 'podróże'}
       title={title} color="#3f8bd0" onClose={onClose}
+      actions={stats.n > 0 && <ShareButtons render={() => draw(spec())} filename={`${fname}.png`} title={title} text={`KBR Wrocław 2024 — podróże: ${title}`} />}
       subtitle={`${S.freight ? 'Przewozy towarów' : 'Podróże mieszkańców'} · ${period}${places.length ? ` · ${WAYS.find((w) => w[0] === x.way)[1]}` : ''}`}>
       <Facts>
         <Fact label={S.freight ? 'Przejazdy w próbie' : 'Podróży na dobę'} tone="now">{S.freight ? fmt(stats.n) : fmtEst(stats.w)}</Fact>

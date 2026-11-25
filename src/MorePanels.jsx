@@ -1,18 +1,22 @@
 // The panels of the smaller surveys, see MoreViews.
 import {
-  Block, Breakdown, DetailsPanel, Fact, Facts, Hint, LinkButton, Notes, TextTable, fmt, hourRuns,
+  Block, Breakdown, DetailsPanel, Fact, Facts, Hint, LinkButton, Notes, ShareButtons, TextTable, fmt, hourRuns,
 } from '@bartor-net/ui-kit'
 import { HourBars } from '@bartor-net/ui-kit/charts'
-import { KIND, airportYear, changeColor, signed, speedOf, sum } from './MoreViews'
+import { KIND, airportYear, changeColor, changeLegend, signed, speedOf, sum } from './MoreViews'
+import { ringChanges } from './compare'
+import { changeCard, draw } from './surveyCards'
 
-export function ChangePanel({ C, rows, sel, onRoad, onClose }) {
+export function ChangePanel({ C, rows, zones, sel, onRoad, onClose }) {
   const r = sel && rows.find((x) => x.key === sel.id)
   const rail = C.rail.filter((x) => x[0] === 'Wszystkie kordony')
   const st = (name) => C.stations.find((x) => x[0] === name)
   const table = (head, body) => <TextTable head={head} rows={body} />
   return (
     <DetailsPanel pill={r ? r.ids.join(' + ') : '2018 → 2024'} title={r ? r.name : 'Co się zmieniło od 2018 roku'}
-      color={r ? changeColor(r.d) : '#676cad'} subtitle={r?.segment} onClose={onClose}>
+      color={r ? changeColor(r.d) : '#676cad'} subtitle={r?.segment} onClose={onClose}
+      actions={!r && <ShareButtons filename="kbr2024-zmiana-2018-2024.png" title="Ruch w 2024 wobec 2018" text="KBR Wrocław — ruch w 2024 wobec 2018"
+        render={() => draw(changeCard({ rows, zones, rings: ringChanges(rows), legend: changeLegend(), color: changeColor }))} />}>
       {r ? (
         <>
           <Facts>

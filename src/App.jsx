@@ -19,7 +19,7 @@ import {
 } from './MoreViews'
 import { ASK0 } from './answers'
 import { changes } from './compare'
-import { TRIPS0, placeName, prepare, prepareFreight, readZones } from './trips'
+import { PAINTS, TRIPS0, placeName, prepare, prepareFreight, readZones } from './trips'
 
 // The panel brings the charts library with it; nobody needs it before the
 // first click, so it loads apart from the map, and early, while idle.
@@ -103,7 +103,9 @@ export default function App() {
 
   // The survey views keep settings of their own, and an open thing each:
   // a station, a road counted twice. Their panel is open unless closed.
-  const [trip, setTrip] = useState({ ...TRIPS0, ...URL0.trip })
+  const [trip, setTrip] = useState({
+    ...TRIPS0, ...URL0.trip, paint: pick(URL0.trip?.paint, (x) => PAINTS[x], TRIPS0.paint),
+  })
   const [ask, setAsk] = useState({ ...ASK0, ...URL0.ask })
   const [ownId, setOwnId] = useState(URL0.own || null)
   const [ownPanel, setOwnPanel] = useState(!isPhone() || !!URL0.own)
@@ -275,7 +277,7 @@ export default function App() {
       return {
         controls: <ChangeControls rows={changed} sel={sel0} onPick={(r) => openOwn(r.key)} />,
         map: <ChangeMap rows={changed} sel={sel0} onPick={(r) => openOwn(r.key)} />, legend: changeLegend(),
-        panel: <ChangePanel C={files.compare} rows={changed} sel={sel0} onRoad={openRoad} onClose={ownId ? () => setOwnId(null) : shut} />,
+        panel: <ChangePanel C={files.compare} rows={changed} zones={zones?.districts} sel={sel0} onRoad={openRoad} onClose={ownId ? () => setOwnId(null) : shut} />,
       }
     }
     if (view === 'stations' && files.stations) {

@@ -6,6 +6,8 @@ import {
 import { ASK0, diverging, marginOf, shareOf, spanOf, startOpts, surface } from './answers'
 import { changes, ringChanges } from './compare'
 import { hashOf, readHash } from './urlState'
+import { everythingTable, filterText, viewTable } from './surveyCards'
+import { fullName } from './answers'
 
 // two city zones in one district, one commune around, one place further out
 const sq = (la, lo) => [[la * 1e5, lo * 1e5, 1000, 0, 0, 1000, -1000, 0]]
@@ -146,6 +148,28 @@ suite('answers', () => {
     const at = (lo) => s.v[Math.floor(s.rows / 2) * s.cols + Math.floor(((lo - 17) / 0.08) * s.cols)]
     expect(at(17.03)).toBeGreaterThan(at(17.05))
     expect(at(17.03)).toBeLessThanOrEqual(0.7)
+  })
+})
+
+suite('exports', () => {
+  const groups = [{ key: 'all', label: 'wszyscy' }, { key: 'car', label: 'kierowcy' }]
+  it('tables the open question, groups without answers left out', () => {
+    const rows = viewTable(Q, groups, 'a', 'wro', false)
+    expect(rows[0]).toEqual(['odpowiedź', 'wszyscy — %', 'wszyscy — ± p.p.'])
+    expect(rows[1].slice(0, 2)).toEqual(['tak', '60'])
+    expect(rows.at(-1)).toEqual(['odpowiedzi w próbie', 400, ''])
+    expect(viewTable(Q, groups, 'z', 0, true)[1][1]).toBe('90')
+  })
+  it('tables every question for a group', () => {
+    const q = { ...Q, group: 'G', label: 'P' }
+    const rows = everythingTable({ questions: [q], groups }, { districts: [] }, 'all', false)
+    expect(rows).toHaveLength(1 + 3)
+    expect(everythingTable({ questions: [q], groups }, { districts: [] }, 'car', false)).toHaveLength(1)
+  })
+  it('puts filters and questions in words', () => {
+    expect(filterText(S, { mode: [0, 2], km: [0] })).toBe('środek transportu: pieszo, samochód — kierowca; długość: do 0,5 km')
+    expect(filterText(S, {})).toBe('')
+    expect(fullName({ group: 'Co utrudnia poruszanie się', label: 'Pieszo' })).toBe('Co utrudnia poruszanie się: pieszo')
   })
 })
 

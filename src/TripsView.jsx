@@ -12,6 +12,9 @@ import {
 
 export const pctText = (s) => (s == null ? '—' : s > 0 && s < 0.005 ? '<1%' : `${Math.round(100 * s)}%`)
 export const WAYS = [['home', 'mieszkańców obszaru'], ['any', 'wszystkie z i do'], ['from', 'stąd'], ['to', 'tutaj']]
+/** The same in a sentence, for a picture. */
+export const WAY_TEXT = { home: 'podróże mieszkańców: z domu i do domu', any: 'wszystkie podróże z obszaru i do niego',
+  from: 'podróże zaczynane w obszarze', to: 'podróże kończone w obszarze' }
 // freight has no residents
 const wayIn = (S, t) => (S?.freight && t.way === 'home' ? 'any' : t.way)
 const perIn = (S, t) => (S.freight && t.per === 'pop' ? 'abs' : perOf(t.paint, t.per))
@@ -38,8 +41,11 @@ export function useTrips(S, t, hours) {
 
 export const unitOf = (S) => (S.freight ? 'przejazdów w badaniu' : 'podróży/dobę')
 
+// One or two trips between two places are an accident of who was asked.
+const FEW_TRIPS = 3
+
 /** What each place is painted by: a value, and how it reads. */
-function painted({ S, t, sums, partner }) {
+export function painted({ S, t, sums, partner }) {
   const { list } = S.levels[t.level]
   const P = PAINTS[t.paint]
   const per = PER[perIn(S, t)]
@@ -48,7 +54,7 @@ function painted({ S, t, sums, partner }) {
   const value = list.map((p, n) => {
     const s = sums[n]
     const d = per.of(p)
-    if (partner) return partner.n[n] && d ? (k * partner.w[n]) / d : null
+    if (partner) return partner.n[n] >= FEW_TRIPS && d ? (k * partner.w[n]) / d : null
     // a share, a mean or a rate of a handful of trips is noise
     if (!P.fixed && (!P.count || per !== PER.abs) && s.n < THIN) return null
     const x = P.v(p, s)
@@ -89,7 +95,7 @@ export function TripsMap({ x, dark, onPick }) {
         <b>{placeName(p)}</b>
         {p.level === 'z' && <TipNote> · rejon {p.id}, {p.district}</TipNote>}<br />
         {partner ? (
-          <>{v == null ? (partner.n[k] ? 'za mało mieszkańców' : 'brak podróży w próbie') : <><b>{p0.text(v)}</b> {p0.unit}</>}
+          <>{v == null ? (!partner.n[k] ? 'brak podróży w próbie' : partner.n[k] < FEW_TRIPS ? 'za mało podróży w próbie' : 'za mało mieszkańców') : <><b>{p0.text(v)}</b> {p0.unit}</>}
             {partner.n[k] > 0 && <TipNote> · {fmtEst(partner.w[k])} {unitOf(S)}, {partner.n[k]} w próbie</TipNote>}</>
         ) : (
           <>{P.label}: {v == null ? (!P.fixed && s.n < THIN ? 'za mało podróży w próbie' : 'brak danych')

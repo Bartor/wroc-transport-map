@@ -81,7 +81,7 @@ export const VIEWS = {
   },
   change: {
     label: 'Zmiana 2018 → 2024', sub: '114 miejsc policzonych w obu badaniach',
-    layers: [], own: ['compare'], color: '#676cad',
+    layers: [], own: ['compare', 'zones'], color: '#676cad',
   },
   speeds: {
     label: 'Prędkości na odcinkach', sub: 'czasy przejazdu 69 tys. aut (zał. 3.11)',

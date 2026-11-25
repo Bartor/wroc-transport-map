@@ -9,7 +9,10 @@ import { diverging, rgb } from './answers'
 import { ringChanges } from './compare'
 
 export const sum = (arr, hours) => hours.reduce((a, h) => a + (arr[h] || 0), 0)
-export const signed = (x) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${Math.abs(Math.round(100 * x))}%`
+export const signed = (x) => {
+  const r = Math.round(100 * x)
+  return `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r)}%`
+}
 
 // --------------------------------------------------------- 2018 against 2024
 // falling is blue, rising orange, +-40% is as far as the colours go
