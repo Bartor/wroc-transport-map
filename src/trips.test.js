@@ -13,7 +13,8 @@ import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days
 import { colorsOf, partsOf } from './Stack'
 import { isSmall, smallText } from './Small'
 import { meanOf, onMean, perPeopleOf, pickWarning, togglePick, valueOf } from './answers'
-import { averages, averagesTable, meanFor } from './trips'
+import { averages, averagesTable, links, meanFor } from './trips'
+import { arrowed, loop } from './arcs'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
@@ -100,6 +101,12 @@ suite('trips', () => {
     expect([...q.w]).toEqual([200, 50, 0])
     expect(pairs(S, all, 'z')[0]).toMatchObject({ w: 200, mode: 2, self: false })
     expect(pairs(S, all, 'z').filter((p) => p.self)).toHaveLength(1)
+    // one line there and back, and as much as the partners add up to
+    const l = links(S, touching(S, all, [1], 'any'), ['z2'], 'z', 'any')
+    const o = l.find((f) => !f.self)
+    expect(o.fw + o.bw).toBeCloseTo(o.w)
+    const two = links(S, all, S.levels.z.list.slice(0, 2).map((p) => p.key), 'z', 'any')
+    expect(new Set(two.map((f) => [f.a.key, f.b.key].sort().join())).size).toBe(two.length)
   })
   it('gives rates only where people live', () => {
     expect(PER.pop.of(S.Z.zones[1])).toBe(2800)
@@ -179,6 +186,18 @@ suite('answers', () => {
     expect(pickWarning(q, [0])).toBe(null)
     expect(pickWarning({ ...q, number: 1 }, [])).toBe(null)
     expect(valueOf(q, [10, 1, 1, [500, 500]], [])).toBe(null)
+  })
+  it('draws arrowheads of their length, and loops that come back', () => {
+    const { line, heads } = arrowed([[0, 0], [100, 0]], { end: 10, start: 10 })
+    expect(heads).toHaveLength(2)
+    expect(heads[0][1]).toEqual([100, 0])
+    expect(heads[1][1]).toEqual([0, 0])
+    expect(line[0][0]).toBeCloseTo(8)
+    expect(line.at(-1)[0]).toBeCloseTo(92)
+    expect(arrowed([[0, 0], [9, 0]]).heads).toEqual([])
+    const l = loop([51.1, 17], 1)
+    expect(l[0]).toEqual([51.1, 17])
+    expect(l.at(-1)[0]).toBeCloseTo(51.1)
   })
   it('averages trips, and the people who made them once each', () => {
     const c = { ...T.cols, p: [0, 0, 1, 2, 3] }

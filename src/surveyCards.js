@@ -4,7 +4,7 @@ import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui
 import { SENT_COLOR, diverging, fullName, marginOf, meanDigits, meanLabel, meanOf, optionShares, perPeopleOf, pickWarning, rgb, sentimentNote, shareOf, valueOf } from './answers'
 import { ORDERED } from './Stack'
 import { diffColor } from './closureColors'
-import { arc } from './arcs'
+import { arc, arrowed, headSizes, loop } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
 import { THIN, meanNote, meanText, placeName } from './trips'
 
@@ -232,7 +232,7 @@ function frame(rings, x, y, w, maxH) {
  * a legend under it. `fit` are the rings that must be in the picture; `heat` a
  * smoothed surface drawn under the outlines.
  */
-export const mapBlock = ({ areas, fit, circles = [], arcs = [], rings = [], heat, legend, title, border }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para }) => {
+export const mapBlock = ({ areas, fit, circles = [], arcs = [], heat, legend, title, border }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para }) => {
   let y = title ? para(ctx, title, PAD, y0, W - 2 * PAD, 16, INK, 600) + 10 : y0
   const f = frame(fit, PAD, y, W - 2 * PAD, 780)
   ctx.save()
@@ -295,23 +295,25 @@ export const mapBlock = ({ areas, fit, circles = [], arcs = [], rings = [], heat
     ctx.stroke()
   }
   ctx.lineCap = 'round'
-  const topW = Math.max(1, ...arcs.map((a) => a.w))
+  const topW = Math.max(1, ...arcs.filter((a) => !a.loop).map((a) => a.w))
   for (const c of arcs) {
+    const weight = c.fixed ?? Math.max(1, (c.width || 8) * Math.sqrt(Math.min(1, c.w / topW)))
+    const { line, heads } = arrowed(c.path.map((p) => f.at(p)), (!c.fixed && headSizes(c, weight)) || {})
     ctx.beginPath()
-    c.path.forEach((p, i) => { const [a, b] = f.at(p); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
+    line.forEach(([a, b], i) => { if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
     ctx.strokeStyle = c.color
+    ctx.fillStyle = c.color
     ctx.globalAlpha = c.fixed ? 1 : c.faint ? 0.35 : 0.7
-    ctx.lineWidth = c.fixed ?? Math.max(1, (c.width || 8) * Math.sqrt(c.w / topW))
+    ctx.lineWidth = weight
+    ctx.lineCap = heads.length ? 'butt' : 'round'
     ctx.stroke()
+    for (const h of heads) {
+      ctx.beginPath()
+      h.forEach(([a, b], i) => { if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
+      ctx.closePath()
+      ctx.fill()
+    }
     ctx.globalAlpha = 1
-  }
-  for (const r of rings) {
-    const [a, b] = f.at(r.at)
-    ctx.beginPath()
-    ctx.arc(a, b, 6 + 22 * Math.sqrt(r.w / (r.top || r.w)), 0, 2 * Math.PI)
-    ctx.strokeStyle = r.color
-    ctx.lineWidth = 3
-    ctx.stroke()
   }
   for (const c of circles) {
     const [a, b] = f.at([c.lat, c.lon])
@@ -500,7 +502,7 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
         title: legendTitle, fit: fitOf(list, picked), border: cityBorder(list),
         areas: list.map((p, k) => ({ rings: p.rings, on: picked.has(p.key), c: p.c, color: !painting || value[k] == null ? null : colorAt(k),
           alpha: (0.3 + 0.7 * Math.min(1, n[k] / 20)) * paint.lead(k), ...label(p, k) })),
-        arcs: lines.arcs.map((a) => ({ ...a, path: arc(a.from, a.to), width: show === 'trips' ? 1.4 : 8 })), rings: lines.rings,
+        arcs: lines.arcs.map((a) => ({ ...a, path: a.loop ? loop(a.from, a.loop) : arc(a.from, a.to), width: show === 'trips' ? 1.4 : 8 })),
         legend: painting ? [...paint.legend(false),
           ...(note ? [{ note }] : []), { note: [paint.unit, 'bladsze i (!): mniej niż 20 podróży w próbie'].filter(Boolean).join(' · ') }]
           : S.modes.map((m) => ({ color: m.color, label: m.label })),

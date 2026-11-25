@@ -7,13 +7,13 @@ import {
 import { CircleLayer, MapLabels, MapTooltip, TipNote, TipRow } from '@bartor-net/ui-kit/map'
 import ScenarioPanel from './ScenarioPanel'
 import { Small, smallText } from './Small'
-import { Arcs, Rings, ZoneLayer } from './ZoneLayer'
-import { rng, scatter } from './arcs'
+import { Arcs, ZoneLayer } from './ZoneLayer'
+import { rng, scatter, loopSize } from './arcs'
 import { DAY_MODES, daysOf } from './days'
 import { useHot } from './hot'
 import { colorsOf, isOrdered } from './Stack'
 import {
-  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, flowsOf, numberOf, pairs, passing, perPartner,
+  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, links, numberOf, pairs, passing, perPartner,
   perOf, perPlace, perPlaceDim, perSpot, perThousand, placeName, scale, shares, statOf, touching,
 } from './trips'
 
@@ -168,7 +168,11 @@ function sample(list, k, seed = 7) {
   return all.slice(0, k)
 }
 
-/** The curves and rings of a view. */
+/** Trips that stay in a place, as loops at its middle. */
+const loops = (list, modeW, color, all) => list.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `l${f.key}`, loop: loopSize(f.a.km2),
+  from: f.a.c, to: f.a.c, w: modeW(f), fw: 1, bw: 0, color: color(f), place: f.a, all }))
+
+/** The curves and loops of a view. */
 export function flowLines(x, hot = {}) {
   const { S, t, partner, places, show, idx, spots } = x
   const { list } = S.levels[t.level]
@@ -183,38 +187,37 @@ export function flowLines(x, hot = {}) {
       const m = S.modeAt[c.m[i]]
       return a && b && { key: `t${i}`, from: a, to: b, w: 1, color: S.modes[m].color, faint: true, i,
         dim: hot.mode != null && hot.mode !== m, on: hot.trip === i }
-    }).filter(Boolean), rings: [], at }
+    }).filter(Boolean), at }
   }
   if (partner && (show === 'areas' || show === 'flows')) {
-    const at = places.length === 1 ? places[0].c : [0, 1].map((k) => places.reduce((a, p) => a + p.c[k], 0) / places.length)
-    const mine = new Set(t.picked)
-    const all = flowsOf(S, partner, list)
-    const out = all.filter((f) => !mine.has(f.key)).sort((a, b) => b.w - a.w).slice(0, show === 'flows' ? 200 : 30)
-    const inside = all.filter((f) => mine.has(f.key))
-    const top = Math.max(1, ...all.map((f) => f.w))
-    const toward = x.way === 'to'
+    const many = places.length > 1
+    const all = links(S, idx, t.picked, t.level, x.way)
+    const out = all.filter((f) => !f.self).slice(0, show === 'flows' ? 300 : Math.min(80, 20 + 10 * places.length))
     const lit = hot.place != null && out.some((f) => f.b.key === hot.place)
+    const total = all.reduce((s, f) => s + f.w, 0)
     return {
-      arcs: out.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `f${f.key}`, from: toward ? f.b.c : at, to: toward ? at : f.b.c, w: modeW(f), color: color(f),
-        faint: f.n < 3, end: x.way === 'from' || x.way === 'to', on: hot.place === f.b.key,
-        // only a place at the other end of a line puts the rest in its shade
-        dim: lit && hot.place !== f.b.key, hotAs: f.hotAs })),
-      rings: inside.filter((f) => modeW(f) > 0).map((f) => ({ key: `r${f.key}`, at: f.b.c, w: modeW(f), n: f.n, top, color: color(f), faint: f.n < 3, place: f.b,
-        all: partner.w.reduce((a, b) => a + b, 0) + partner.off.reduce((a, o) => a + o.w, 0) })),
+      arcs: [
+        ...out.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `f${f.key}`, pair: f.key, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f),
+          // lines of one place begin together, so the heads back to it stand off
+          faint: f.n < 3, inner: 0.13, many, on: hot.place === f.b.key || hot.pair === f.key,
+          // only a place at the other end of a line puts the rest in its shade
+          dim: (lit && hot.place !== f.b.key) || (hot.pair != null && hot.pair !== f.key) })),
+        ...loops(all.filter((f) => f.self), modeW, color, total).map((f) => ({ ...f, faint: f.n < 3 })),
+      ],
     }
   }
   if (show === 'flows') {
     const all = pairs(S, x.passed, t.level, t.top)
-    const top = Math.max(1, ...all.map((f) => f.w))
     const lit = hot.place != null && all.some((f) => f.a.key === hot.place || f.b.key === hot.place)
     return {
-      arcs: all.filter((f) => !f.self && modeW(f) > 0).map((f) => ({ ...f, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), faint: f.n < 5,
-        on: hot.pair === f.key, dim: (hot.pair != null && hot.pair !== f.key) || (lit && hot.place !== f.a.key && hot.place !== f.b.key) })),
-      rings: all.filter((f) => f.self && modeW(f) > 0).map((f) => ({ key: f.key, at: f.a.c, w: modeW(f), n: f.n, top, color: color(f), faint: f.n < 5, place: f.a,
-        dim: lit && hot.place !== f.a.key })),
+      arcs: [
+        ...all.filter((f) => !f.self && modeW(f) > 0).map((f) => ({ ...f, pair: f.key, many: true, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), faint: f.n < 5,
+          on: hot.pair === f.key, dim: (hot.pair != null && hot.pair !== f.key) || (lit && hot.place !== f.a.key && hot.place !== f.b.key) })),
+        ...loops(all.filter((f) => f.self), modeW, color).map((f) => ({ ...f, faint: f.n < 5, dim: lit && hot.place !== f.place.key })),
+      ],
     }
   }
-  return { arcs: [], rings: [] }
+  return { arcs: [] }
 }
 
 /** Whole days as chains of curves. */
@@ -279,8 +282,9 @@ export function TripsMap({ x, dark, onPick, setT }) {
   const tipOf = useMemo(() => (item) => tip(item), [tip])
   const flowTip = (f) => (
     <MapTooltip sticky>
-      {f.a && !f.self ? `${placeName(f.a)} ↔ ` : ''}{placeName(f.b || f.place)}{f.place ? ' — w obrębie' : ''}<br />
+      {f.place ? `${placeName(f.place)} — w obrębie` : `${placeName(f.a)} ${!f.bw ? '→' : !f.fw ? '←' : '↔'} ${placeName(f.b)}`}<br />
       <b>{fmtEst(f.w)}</b> {unitOf(S)}<Small n={f.n} /> <TipNote>· {f.n} w próbie{f.all ? ` · ${pctText(f.w / f.all)} podróży` : ''}</TipNote>
+      {!f.place && f.fw > 0 && f.bw > 0 && <><br /><TipNote>→ {fmtEst(f.fw)} · ← {fmtEst(f.bw)}</TipNote></>}
       {f.modes && [...f.modes].map((w, m) => [w, m]).filter(([w]) => w > 0).sort((a, b) => b[0] - a[0]).slice(0, 4)
         .map(([w, m]) => <TipRow key={m} color={S.modes[m].color} label={S.modes[m].label} value={fmtEst(w)} share={pctText(w / [...f.modes].reduce((a, b) => a + b, 0))} />)}
     </MapTooltip>
@@ -296,8 +300,7 @@ export function TripsMap({ x, dark, onPick, setT }) {
   return (
     <>
       <ZoneLayer items={items} picked={picked} onPick={onPick} tip={tipOf} plain={show !== 'areas'} hot={hot.place} />
-      <Arcs width={single ? 1.6 : 9} flows={[...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), hotAs: f.a ? f.hotAs || { pair: f.key } : HOT_PLACE(f.b.key) })), ...chains]} />
-      <Rings rings={lines.rings.map((r) => ({ ...r, tip: flowTip(r), hotAs: HOT_PLACE(r.place.key), onPick: () => onPick(r.place) }))} />
+      <Arcs width={single ? 1.6 : 9} flows={[...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), ...(f.place ? { hotAs: HOT_PLACE(f.place.key), onPick: () => onPick(f.place) } : { hotAs: f.many ? HOT_PAIR(f.pair) : HOT_PLACE(f.b.key) }) })), ...chains]} />
       {perS && (
         <CircleLayer points={spots.map((s, i) => ({ s, i })).filter(({ i }) => perS.n[i] > 0).sort((a, b) => perS.w[b.i] - perS.w[a.i]).map(({ s, i }) => {
           const on = t.filters.spot?.[0] === i
@@ -319,6 +322,8 @@ export function TripsMap({ x, dark, onPick, setT }) {
 }
 // one object a place, so that a line is not redrawn for a new one
 const hotPlaces = new Map()
+const hotPairs = new Map()
+const HOT_PAIR = (key) => { if (!hotPairs.has(key)) hotPairs.set(key, { pair: key }); return hotPairs.get(key) }
 const HOT_PLACE = (key) => { if (!hotPlaces.has(key)) hotPlaces.set(key, { place: key }); return hotPlaces.get(key) }
 
 /** The legend of what is shown. */
@@ -337,7 +342,7 @@ export function tripsLegend({ x, dark }) {
   }
   if (show !== 'areas') {
     return [{ title: show === 'flows' ? 'Przepływy — najczęstszy środek' : 'Pojedyncze podróże' }, ...modes(S.modes),
-      { note: show === 'flows' ? 'grubość = podróże, kółko = w obrębie obszaru, blade = mniej niż 5 w próbie'
+      { note: show === 'flows' ? 'grubość = podróże, strzałka = dokąd, pętla = w obrębie obszaru, blade = mniej niż 5 w próbie'
         : `do ${MANY_TRIPS} losowych podróży z próby; domy wzdłuż ulicy, rzadkie miejsca w losowym punkcie rejonu` }]
   }
   const to = { from: 'z', to: 'do', any: 'z i do', home: 'mieszkańców —' }[x.way]
@@ -349,7 +354,7 @@ export function tripsLegend({ x, dark }) {
     ...(p0.stat?.opts.length === p0.stat?.d.options.length && p0.stat ? [{ note: '(!) wybrano wszystkie odpowiedzi — wszędzie 100%' }] : p0.legend(dark)),
     ...(p0.stat?.d.key === 'km' ? [{ note: KM_NOTE }] : []),
     ...(p0.stat && !p0.stat.opts.length && !p0.stat.mean ? [{ note: 'kolor = najczęstsza odpowiedź, bledszy = mniejsza przewaga' }] : []),
-    ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek, kropka = dokąd; kółko = podróże w obrębie' }] : []),
+    ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek, strzałka = dokąd; pętla = podróże w obrębie' }] : []),
     { note: `blade i (!) = mniej niż ${THIN} podróży w próbie` },
   ]
 }

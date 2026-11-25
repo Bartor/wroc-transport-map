@@ -533,11 +533,40 @@ export function mainMode(modes, from, K) {
   return best
 }
 
-/** From or to the picked zones: a flow a partner, the picked place itself too. */
-export function flowsOf(S, partner, list) {
+/**
+ * What runs between each picked place and the others, and within it: `a` is the
+ * picked one, `fw` goes from it and `bw` to it. Counted as `perPartner` does;
+ * between two picked ones it is a single pair.
+ */
+export function links(S, idx, picked, level, way) {
+  const { list, of, byKey } = S.levels[level]
+  const c = S.T.cols
   const K = S.modes.length
-  return list.map((p, k) => ({ key: p.key, b: p, w: partner.w[k], n: partner.n[k], mode: mainMode(partner.modes, k * K, K),
-    modes: partner.modes.subarray(k * K, (k + 1) * K) })).filter((f) => f.n > 0)
+  const mine = new Set(picked.map((k) => list.indexOf(byKey.get(k))))
+  const by = new Map()
+  const add = (a0, b0, out, i) => {
+    if (a0 < 0 || b0 < 0) return
+    let [a, b, fw] = [a0, b0, out]
+    if (mine.has(b) && a > b) { [a, b] = [b, a]; fw = !fw }
+    const k = a * 1000 + b
+    const p = by.get(k) || { a, b, w: 0, n: 0, fw: 0, bw: 0, modes: new Float64Array(K) }
+    p.w += c.w[i]
+    p.n += 1
+    p[fw ? 'fw' : 'bw'] += c.w[i]
+    p.modes[S.modeAt[c.m[i]]] += c.w[i]
+    by.set(k, p)
+  }
+  for (const i of idx) {
+    const home = way === 'home' ? homeOf(c, i) : null
+    const a = of[c.f[i]]
+    const b = of[c.t[i]]
+    const f = mine.has(a) && (home == null || home === c.f[i])
+    const t = mine.has(b) && (home == null || (home === c.t[i] && !f))
+    if (f && way !== 'to') add(a, b, true, i)
+    if (t && way !== 'from' && !(f && way === 'any')) add(b, a, false, i)
+  }
+  return [...by.values()].sort((p, q) => q.w - p.w)
+    .map((p) => ({ ...p, key: `${list[p.a].key}-${list[p.b].key}`, self: p.a === p.b, a: list[p.a], b: list[p.b], mode: mainMode(p.modes, 0, K) }))
 }
 
 /** The busiest pairs of places, both directions together; a place with itself
@@ -551,10 +580,12 @@ export function pairs(S, idx, level, top = 40) {
     let a = of[c.f[i]]
     let b = of[c.t[i]]
     if (a < 0 || b < 0) continue
-    if (a > b) [a, b] = [b, a]
+    const back = a > b
+    if (back) [a, b] = [b, a]
     const k = a * 1000 + b
-    const p = by.get(k) || { a, b, w: 0, n: 0, modes: new Float64Array(K) }
+    const p = by.get(k) || { a, b, w: 0, n: 0, fw: 0, bw: 0, modes: new Float64Array(K) }
     p.w += c.w[i]
+    p[back ? 'bw' : 'fw'] += c.w[i]
     p.n += 1
     p.modes[S.modeAt[c.m[i]]] += c.w[i]
     by.set(k, p)

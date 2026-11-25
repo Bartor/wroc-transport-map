@@ -1,7 +1,7 @@
-import { memo, useMemo } from 'react'
-import { CircleMarker, ImageOverlay, LayerGroup, Polygon, Polyline } from 'react-leaflet'
+import { memo, useMemo, useState } from 'react'
+import { ImageOverlay, LayerGroup, Polygon, Polyline, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
-import { arc } from './arcs'
+import { arc, arrowed, headSizes, loop } from './arcs'
 import { diverging } from './answers'
 import { setHot } from './hot'
 
@@ -44,56 +44,53 @@ export function ZoneLayer({ items, picked, onPick, tip, quiet, plain, hot }) {
   )
 }
 
-const Arc = memo(function Arc({ path, color, weight, opacity, tip, hotAs, cased, end }) {
+const Arc = memo(function Arc({ path, color, weight, opacity, tip, hotAs, cased, end, start, inner, zoom, onPick }) {
+  const map = useMap()
+  // the heads are so many pixels long, whatever the zoom
+  const { line, heads } = useMemo(() => {
+    if (!end && !start) return { line: path, heads: [] }
+    const px = (p) => { const q = map.project(p, zoom); return [q.x, q.y] }
+    const back = (p) => { const q = map.unproject(p, zoom); return [q.lat, q.lng] }
+    const out = arrowed(path.map(px), { end, start, inner })
+    return { line: out.line.map(back), heads: out.heads.map((h) => h.map(back)) }
+  }, [map, zoom, path, end, start, inner])
   const handlers = useMemo(() => (hotAs ? {
-    mouseover: () => setHot(hotAs), mouseout: () => setHot({}),
-  } : undefined), [hotAs])
+    mouseover: () => setHot(hotAs), mouseout: () => setHot({}), ...(onPick ? { click: onPick } : {}),
+  } : undefined), [hotAs, onPick])
   return (
     <>
       {/* a dark edge, so that it stands off whatever is under it */}
-      {cased && <Polyline positions={path} interactive={false} pathOptions={{ color: '#0b1016', weight: weight + 2.5, opacity: opacity * 0.55, lineCap: 'round' }} />}
-      <Polyline positions={path} interactive={!!hotAs} eventHandlers={handlers}
-        pathOptions={{ color, weight, opacity, lineCap: 'round' }}>
+      {cased && <Polyline positions={line} interactive={false} pathOptions={{ color: '#0b1016', weight: weight + 2.5, opacity: opacity * 0.55, lineCap: 'round' }} />}
+      {cased && heads.map((h, i) => <Polygon key={i} positions={h} interactive={false} pathOptions={{ color: '#0b1016', weight: 2.5, opacity: opacity * 0.55, fill: false, lineJoin: 'round' }} />)}
+      <Polyline positions={line} interactive={!!hotAs} eventHandlers={handlers}
+        pathOptions={{ color, weight, opacity, lineCap: heads.length ? 'butt' : 'round' }}>
         {tip}
       </Polyline>
-      {end && (
-        <CircleMarker center={path[path.length - 1]} radius={Math.max(3, weight / 2 + 1.5)} interactive={false}
-          pathOptions={{ color: '#0b1016', weight: 1, opacity, fillColor: color, fillOpacity: opacity }} />
-      )}
+      {heads.map((h, i) => <Polygon key={i} positions={h} interactive={false} pathOptions={{ stroke: false, fillColor: color, fillOpacity: opacity }} />)}
     </>
   )
 })
 
-/** Curves between places: thin, in the colour of what runs along them. A flow
- *  is { key, from, to, w, color, faint, dim, on, end, tip, hotAs }; `end` marks
- *  where it goes. */
+/** Curves between places, the wider the more there is of it, with an arrow each
+ *  way it runs; a loop where it stays in a place. */
 export function Arcs({ flows, width = 6 }) {
-  const top = Math.max(1, ...flows.map((f) => f.w))
-  const drawn = useMemo(() => flows.map((f) => ({ ...f, path: arc(f.from, f.to) })), [flows])
+  const map = useMap()
+  const [zoom, setZoom] = useState(map.getZoom())
+  useMapEvents({ zoomend: () => setZoom(map.getZoom()) })
+  // what stays is often most of it: it must not make threads of the rest
+  const top = Math.max(1, ...flows.filter((f) => !f.loop).map((f) => f.w))
+  const drawn = useMemo(() => flows.map((f) => ({ ...f, path: f.loop ? loop(f.from, f.loop) : arc(f.from, f.to) })), [flows])
   return (
     <LayerGroup>
-      {drawn.map((f) => (
-        <Arc key={f.key} path={f.path} color={f.on ? '#ffffff' : f.color} tip={f.tip} hotAs={f.hotAs}
-          cased={!!f.hotAs && !f.dim} end={f.end}
-          weight={Math.max(f.hotAs ? 2 : 1, width * Math.sqrt(f.w / top)) + (f.on ? 1.5 : f.strong ? 2 : 0)}
-          opacity={f.on || f.strong ? 1 : f.dim ? 0.2 : f.faint ? (f.hotAs ? 0.6 : 0.45) : 0.9} />
-      ))}
-    </LayerGroup>
-  )
-}
-
-/** Trips that stay where they start: a ring around the middle of the place. */
-export function Rings({ rings }) {
-  const top = Math.max(1, ...rings.map((r) => r.top ?? r.w))
-  return (
-    <LayerGroup>
-      {rings.map((r) => (
-        <CircleMarker key={r.key} center={r.at} radius={5 + 18 * Math.sqrt(r.w / top)}
-          pathOptions={{ color: r.color, weight: 3, opacity: r.dim ? 0.2 : 0.85, fillColor: r.color, fillOpacity: r.dim ? 0.03 : 0.12, dashArray: r.faint ? '3 4' : null }}
-          eventHandlers={r.hotAs ? { mouseover: () => setHot(r.hotAs), mouseout: () => setHot({}), click: r.onPick } : undefined}>
-          {r.tip}
-        </CircleMarker>
-      ))}
+      {drawn.map((f) => {
+        const weight = Math.max(f.hotAs ? 2 : 1, width * Math.sqrt(Math.min(1, f.w / top))) + (f.on ? 1.5 : f.strong ? 2 : 0)
+        const heads = headSizes(f, weight)
+        return (
+          <Arc key={f.key} path={f.path} color={f.on ? '#ffffff' : f.color} tip={f.tip} hotAs={f.hotAs} onPick={f.onPick}
+            cased={!!f.hotAs && !f.dim} end={heads?.end} start={heads?.start} inner={heads?.inner} zoom={heads ? zoom : 0}
+            weight={weight} opacity={f.on || f.strong ? 1 : f.dim ? 0.2 : f.faint ? (f.hotAs ? 0.6 : 0.45) : 0.9} />
+        )
+      })}
     </LayerGroup>
   )
 }
