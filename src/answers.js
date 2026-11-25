@@ -1,7 +1,8 @@
 // Answers to the survey's questions, by where the people who gave them live.
 // answers.json holds, per question and group of people, rows for zones,
 // districts and wholes: [people, how bunched they are by interviewer, and by
-// round, thousandths on each option, the same corrected - opinions only].
+// round, thousandths on each option, the same corrected - opinions only, a mean
+// in thousandths and the same per person - numbers only].
 //
 // Who asked matters more than where: between interviewers the answers differ
 // several times as much as between districts. The corrected weights have the
@@ -22,8 +23,17 @@ export function shareOf(row, opts, raw = false) {
   return Math.max(0, Math.min(1, opts.reduce((a, o) => a + (w[o] || 0), 0) / 1000))
 }
 
+/** Numbers have a mean: what is shown when no option is picked. */
+export const onMean = (q, opts) => !!q.number && !opts.length
+export const meanOf = (row) => (row?.[5] == null ? null : row[5] / 1000)
+/** Per thousand people in those households. */
+export const perPeopleOf = (row) => (row?.[6] == null ? null : row[6])
+/** What is shown of a row: a mean, or a share of the options. */
+export const valueOf = (q, row, opts, raw) => (onMean(q, opts) ? meanOf(row) : shareOf(row, opts, raw))
+
 /** How alike answers are between interviewers, and between rounds. */
 function rhoOf(q, opts) {
+  if (!opts.length) return [0, 0]
   if (q.rhoGood && opts.length === q.good.length && opts.every((o) => q.good.includes(o))) return q.rhoGood
   return [0, 1].map((k) => Math.max(...opts.map((o) => q.rho[o][k])))
 }
@@ -35,6 +45,10 @@ function rhoOf(q, opts) {
  */
 export function marginOf(q, row, opts, raw = false) {
   if (!row || row[0] < 2) return null
+  if (onMean(q, opts)) {
+    const [byAsker, byRound] = q.rhoMean
+    return 1.96 * q.sd * Math.sqrt((1 + byAsker * (row[1] - 1) + byRound * (row[2] - 1)) / row[0])
+  }
   // the city's share: a place's own is extreme by chance as often as not
   const s = Math.min(0.95, Math.max(0.05, shareOf(rowAt(q, 'all', 'a', 'wro') || row, opts, true)))
   const [byAsker, byRound] = rhoOf(q, opts)
@@ -44,7 +58,7 @@ export function marginOf(q, row, opts, raw = false) {
 }
 
 /** The options a map of this question starts with. */
-export const startOpts = (q) => (q.multi || !q.good.length ? [biggest(q)] : q.good)
+export const startOpts = (q) => (q.number ? [] : q.multi || !q.good.length ? [biggest(q)] : q.good)
 function biggest(q) {
   const row = rowAt(q, 'all', 'a', 'wro')
   if (!row) return 0
@@ -64,6 +78,7 @@ export const clampOpts = (q, opts) => {
 
 /** A question's name where its group is not beside it. */
 export const fullName = (q) => (/^Co utrudnia/.test(q.group) ? `${q.group}: ${q.label.toLowerCase()}`
+  : /^Gospodarstwo/.test(q.group) ? `Gospodarstwo domowe: ${q.label[0].toLowerCase()}${q.label.slice(1)}`
   : /^Oceny/.test(q.group) ? `Ocena komunikacji zbiorowej: ${q.label.toLowerCase()}` : q.label)
 
 /** Every option's share in one place, for bars. */
@@ -75,7 +90,7 @@ export const optionShares = (q, row, raw) => q.options.map((label, i) => ({
 export function valuesOf(q, group, opts, level, places, raw) {
   return places.map((p) => {
     const row = rowAt(q, group, level, p.i)
-    return { p, row, n: row ? row[0] : 0, v: shareOf(row, opts, raw) }
+    return { p, row, n: row ? row[0] : 0, v: valueOf(q, row, opts, raw) }
   })
 }
 
@@ -93,7 +108,7 @@ export function surface(q, group, opts, zones, { km = 1, cols = 130, box, raw } 
     const row = rowAt(q, group, 'z', z.i)
     if (!row) continue
     pts.push({ x: z.c[1] * KX, y: z.c[0] * KY, n: row[0], w: row[0],
-      k: shareOf(row, opts, raw) * row[0] })
+      k: valueOf(q, row, opts, raw) * row[0] })
   }
   const [s, west, n, east] = box
   const rows = Math.round((cols * (n - s) * KY) / ((east - west) * KX))
@@ -150,6 +165,7 @@ export const sentiment = (q, opts) => {
 export const isOpinion = (q) => ['tram', 'bike', 'cars'].includes(q.key)
 export function sentimentNote(q, opts) {
   const s = sentiment(q, opts)
+  if (onMean(q, opts)) return 'fioletowy = więcej niż średnio, niebieski = mniej'
   if (!s) return 'fioletowy = częściej niż średnio, niebieski = rzadziej'
   return isOpinion(q) ? 'zielony = większe poparcie zmiany niż średnio, pomarańczowy = mniejsze'
     : 'zielony = lepiej niż średnio, pomarańczowy = gorzej'
@@ -185,12 +201,13 @@ export function spanOf(vals, mid) {
   return Math.max(0.05, d[Math.floor(0.9 * (d.length - 1))])
 }
 
+const pl = (x) => (x == null ? '' : String(Math.round(x * 100) / 100).replace('.', ','))
 /** One row per place and option. */
 export function answersTable(q, groups, group, places, level, raw) {
   const g = groups.find((x) => x.key === group)?.label
   return [
-    ['obszar', 'grupa', 'odpowiedzi w próbie', ...q.options.map((o) => `% ${o}`)],
+    ['obszar', 'grupa', 'odpowiedzi w próbie', ...(q.number ? [`średnia liczba ${q.unit}`, ...(q.per ? [q.per] : [])] : []), ...q.options.map((o) => `% ${o}`)],
     ...places.map((p) => [p, rowAt(q, group, level, p.i)]).filter(([, r]) => r)
-      .map(([p, r]) => [p.name, g, r[0], ...optionShares(q, r, raw).map((o) => Math.round(1000 * o.share) / 10)]),
+      .map(([p, r]) => [p.name, g, r[0], ...(q.number ? [pl(meanOf(r)), ...(q.per ? [perPeopleOf(r)] : [])] : []), ...optionShares(q, r, raw).map((o) => Math.round(1000 * o.share) / 10)]),
   ]
 }

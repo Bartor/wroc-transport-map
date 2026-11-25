@@ -1,7 +1,7 @@
 // Pictures of the survey views: what is asked or filtered, the map, the bars,
 // and the notes that have to travel with them.
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
-import { SENT_COLOR, diverging, fullName, marginOf, optionShares, rgb, sentimentNote, shareOf } from './answers'
+import { SENT_COLOR, diverging, fullName, marginOf, meanOf, optionShares, perPeopleOf, rgb, sentimentNote, shareOf, valueOf } from './answers'
 import { arc } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
 import { placeName } from './trips'
@@ -334,40 +334,40 @@ const fitOf = (places, picked) => places.filter((p) => p.city || picked?.has(p.k
 const optText = (q, opts) => opts.map((o) => q.options[o]).join(' + ')
 
 /** The answers view as a card. `p` is the picked place, if any. */
-export function answersCard({ x, p, row, by, gname, ranked, colors, legend }) {
+export function answersCard({ x, p, row, by, gname, ranked, colors, legend, optLabel, text, mtext }) {
   const { Z, a, q, opts, mid, span, heat, vals, sent } = x
-  const v = shareOf(row, opts, a.raw)
+  const v = valueOf(q, row, opts, a.raw)
   const m = row && marginOf(q, row, opts, a.raw)
   const picked = new Set(a.place ? [a.place] : [])
   const places = a.level === 'd' ? Z.districts : Z.zones
   const list = optionShares(q, row, a.raw)
   const enough = a.level === 'd' ? 40 : 15
   return {
-    accent: '#d6541c', kicker: 'Badanie ankietowe KBR 2024 · odpowiedzi mieszkańców', title: fullName(q),
+    accent: '#d6541c', kicker: `Badanie ankietowe KBR 2024 · ${q.home ? 'gospodarstwa domowe' : 'odpowiedzi mieszkańców'}`, title: fullName(q),
     subtitle: q.full ? `„${q.full}”` : undefined,
     when: `${p ? p.name : 'Wrocław'} · ${gname} · ${fmt(row?.[0])} odpowiedzi`,
     blocks: [
       q.multi ? barsBlock({ color: '#d6541c', whole: true, rows: [...list].sort((s, t) => t.share - s.share).slice(0, 12)
         .map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.includes(o.i), note: opts[0] === o.i ? `±${Math.round(100 * m)} p.p.` : null })) })
-        : stackBlock({ parts: list.map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.includes(o.i) })) }),
-      ...(!q.multi ? [(ctx, y, k) => k.para(ctx, `${optText(q, opts)}: ${pctText(v)} ±${Math.round(100 * m)} p.p.`, k.PAD, y, k.W - 2 * k.PAD, 21, '#c2410c', 700) + 18] : []),
+        : stackBlock({ parts: list.map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.length ? opts.includes(o.i) : undefined })) }),
+      ...(!q.multi ? [(ctx, y, k) => k.para(ctx, `${optLabel}: ${text(v)} ${mtext(row)}${perPeopleOf(row) != null ? ` · ${fmt(perPeopleOf(row))} ${q.per}` : ''}`, k.PAD, y, k.W - 2 * k.PAD, 21, '#c2410c', 700) + 18] : []),
       mapBlock({
-        title: `${optText(q, opts)} — ${a.level === 'h' ? 'mapa wygładzona' : a.level === 'd' ? 'według osiedli' : 'według rejonów'}`,
+        title: `${optLabel} — ${a.level === 'h' ? 'mapa wygładzona' : a.level === 'd' ? 'według osiedli' : 'według rejonów'}`,
         fit: fitOf(places, picked), legend: [...legend, { note: sentimentNote(q, opts) }], heat: heat && { surface: heat, mid, span, sent }, border: cityBorder(places),
         areas: vals.map((t) => ({
           rings: t.p.rings, on: picked.has(t.p.key), c: t.p.c,
           color: t.v == null ? null : rgb(diverging(t.v, mid, span, sent)),
           alpha: t.v == null ? null : (0.25 + 0.75 * Math.min(1, t.n / enough)) * (Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw) ? 0.5 : 1),
           faint: t.v != null && Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw),
-          name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : pctText(t.v) + smallText(t.n, FEW_ANSWERS),
-          sub: t.v == null ? null : `±${Math.round(100 * marginOf(q, t.row, opts, a.raw))} · n=${t.n}`, weight: t.n,
+          name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : text(t.v) + smallText(t.n, FEW_ANSWERS),
+          sub: t.v == null ? null : `${mtext(t.row)} · n=${t.n}`, weight: t.n,
         })),
       }),
       ...(by.length > 1 ? [q.multi ? barsBlock({ color: SENT_COLOR[sent], whole: true, title: `${optText(q, opts)} — kto tak odpowiada`,
         rows: by.map(({ g, r, v: s }) => ({ label: g.label, share: s, note: `±${Math.round(100 * marginOf(q, r, opts, a.raw))} · n=${fmt(r[0])}` })) })
-        : stackBlock({ title: 'Kto jak odpowiada', rows: by.map(({ g, r, v: s }) => ({ label: g.label,
-          note: `${optText(q, opts)} ${pctText(s)} ±${Math.round(100 * marginOf(q, r, opts, a.raw))} · n=${fmt(r[0])}`,
-          parts: optionShares(q, r, a.raw).map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.includes(o.i) })) })) })] : []),
+        : stackBlock({ title: q.opinion ? 'Kto jak odpowiada' : 'Według grup', rows: by.map(({ g, r, v: s }) => ({ label: g.label,
+          note: `${optLabel} ${text(s)} ${mtext(r)} · n=${fmt(r[0])}`,
+          parts: optionShares(q, r, a.raw).map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.length ? opts.includes(o.i) : undefined })) })) })] : []),
     ],
     notes: [
       `(!) — mniej niż ${FEW_ANSWERS} odpowiedzi.`,
@@ -503,6 +503,8 @@ export function viewTable(q, groups, level, key, raw) {
   return [
     ['odpowiedź', ...cols.flatMap(({ g }) => [`${g.label} — %`, `${g.label} — ± p.p.`])],
     ...q.options.map((o, i) => [o, ...cols.flatMap(({ row }) => [pp(shareOf(row, [i], raw)), pp(marginOf(q, row, [i], raw))])]),
+    ...(q.number ? [[`średnia liczba ${q.unit}`, ...cols.flatMap(({ row }) => [String(Math.round(100 * meanOf(row)) / 100).replace('.', ','), ''])]] : []),
+    ...(q.per ? [[q.per, ...cols.flatMap(({ row }) => [perPeopleOf(row), ''])]] : []),
     ['odpowiedzi w próbie', ...cols.flatMap(({ row }) => [row[0], ''])],
   ]
 }

@@ -12,7 +12,7 @@ import Sidebar from './Sidebar'
 import { readHash, hashOf, findSelection } from './urlState'
 import { BY, FLOW0, UNITS, withoutDirs } from './flows'
 import { TripsControls, TripsMap, tripsLegend, useTrips } from './TripsView'
-import { AnswersControls, AnswersMap, AnswersPanel, answersLegend, useAnswers } from './AnswersView'
+import { AnswersControls, AnswersMap, AnswersPanel, answersLegend, questionOf, useAnswers } from './AnswersView'
 import {
   ChangeControls, ChangeMap, SpeedsControls, SpeedsMap, StationsControls, StationsMap, changeLegend,
   speedsLegend, stationsLegend,
@@ -220,7 +220,11 @@ export default function App() {
   const zones = useMemo(() => (files.zones ? readZones(files.zones) : null), [files.zones])
   const dayData = useMemo(() => (people0 ? readDays(people0) : null), [people0])
   const tripsX = useTrips(view === 'trips' ? (trip.set === 'freight' ? freight : people0) : null, trip, hours, files.places?.spots, dayData)
-  const askX = useAnswers(view === 'answers' ? files.answers : null, zones, ask)
+  const askKey = view === 'answers' ? questionOf(files.answers, ask)?.key : null
+  useEffect(() => { if (askKey) fetchFile(`answers/${askKey}`) }, [askKey, fetchFile])
+  const askX = useAnswers(view === 'answers' ? files.answers : null, zones, ask, files[`answers/${askKey}`])
+  const loadAnswers = useCallback(() => Promise.all(files.answers.questions.map((q) => loadFile(`answers/${q.key}`).then((tab) => ({ ...q, tab }))))
+    .then((questions) => ({ ...files.answers, questions })), [files.answers])
   const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])
   const dark = BASEMAPS[basemap].dark
   const pickTrip = useCallback((p, add) => {
@@ -273,7 +277,7 @@ export default function App() {
       return {
         controls: <AnswersControls x={askX} setA={setAsk} />,
         map: <AnswersMap x={askX} onPick={pickAsk} />, legend: answersLegend({ x: askX }),
-        panel: <AnswersPanel x={askX} setA={setAsk} onClose={shut} />,
+        panel: <AnswersPanel x={askX} setA={setAsk} onClose={shut} loadAll={loadAnswers} />,
       }
     }
     if (view === 'change' && changed) {

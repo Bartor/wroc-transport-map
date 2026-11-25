@@ -12,6 +12,8 @@ import { arc, inside, scatter } from './arcs'
 import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days'
 import { colorsOf, partsOf } from './Stack'
 import { isSmall, smallText } from './Small'
+import { meanOf, onMean, perPeopleOf, valueOf } from './answers'
+import { meanFor } from './trips'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
@@ -40,7 +42,7 @@ const T = {
   modes: Array.from({ length: 12 }, (_, i) => `m${i}`), park: ['ulica'], why: ['wygoda'], ages: ['a'], jobs: ['j'],
   cols: {
     ...Object.fromEntries(keys.map((k, i) => [k, ROWS.map((r) => r[i])])),
-    pk: blank(-1), x: blank(0), ag: blank(0), jb: blank(0), hc: blank(1), ps: blank(0), lc: blank(1), wr: blank(1), y: blank(0),
+    hs: blank(3), sx: blank(0), ed: blank(4), kd: blank(0), bd: blank(0), pk: blank(-1), x: blank(0), ag: blank(0), jb: blank(0), hc: blank(1), ps: blank(0), lc: blank(1), wr: blank(1), y: blank(0),
     sf: [1, 1, 0, 0, 0],
   },
 }
@@ -151,6 +153,19 @@ suite('answers', () => {
     expect(diverging(-9, 0.6, 0.2, 1)).toEqual([214, 84, 28])
     expect(diverging(9, 0.6, 0.2, 0)).toEqual([150, 72, 178])
     expect(spanOf([{ v: 0.9, n: 50 }, { v: 0.5, n: 50 }], 0.6)).toBeGreaterThanOrEqual(0.05)
+  })
+  it('averages numbers', () => {
+    const q = { key: 'cars0', number: 1, unit: 'aut', per: 'aut na 1000', sd: 0.8, rhoMean: [0.1, 0.1], options: ['brak', '1', '2'], good: [], rho: [[0, 0], [0, 0], [0, 0]],
+      tab: { all: { a: { wro: [100, 20, 5, [300, 500, 200], null, 900, 410] } } } }
+    const row = q.tab.all.a.wro
+    expect(startOpts(q)).toEqual([])
+    expect(onMean(q, [])).toBe(true)
+    expect(valueOf(q, row, [])).toBeCloseTo(0.9)
+    expect(valueOf(q, row, [1, 2])).toBeCloseTo(0.7)
+    expect([meanOf(row), perPeopleOf(row)]).toEqual([0.9, 410])
+    expect(marginOf(q, row, [])).toBeGreaterThan((1.96 * 0.8) / 10)
+    expect(meanFor(S, all, 'in').v).toBe(1)
+    expect(meanFor(S, all, 'goal')).toBe(null)
   })
   it('knows what an answer means', () => {
     const u = { key: 'u1', options: ['uciążliwy ruch kołowy', 'nie odczuwam uciążliwości', 'inne rzeczy'] }

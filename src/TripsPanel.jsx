@@ -12,7 +12,7 @@ import { hotOn, setHot, useHot } from './hot'
 import { Small, isSmall } from './Small'
 import Stack, { Bar, colorsOf, isOrdered } from './Stack'
 import {
-  FEW, THIN, countMargin, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
+  FEW, THIN, countMargin, meanFor, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
 } from './trips'
 import { draw, tripsCard, tripsName } from './surveyCards'
 import { KM_NOTE, StatChips, WAYS, WAY_TEXT, flowLines, painted, pctText, statIn, unitOf } from './TripsView'
@@ -20,7 +20,7 @@ import { KM_NOTE, StatChips, WAYS, WAY_TEXT, flowLines, painted, pctText, statIn
 const MANY = 200      // rows of single trips to show
 const STACKS = [['goal', 'Cel podróży'], ['km', 'Długość (w linii prostej)'], ['min', 'Czas podróży'],
   ['in', 'Osób w samochodzie — kierowcy'], ['park', 'Gdzie zaparkowano — kierowcy'],
-  ['reason', 'Dlaczego samochodem — kierowcy'], ['cars', 'Samochody w gospodarstwie'], ['age', 'Wiek']]
+  ['reason', 'Dlaczego samochodem — kierowcy'], ['cars', 'Samochody w gospodarstwie'], ['size', 'Osób w gospodarstwie'], ['age', 'Wiek'], ['job', 'Zajęcie'], ['edu', 'Wykształcenie'], ['sex', 'Płeć']]
 const FREIGHT_STACKS = [['goal', 'Cel'], ['from', 'Skąd'], ['to', 'Dokąd']]
 
 /** A chart's heading with its way onto the map. */
@@ -134,7 +134,8 @@ export default function TripsPanel({ x, setT, period, onClose }) {
     const sh = shares(S, baseOf(key), key)
     if (sh.filter((o) => o.n > 0).length < 2) return null
     const colors = colorsOf(d, isOrdered(key))
-    return { key, label, n: sh.reduce((a, o) => a + o.n, 0), parts: sh.filter((o) => o.n > 0).map((o) => ({ key: String(o.i), label: o.label, share: o.share, n: o.n, color: colors[o.i],
+    const mean = meanFor(S, idx, key)
+    return { key, label: mean ? `${label} — śr. ${fixed(mean.v, mean.digits)} ${mean.unit}` : label, n: sh.reduce((a, o) => a + o.n, 0), parts: sh.filter((o) => o.n > 0).map((o) => ({ key: String(o.i), label: o.label, share: o.share, n: o.n, color: colors[o.i],
       title: `${S.freight ? fmt(o.w) : fmtEst(o.w)} ${unitOf(S)} · ${o.n} w próbie` })) }
   }
   // onto the map and off it; a chart that is already filtered starts with that
@@ -199,7 +200,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
             const s = stackOf(key, label)
             return s && (
               <Block key={key}>
-                <Head on={statOn(key)} onMap={onMap(key)}>{label}<Small n={s.n} /></Head>
+                <Head on={statOn(key)} onMap={onMap(key)}>{s.label}<Small n={s.n} /></Head>
                 {mapped(key)}
                 <Stack parts={s.parts} on={onOf(key)} onPick={toggle(key)} />
               </Block>

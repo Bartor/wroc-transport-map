@@ -131,8 +131,13 @@ export function dims(T, area) {
     { key: 'reason', label: 'Dlaczego samochodem', options: o(T.why), of: (c, i) => c.y[i],
       note: 'tylko kierowcy', help: 'Główny powód podany przez kierowcę — raz, nie osobno dla każdej podróży.' },
     { key: 'cars', label: 'Samochody w domu', options: o(['brak', '1', '2', '3 i więcej']), of: (c, i) => c.hc[i] },
+    { key: 'size', label: 'Osób w gospodarstwie', options: o(['1', '2', '3', '4', '5', '6 i więcej']), of: (c, i) => c.hs[i] - 1 },
     { key: 'age', label: 'Wiek', options: o(T.ages), of: (c, i) => c.ag[i] },
     { key: 'job', label: 'Zajęcie', options: o(T.jobs), of: (c, i) => c.jb[i] },
+    { key: 'sex', label: 'Płeć', options: o(['kobiety', 'mężczyźni', 'inne']), of: (c, i) => c.sx[i] },
+    { key: 'edu', label: 'Wykształcenie', options: o(['w szkole podstawowej', 'podstawowe', 'zawodowe', 'średnie', 'wyższe']), of: (c, i) => c.ed[i] },
+    { key: 'kids', label: 'Dziecko do 6 lat w domu', options: o(['nie ma', 'jest']), of: (c, i) => c.kd[i] },
+    { key: 'house', label: 'Budynek', options: o(['wielorodzinny', 'jednorodzinny']), of: (c, i) => c.bd[i] },
     { key: 'pass', label: 'Bilet okresowy', options: o(['nie ma', 'ma']), of: (c, i) => c.ps[i] },
     { key: 'lic', label: 'Prawo jazdy', options: o(['nie ma', 'ma']), of: (c, i) => c.lc[i] },
     { key: 'live', label: 'Mieszka', options: o(['poza Wrocławiem', 'we Wrocławiu']), of: (c, i) => c.wr[i] },
@@ -630,7 +635,28 @@ export function tripsTable(S, idx) {
   ]
 }
 
-const OVERVIEW = ['goal', 'km', 'min', 'in', 'park', 'reason', 'cars', 'age']
+/** Averages of the dimensions that are numbers, weighted by trips. Three cars
+ *  and six people stand for more than that, so those two are a little low. */
+const NUMBERS = {
+  km: ['km', 1, (c, i) => c.km[i]], min: ['min', 0, (c, i) => c.d[i]], in: ['os.', 2, (c, i) => c.o[i] || null],
+  cars: ['auta', 2, (c, i) => c.hc[i]], size: ['os.', 1, (c, i) => c.hs[i]],
+}
+export function meanFor(S, idx, key) {
+  const m = NUMBERS[key]
+  if (!m || S.freight) return null
+  const c = S.T.cols
+  let a = 0
+  let b = 0
+  for (const i of idx) {
+    const v = m[2](c, i)
+    if (v == null) continue
+    a += v * c.w[i]
+    b += c.w[i]
+  }
+  return b ? { v: a / b, unit: m[0], digits: m[1] } : null
+}
+
+const OVERVIEW = ['goal', 'km', 'min', 'in', 'park', 'reason', 'cars', 'size', 'age']
 /** One row per place: what the map is painted from, and every statistic. */
 export function placesTable(S, sums, level, idx = [], way = 'any') {
   const { list } = S.levels[level]

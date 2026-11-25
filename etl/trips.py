@@ -5,7 +5,7 @@
 
 zones.json    zone and district outlines, residents, jobs
 trips.json    one row per reported trip, between zones; by column
-answers.json  how each question was answered, summed over zones
+answers.json  the questions; answers/*.json how each was answered, summed over zones
 places.json   places at least five people went to, see places.py
 freight.json  the freight survey's trips, between zones; by column
 
@@ -342,6 +342,8 @@ WHY = ["większa wygoda podróży", "krótszy czas podróży", "niższy koszt po
 AGES = ["6–15", "16–24", "25–44", "45–60/65", "60/65+"]
 AGE = {"6-15 lat": 0, "16-19 lat": 1, "20-24 lata": 1, "25-44 lata": 2,
        "45-60 lat (K) i 45-65 lat (M)": 3, "pow. 60 lat (K) i pow. 65 lat (M)": 4}
+SEXES = ["kobieta", "mężczyzna"]
+SCHOOLS = ["uczeń w szkole podstawowej", "podstawowe", "zawodowe", "średnie", "wyższe"]
 JOBS = ["pracujący poza domem", "pracujący zdalnie lub hybrydowo", "uczeń", "student",
         "emeryt/rencista", "pozostali"]
 
@@ -392,9 +394,13 @@ def stage_trips(d, zones, outside, spots, ends):
             # comfort, time or cost only
             int(bool(y) and all(v in (None, "", *WHY[:3]) for v in y)),
             round(float(p["w"])), *end, t["person"], int(t["n"] or 0),
+            min(6, int(diary.num(p["nPeople"]) or 1)),
+            SEXES.index(p["sex"]) if p["sex"] in SEXES else 2,
+            SCHOOLS.index(p["school"]) if p["school"] in SCHOOLS else -1,
+            int(p["smallKids"] == "są"), int(not str(p["building"]).startswith("wielo")),
         ))
     cols = columns(rows, ["f", "t", "m", "a0", "a1", "h", "d", "km", "o", "pk", "x", "ag", "jb",
-                          "hc", "ps", "lc", "wr", "y", "sf", "w", "pf", "pt", "p", "q"])
+                          "hc", "ps", "lc", "wr", "y", "sf", "w", "pf", "pt", "p", "q", "hs", "sx", "ed", "kd", "bd"])
     write("trips.json", {
         "n": len(rows), "modes": MODES, "acts": ACTS, "park": PARK, "why": WHY, "ages": AGES,
         "jobs": JOBS, "cols": cols,
@@ -452,9 +458,9 @@ def questions(d):
     else the options they chose. `good` are the options a map starts on."""
     Q = []
 
-    def add(key, group, label, options, f, good=(), multi=0, full=None):
+    def add(key, group, label, options, f, good=(), multi=0, full=None, **more):
         Q.append({"key": key, "group": group, "label": label, "options": list(options),
-                  "good": list(good), "multi": multi, "full": full, "f": f,
+                  "good": list(good), "multi": multi, "full": full, "f": f, **more,
                   # facts do not depend on who asks; what looks like it is the
                   # interviewer's territory
                   "opinion": int(G.startswith(("Opinie", "Co utrudnia", "Dlaczego", "Oceny")) and key != "home")})
@@ -465,6 +471,17 @@ def questions(d):
         add(key, group, label, short or options,
             lambda p: [at[get(p)]] if get(p) in at else None, good,
             full=d["questions"].get(src))
+
+    def count(key, group, label, src, top, unit, home=1, zero=True, per=None):
+        """A number: how many of each, and on average; of a household or a person."""
+        low = 0 if zero else 1
+        opts = [str(i) for i in range(low, top)] + ["%d lub więcej" % top]
+        if zero:
+            opts[0] = "brak"
+        num = lambda p: diary.num(p[src]) if p[src] not in (None, "") else None
+        add(key, group, label, opts,
+            lambda p: None if num(p) is None else [min(top, int(num(p))) - low],
+            num=num, home=home, unit=unit, per=per)
 
     def several(key, group, label, pre):
         ks = sorted((k for k in d["questions"] if re.match(pre + r"\d+$", k)),
@@ -510,17 +527,51 @@ def questions(d):
     one("chg", G, "W ostatnich 3 latach zmienił(a) środek transportu", "O16_1", ["tak", "nie"])
     one("hol", G, "W wakacje podróżuje inaczej lub rzadziej", None, ["tak", "nie"],
         get=lambda p: {"tak": "nie", "nie": "tak"}.get(p["ans"].get("O15_3")))
-    one("cars0", G, "Samochody w gospodarstwie", None,
-        ["brak samochodów", "1 samochód", "2 samochody", "3  lub więcej samochodów"],
-        ["brak", "1", "2", "3 lub więcej"], get=lambda p: p["cars"])
-    one("bikes0", G, "Rowery w gospodarstwie", None,
-        ["brak rowerów", "1 rower", "2 rowery", "3 rowery", "4 lub więcej rowerów"],
-        ["brak", "1", "2", "3", "4 lub więcej"], get=lambda p: p["bikes"])
+    count("trips0", G, "Liczba podróży w ciągu dnia", "nTrips", 5, "podróży na osobę", home=0)
     one("pass", G, "Bilet okresowy", None, ["tak", "nie"], get=lambda p: p["pass"])
     one("lic", G, "Prawo jazdy (20 lat i więcej)", None, ["posiada", "nie posiada"], ["tak", "nie"],
         get=lambda p: None if p["age"] in ("6-15 lat", "16-19 lat") else p["licence"])
     one("out", G, "Wychodził(a) z domu poprzedniego dnia", None, ["tak", "nie"],
         get=lambda p: p["out"])
+    G = "Gospodarstwo domowe"
+    count("size0", G, "Liczba osób", "nPeople", 6, "osób w gospodarstwie", zero=False)
+    one("kids0", G, "Dzieci poniżej 6 lat", None, ["są", "nie ma"], ["są", "nie ma"], get=lambda p: p["smallKids"])
+    count("cars0", G, "Samochody", "nCars", 3, "samochodów na gospodarstwo", per="samochodów na 1000 osób")
+    count("bikes0", G, "Rowery", "nBikes", 4, "rowerów na gospodarstwo", per="rowerów na 1000 osób")
+    count("ebikes0", G, "Rowery elektryczne", "nEbikes", 2, "rowerów el. na gospodarstwo", per="rowerów el. na 1000 osób")
+    count("scoot0", G, "Hulajnogi elektryczne", "nScooters", 2, "hulajnóg na gospodarstwo", per="hulajnóg na 1000 osób")
+    one("build0", G, "Rodzaj budynku", None, ["wielorodzinny", "jednorodzinny|bliźniak|szeregowiec"],
+        ["wielorodzinny", "jednorodzinny, bliźniak, szeregowiec"], get=lambda p: p["building"])
+    for q in Q:
+        if q["key"] in ("kids0", "build0"):
+            q["home"] = 1
+    G = "Kim są badani"
+    one("age0", G, "Wiek", None,
+        ["6-15 lat", "16-19 lat", "20-24 lata", "25-44 lata", "45-60 lat (K) i 45-65 lat (M)",
+         "pow. 60 lat (K) i pow. 65 lat (M)"],
+        ["6–15", "16–19", "20–24", "25–44", "45–60 (K) / 45–65 (M)", "ponad 60 (K) / 65 (M)"],
+        get=lambda p: p["age"])
+    one("sex0", G, "Płeć", None, ["kobieta", "mężczyzna", "inne"], get=lambda p: p["sex"])
+    one("school0", G, "Wykształcenie", None,
+        ["uczeń w szkole podstawowej", "podstawowe", "zawodowe", "średnie", "wyższe"],
+        ["w szkole podstawowej", "podstawowe", "zawodowe", "średnie", "wyższe"], get=lambda p: p["school"])
+    one("job0", G, "Zajęcie", None, JOBS, get=lambda p: p["job"])
+    one("shift0", G, "Godziny pracy (pracujący)", None,
+        ["praca w stałych godzinach", "praca zmianowa", "praca w nieregularnych godzinach"],
+        ["stałe", "zmiany", "nieregularne"], get=lambda p: next((o for o in (
+            "praca w stałych godzinach", "praca zmianowa", "praca w nieregularnych godzinach")
+            if str(p["workMode"] or "").startswith(o[:20])), None))
+    one("remote0", G, "Praca zdalna w poprzednim tygodniu (pracujący)", None, ["tak", "nie"],
+        get=lambda p: p["remote"])
+    add("limits0", G, "Trudności i opieka", ["kłopoty z poruszaniem się", "opieka nad dzieckiem do 10 lat",
+                                             "opieka nad osobą starszą", "opieka nad inną osobą", "żadne z tych"],
+        lambda p: [i for i, k in enumerate(("mobility", "careChild", "careOld", "careOther", "noLimits"))
+                   if p[k] == "tak"], multi=1)
+    one("fares0", G, "Ulgi w komunikacji zbiorowej", None,
+        ["tak, do przejazdów bezpłatnych", "ulgowe", "nie"], ["przejazdy bezpłatne", "ulgowe", "brak"],
+        get=lambda p: p["fares"] if not str(p["fares"]).startswith("tak, do przejazdów ulgowych") else "ulgowe")
+    one("nation0", G, "Narodowość", None, ["polskiej", "ukraińskiej", "inna"], ["polska", "ukraińska", "inna lub odmowa"],
+        get=lambda p: p["nation"] if p["nation"] in ("polskiej", "ukraińskiej") else "inna")
     G = "Oceny komunikacji zbiorowej (pasażerowie)"
     for k, lab in (("K3a", "Wygoda jazdy autobusami"), ("K3b", "Wygoda jazdy tramwajami"),
                    ("K3c", "Czystość w pojazdach"), ("K3d", "Temperatura w pojazdach"),
@@ -545,6 +596,14 @@ GROUPS = [
     ("mid", "25–60/65 lat", lambda p: p["age"].startswith(("25", "45"))),
     ("old", "powyżej 60/65 lat", lambda p: p["age"].startswith("pow")),
     ("nocar", "bez samochodu w gospodarstwie", lambda p: p["cars"].startswith("brak")),
+    ("women", "kobiety", lambda p: p["sex"] == "kobieta"),
+    ("men", "mężczyźni", lambda p: p["sex"] == "mężczyzna"),
+    ("work", "pracujący", lambda p: str(p["job"]).startswith("pracując")),
+    ("study", "uczniowie i studenci", lambda p: p["job"] in ("uczeń", "student")),
+    ("retired", "emeryci i renciści", lambda p: p["job"] == "emeryt/rencista"),
+    ("kids", "z dzieckiem poniżej 6 lat w domu", lambda p: p["smallKids"] == "są"),
+    ("limited", "z kłopotami z poruszaniem się", lambda p: p["mobility"] == "tak"),
+    ("uni", "z wyższym wykształceniem", lambda p: p["school"] == "wyższe"),
 ]
 
 
@@ -587,15 +646,32 @@ def without_asker(y, asker, place, rounds=25):
 def stage_answers(d, zones):
     import numpy as np
     at = {z["id"]: i for i, z in enumerate(zones)}
-    P = d["people"]
-    zi = np.array([at.get(str(p["zone"]), -1) for p in P])
-    di = np.array([zones[z]["d"] if z >= 0 else -1 for z in zi])
-    w = np.array([float(p["w"]) for p in P])
-    asker, walk = (np.array([p[k] for p in P]) for k in ("asker", "round"))
-    wro = np.array([p["area"] == "Wrocław" for p in P])
-    tested = {g: np.array([bool(test(p)) for p in P]) for g, _, test in GROUPS}
+    P0 = d["people"]
+
+    def frame(home):
+        """People, or one person a household with its weight; a household is in
+        a group when any of its members is."""
+        if home:
+            first, members = {}, collections.defaultdict(list)
+            for p in P0:
+                first.setdefault(p["home"], p)
+                members[p["home"]].append(p)
+            P, of = list(first.values()), lambda p: members[p["home"]]
+        else:
+            P, of = P0, lambda p: [p]
+        zi = np.array([at.get(str(p["zone"]), -1) for p in P])
+        return {"P": P, "zi": zi, "di": np.array([zones[z]["d"] if z >= 0 else -1 for z in zi]),
+                "w": np.array([float(p["wh" if home else "w"]) for p in P]),
+                "asker": np.array([p["asker"] for p in P]), "walk": np.array([p["round"] for p in P]),
+                "wro": np.array([p["area"] == "Wrocław" for p in P]),
+                "people": np.array([diary.num(p["nPeople"]) or 1 for p in P]),
+                "in": {g: np.array([any(test(m) for m in of(p)) for p in P]) for g, _, test in GROUPS}}
+
+    frames = {0: frame(0), 1: frame(1)}
     out = []
     for q in questions(d):
+        F = frames[int(bool(q.get("home")))]
+        P, zi, di, w, asker, walk, wro, tested = (F[k] for k in ("P", "zi", "di", "w", "asker", "walk", "wro", "in"))
         got = [q["f"](p) for p in P]
         asked = np.array([x is not None for x in got]) & (zi >= 0)
         k = len(q["options"])
@@ -603,6 +679,9 @@ def stage_answers(d, zones):
         for i, x in enumerate(got):
             for o in x or ():
                 Y[i, o] = 1
+        number = None
+        if q.get("num"):
+            number = np.array([q["num"](p) or 0.0 for p in P])
         idx = np.flatnonzero(asked)
         _, ai = np.unique(asker[idx], return_inverse=True)
         _, wi = np.unique(walk[idx], return_inverse=True)
@@ -611,7 +690,7 @@ def stage_answers(d, zones):
         sets = [[o] for o in range(k)] + ([q["good"]] if len(q["good"]) > 1 else [])
         for s in sets:
             y = Y[idx][:, s].sum(axis=1)
-            a = without_asker(y, ai, di[idx])
+            a = without_asker(y, ai, di[idx]) if q["opinion"] else y
             if len(s) == 1 and q["opinion"]:
                 A[idx, s[0]] = a
             # between interviewers; then between rounds, the interviewer taken off
@@ -635,17 +714,32 @@ def stage_answers(d, zones):
                     # how bunched: people per interviewer, and per round, as a
                     # random one of them sees it
                     bunch = lambda key: (np.bincount(np.unique(key[i], return_inverse=True)[1]) ** 2).sum() / len(i)
-                    rows[name] = [len(i), round(bunch(asker), 1), round(bunch(walk), 1),
-                                  [round(1000 * x) for x in raw]]
+                    row = [len(i), round(bunch(asker), 1), round(bunch(walk), 1), [round(1000 * x) for x in raw]]
                     if lv != "a" and q["opinion"]:
                         # shares again: none below nothing, adding up as they did
                         fixed = np.maximum(0, ww @ A[i] / ww.sum())
                         if not q["multi"] and fixed.sum() > 0:
                             fixed *= raw.sum() / fixed.sum()
-                        rows[name].append([round(1000 * x) for x in np.minimum(1, fixed)])
+                        row.append([round(1000 * x) for x in np.minimum(1, fixed)])
+                    if number is not None:
+                        # on average, and of everyone in those households
+                        row += [None] * (4 - len(row) + 1)
+                        row.append(round(1000 * float(ww @ number[i] / ww.sum())))
+                        if q.get("per"):
+                            row.append(round(1000 * float(ww @ number[i] / (ww @ F["people"][i]))))
+                    rows[name] = row
                 tabs[g][lv] = rows
-        out.append({**{x: v for x, v in q.items() if x != "f"}, "rho": rho[:k],
-                    "rhoGood": rho[k] if len(rho) > k else None, "tab": tabs})
+        more = {}
+        if number is not None:
+            y = number[idx]
+            more = {"sd": round(float(y.std()), 3), "rhoMean": [round(icc(y, ai), 3), round(icc(y, wi), 3)]}
+        out.append({**{x: v for x, v in q.items() if x not in ("f", "num")}, "number": int(number is not None),
+                    **more, "rho": rho[:k], "rhoGood": rho[k] if len(rho) > k else None,
+                    "groups": list(tabs)})
+        # the figures of each question apart: they are fetched as it is opened
+        os.makedirs(os.path.join(OUT, "answers"), exist_ok=True)
+        with open(os.path.join(OUT, "answers", q["key"] + ".json"), "w", encoding="utf8", newline="\n") as f:
+            json.dump(tabs, f, ensure_ascii=False, separators=(",", ":"))
     write("answers.json", {"groups": [{"key": g, "label": lab} for g, lab, _ in GROUPS],
                            "questions": out, "minN": MIN_N})
 

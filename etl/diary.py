@@ -42,6 +42,11 @@ PERSON = {
     "DOMtyp": "building", "dzieci": "smallKids", "O11_2": "careChild",
     # who asked and on which round, as running numbers: answers depend on it
     "r41": "asker", "wiazka": "round",
+    # in numbers, and the weight of the household
+    "G1": "nPeople", "G3": "nCars", "G4_5": "nBikes", "G5": "nEbikes", "G6": "nScooters",
+    "L_podrozy": "nTrips", "waga_gosp_pop": "wh",
+    "O4rec": "school", "O8a": "remote", "O9": "nation", "O11_3": "careOld", "O11_4": "careOther",
+    "O11_5": "noLimits", "O13": "fares", "O7tryb": "studyMode", "G3typ": "carKind", "G3el": "electric",
 }
 TRIP = {
     "nr_podrozy": "n", "STARTrejon": "from", "STOPrejon": "to", "odleglosc": "km",
