@@ -44,20 +44,29 @@ export function ZoneLayer({ items, picked, onPick, tip, quiet, plain, hot }) {
   )
 }
 
-const Arc = memo(function Arc({ path, color, weight, opacity, tip, hotAs }) {
+const Arc = memo(function Arc({ path, color, weight, opacity, tip, hotAs, cased, end }) {
   const handlers = useMemo(() => (hotAs ? {
     mouseover: () => setHot(hotAs), mouseout: () => setHot({}),
   } : undefined), [hotAs])
   return (
-    <Polyline positions={path} interactive={!!hotAs} eventHandlers={handlers}
-      pathOptions={{ color, weight, opacity, lineCap: 'round' }}>
-      {tip}
-    </Polyline>
+    <>
+      {/* a dark edge, so that it stands off whatever is under it */}
+      {cased && <Polyline positions={path} interactive={false} pathOptions={{ color: '#0b1016', weight: weight + 2.5, opacity: opacity * 0.55, lineCap: 'round' }} />}
+      <Polyline positions={path} interactive={!!hotAs} eventHandlers={handlers}
+        pathOptions={{ color, weight, opacity, lineCap: 'round' }}>
+        {tip}
+      </Polyline>
+      {end && (
+        <CircleMarker center={path[path.length - 1]} radius={Math.max(3, weight / 2 + 1.5)} interactive={false}
+          pathOptions={{ color: '#0b1016', weight: 1, opacity, fillColor: color, fillOpacity: opacity }} />
+      )}
+    </>
   )
 })
 
 /** Curves between places: thin, in the colour of what runs along them. A flow
- *  is { key, from, to, w, color, faint, dim, on, tip, hotAs }. */
+ *  is { key, from, to, w, color, faint, dim, on, end, tip, hotAs }; `end` marks
+ *  where it goes. */
 export function Arcs({ flows, width = 6 }) {
   const top = Math.max(1, ...flows.map((f) => f.w))
   const drawn = useMemo(() => flows.map((f) => ({ ...f, path: arc(f.from, f.to) })), [flows])
@@ -65,8 +74,9 @@ export function Arcs({ flows, width = 6 }) {
     <LayerGroup>
       {drawn.map((f) => (
         <Arc key={f.key} path={f.path} color={f.on ? '#ffffff' : f.color} tip={f.tip} hotAs={f.hotAs}
-          weight={Math.max(f.hotAs ? 1 : 0.8, width * Math.sqrt(f.w / top)) + (f.on ? 1.5 : f.strong ? 2 : 0)}
-          opacity={f.on || f.strong ? 1 : f.dim ? 0.1 : f.faint ? 0.3 : 0.6} />
+          cased={!!f.hotAs && !f.dim} end={f.end}
+          weight={Math.max(f.hotAs ? 2 : 1, width * Math.sqrt(f.w / top)) + (f.on ? 1.5 : f.strong ? 2 : 0)}
+          opacity={f.on || f.strong ? 1 : f.dim ? 0.2 : f.faint ? (f.hotAs ? 0.6 : 0.45) : 0.9} />
       ))}
     </LayerGroup>
   )

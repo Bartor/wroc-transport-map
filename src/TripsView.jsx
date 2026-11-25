@@ -89,7 +89,7 @@ export function painted({ S, t, sums, partner }) {
   return { list, P, value, n, share, digits, unit, text,
     title: P.count && per.unit ? `${P.label} ${k > 1 ? per.many : per.unit}` : P.label }
 }
-const alphaOf = (n) => 0.14 + 0.5 * Math.min(1, n / THIN)
+const alphaOf = (n) => 0.24 + 0.4 * Math.min(1, n / THIN)
 
 // -------------------------------------------------------------------- the map
 /** Where a trip's end is drawn: at its address, along its street, or anywhere
@@ -141,9 +141,12 @@ export function flowLines(x, hot = {}) {
     const inside = all.filter((f) => mine.has(f.key))
     const top = Math.max(1, ...all.map((f) => f.w))
     const toward = x.way === 'to'
+    const lit = hot.place != null && out.some((f) => f.b.key === hot.place)
     return {
       arcs: out.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `f${f.key}`, from: toward ? f.b.c : at, to: toward ? at : f.b.c, w: modeW(f), color: color(f),
-        faint: f.n < 3, on: hot.place === f.b.key, dim: hot.place != null && hot.place !== f.b.key, hotAs: f.hotAs })),
+        faint: f.n < 3, end: x.way === 'from' || x.way === 'to', on: hot.place === f.b.key,
+        // only a place at the other end of a line puts the rest in its shade
+        dim: lit && hot.place !== f.b.key, hotAs: f.hotAs })),
       rings: inside.filter((f) => modeW(f) > 0).map((f) => ({ key: `r${f.key}`, at: f.b.c, w: modeW(f), n: f.n, top, color: color(f), faint: f.n < 3, place: f.b,
         all: partner.w.reduce((a, b) => a + b, 0) + partner.off.reduce((a, o) => a + o.w, 0) })),
     }
@@ -151,11 +154,12 @@ export function flowLines(x, hot = {}) {
   if (show === 'flows') {
     const all = pairs(S, x.passed, t.level, t.top)
     const top = Math.max(1, ...all.map((f) => f.w))
+    const lit = hot.place != null && all.some((f) => f.a.key === hot.place || f.b.key === hot.place)
     return {
       arcs: all.filter((f) => !f.self && modeW(f) > 0).map((f) => ({ ...f, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), faint: f.n < 5,
-        on: hot.pair === f.key, dim: (hot.pair != null && hot.pair !== f.key) || (hot.place != null && hot.place !== f.a.key && hot.place !== f.b.key) })),
+        on: hot.pair === f.key, dim: (hot.pair != null && hot.pair !== f.key) || (lit && hot.place !== f.a.key && hot.place !== f.b.key) })),
       rings: all.filter((f) => f.self && modeW(f) > 0).map((f) => ({ key: f.key, at: f.a.c, w: modeW(f), n: f.n, top, color: color(f), faint: f.n < 5, place: f.a,
-        dim: hot.place != null && hot.place !== f.a.key })),
+        dim: lit && hot.place !== f.a.key })),
     }
   }
   return { arcs: [], rings: [] }
@@ -237,7 +241,7 @@ export function TripsMap({ x, dark, onPick, setT }) {
   return (
     <>
       <ZoneLayer items={items} picked={picked} onPick={onPick} tip={tipOf} plain={show !== 'areas'} hot={hot.place} />
-      <Arcs width={single ? 1.4 : 7} flows={[...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), hotAs: f.a ? f.hotAs || { pair: f.key } : HOT_PLACE(f.b.key) })), ...chains]} />
+      <Arcs width={single ? 1.6 : 9} flows={[...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), hotAs: f.a ? f.hotAs || { pair: f.key } : HOT_PLACE(f.b.key) })), ...chains]} />
       <Rings rings={lines.rings.map((r) => ({ ...r, tip: flowTip(r), hotAs: HOT_PLACE(r.place.key), onPick: () => onPick(r.place) }))} />
       {perS && (
         <CircleLayer points={spots.map((s, i) => ({ s, i })).filter(({ i }) => perS.n[i] > 0).sort((a, b) => perS.w[b.i] - perS.w[a.i]).map(({ s, i }) => {
@@ -292,7 +296,7 @@ export function tripsLegend({ x, dark }) {
       color: s.color,
       label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}`,
     })),
-    ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek; kółko = podróże w obrębie' }] : []),
+    ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek, kropka = dokąd; kółko = podróże w obrębie' }] : []),
     { note: `blade = mało podróży w próbie (pełny kolor od ${THIN})` },
   ]
 }
