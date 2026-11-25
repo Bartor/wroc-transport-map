@@ -363,6 +363,21 @@ w obrębie osiedla:
 | które auta do centrum | 0,09 | 0,38 | 1,1% |
 | najczęstszy środek: samochód | 0,06 | 0,07 | 1,9% |
 
+To nie okolica, w której ankieter pracował. Pary osób z różnych domów we Wrocławiu —
+korelacja odpowiedzi według tego, czy łączy je ankieter i jak daleko mieszkają:
+
+| Pytanie | ten sam ankieter: rejon / < 1 km / > 4 km | inny ankieter: rejon / < 1 km / > 4 km |
+|---|---|---|
+| priorytet tramwajów | 22% / 18% / 15% | 1% / 3% / −1% |
+| drogi rowerowe | 16% / 12% / 8% | 2% / 2% / 0% |
+| wszystkie auta do centrum | 41% / 40% / 48% | 1% / −2% / −2% |
+| dom jednorodzinny (fakt) | 46% / 26% / 25% | 31% / 18% / −6% |
+| samochód w domu (fakt) | 17% / 12% / 14% | 8% / 9% / −3% |
+
+Fakty łączą sąsiadów także wtedy, gdy pytali ich różni ludzie; opinie prawie wcale.
+186 z 293 rejonów miało więcej niż jednego ankietera. Skrajny zapisał „wszystkie auta
+do centrum” u 98% z 492 osób, inni w tych samych rejonach u 51%.
+
 Mapa odpowiedzi odejmuje więc od opinii — nie od faktów — efekt ankietera (dwa zestawy efektów, ankieterów
 i osiedli, ściągane do zera o tyle, ile może być przypadkiem), a przedziały liczą
 jeszcze zgrupowanie w rundach. W symulacjach zostaje 41–70% prawdziwych różnic, a błąd

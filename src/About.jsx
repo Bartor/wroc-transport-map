@@ -204,7 +204,9 @@ export default function About({ data, onClose }) {
         </li>
         <li>
           <b>Ankieter.</b> Odpowiedzi zależą od tego, kto pytał, bardziej niż od osiedla: w pytaniu o wjazd do
-          centrum ankieter wyjaśnia 38% różnic, osiedle ponad to ok. 1%. Dlatego mapa odpowiedzi jest domyślnie
+          centrum ankieter wyjaśnia 38% różnic, osiedle ponad to ok. 1%. Nie wynika to z okolicy, w której pracował:
+          różni ankieterzy w tym samym rejonie dostawali odpowiedzi niepodobne do siebie, a ten sam — podobne nawet ponad 4 km
+          dalej. Dlatego mapa odpowiedzi jest domyślnie
           skorygowana o ankietera, a przedziały są szerokie. Poparcie dla priorytetu tramwajów to 60%,
           a przy losowaniu ankieterów 54–66%; wśród osób jeżdżących na co dzień samochodem 48% (40–56%). Przedziały nie
           obejmują tego, że na udział zgodziło się ok. 31% gospodarstw.
