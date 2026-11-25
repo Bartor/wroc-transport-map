@@ -389,6 +389,8 @@ model (R² 0,50 wobec 0,63), bo na parę rejonów wypada ok. 1,4 podróży.
 379 rejonami i 43 wjazdami na sieć ulic z przepustowością, dopasowuje je do liczb z 228
 przekrojów i zapisuje sieć z macierzą do `closure.json`. `src/assign.js` liczy to samo
 w przeglądarce (w workerze, ok. 4–5 s), więc można zamknąć lub zwęzić dowolną ulicę.
+Ile przejazdów zniknie, to założenie (domyślnie 0); `src/evaporation.js` ma do niego
+63 zmierzone przypadki z przeglądu Cairnsa, Atkinsa i Goodwina (2002) i inne badania.
 
 Dla przekrojów, których model nie widział (5 części, dzielone po punktach): mediana
 błędu 17%, 90. percentyl 52%, GEH<10 dla 76% (regresja sieciowa na tych samych

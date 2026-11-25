@@ -5,6 +5,7 @@ import { useMap } from 'react-leaflet'
 import L from 'leaflet'
 import { Chips, Field, Hint, LinkButton, Panel, Slider, Warn, fmt, fmtEst, isPhone } from '@bartor-net/ui-kit'
 import { DOWN, NOISE, UP, diffColor } from './closureColors'
+import { ASSUME, CASES, KINDS, MOST, SOURCES } from './evaporation'
 import { setHot, useHot } from './hot'
 
 export const CLOSE0 = { closed: [], narrow: [], reduce: 0, whole: false, tool: 'close' }
@@ -17,6 +18,7 @@ export function useClosure(json, c, active) {
   const [base, setBase] = useState(null)
   const [result, setResult] = useState(null)
   const [part, setPart] = useState(null)
+  const [prep, setPrep] = useState(0)
   const [error, setError] = useState(null)
   const id = useRef(0)
   const asked = useRef(null)
@@ -25,14 +27,16 @@ export function useClosure(json, c, active) {
     const w = new Worker(new URL('./assign.worker.js', import.meta.url), { type: 'module' })
     w.onmessage = ({ data }) => {
       if (data.type === 'ready') setBase({ segments: data.segments, meta: data.meta, before: data.before })
+      else if (data.type === 'prep') setPrep(data.part)
       else if (data.type === 'step' && data.id === id.current) setPart(data.part)
       else if (data.type === 'done' && data.id === id.current) { setResult({ ...data, of: asked.current }); setPart(null) }
       else if (data.type === 'error') { setError(data.message); setPart(null) }
     }
+    w.onerror = (e) => { setError(e.message || 'błąd obliczeń'); setPart(null) }
     w.postMessage({ type: 'load', json })
     worker.current = w
   }, [json, active])
-  useEffect(() => () => worker.current?.terminate(), [])
+  useEffect(() => () => { worker.current?.terminate(); worker.current = null }, [])
   // what is worked out is what was asked for, until it is asked for again
   const calculate = useCallback((change) => {
     if (!worker.current) return
@@ -54,8 +58,8 @@ export function useClosure(json, c, active) {
   }, [base, c, calculate])
   const empty = !c.closed.length && !c.narrow.length
   const stale = !!result && keyOf(result.of) !== keyOf(c)
-  return useMemo(() => base && { ...base, c, result: empty ? null : result, stale: stale && !empty, empty, part, error, calculate,
-    streets: streets(base.segments) }, [base, c, result, stale, empty, part, error, calculate])
+  return useMemo(() => base && { ...base, c, result: empty ? null : result, stale: stale && !empty, empty, part, prep, error, calculate,
+    streets: streets(base.segments) }, [base, c, result, stale, empty, part, prep, error, calculate])
 }
 const keyOf = (c) => `${[...c.closed].sort().join('.')}|${[...c.narrow].sort().join('.')}|${c.reduce}`
 
@@ -279,19 +283,95 @@ export function ClosureControls({ x, setC }) {
           </Field>
         )}
         {(c.closed.length > 0 || c.narrow.length > 0) && <LinkButton block onClick={() => setC({ ...c, closed: [], narrow: [] })}>Otwórz wszystko</LinkButton>}
-        <Field label={`Przejazdów, które znikną: ${Math.round(100 * c.reduce)}%`} help={(
-          <p>
-            Część kierowców po zamknięciu ulicy zmienia środek transportu, cel albo porę, zamiast jechać objazdem.
-            W przeglądzie ponad 70 przypadków (Cairns, Atkins, Goodwin, „Disappearing traffic? The story so far”,
-            2002) ruch po zmianach zwykle malał. Ile zniknie we Wrocławiu, nie wiadomo: to założenie,
-            domyślnie 0. Dotyczy przejazdów przez zamknięte odcinki.
-          </p>
-        )}>
-          <Slider min="0" max="40" step="5" value={Math.round(100 * c.reduce)} label="Przejazdów, które znikną" onChange={(v) => setC({ ...c, reduce: v / 100 })} />
-        </Field>
+        <Vanish c={c} setC={setC} />
         {x.error && <Warn>Nie udało się policzyć: {x.error}</Warn>}
       </Panel>
     </>
+  )
+}
+
+// ------------------------------------------------------- how much will disappear
+const STEP = 5              // percent a column of dots
+const FROM = -30
+const TO = 105              // and everything above
+const COLS = (TO - FROM) / STEP
+const colOf = (v) => Math.floor((Math.max(FROM, Math.min(TO - 1, v)) - FROM) / STEP)
+const CW = 10
+const CH = 8.4
+
+const DOTS = (() => {
+  const high = new Array(COLS).fill(0)
+  return ['b', 'c', 'l', ''].flatMap((kind) => CASES.filter((q) => q.kind === kind))
+    .map((q) => { const col = colOf(q.v); return { ...q, col, at: high[col]++ } })
+})()
+const TALL = Math.max(...DOTS.map((d) => d.at)) + 1
+const pct = (v) => `${v > 0 ? '−' : v < 0 ? '+' : ''}${String(Math.abs(v)).replace('.', ',')}%`
+
+/** What was measured elsewhere, a dot a case; a press takes its share. */
+function Cases({ share, onPick }) {
+  const [at, setAt] = useState(null)
+  const H = TALL * CH
+  const X = (v) => ((v - FROM) / STEP) * CW
+  return (
+    <div style={{ marginTop: 10 }}>
+      <div style={{ fontSize: 11, opacity: 0.85, marginBottom: 6 }}>O ile ubyło ruchu w {CASES.length} zmierzonych przypadkach</div>
+      <svg viewBox={`0 0 ${COLS * CW} ${H + 16}`} width="100%" role="img" style={{ display: 'block', overflow: 'visible' }}
+        aria-label="63 zmierzone przypadki: o ile ubyło ruchu" onPointerLeave={() => setAt(null)}>
+        <rect x={X(1.2)} width={X(33.5) - X(1.2)} y={0} height={H} fill="currentColor" opacity="0.07" />
+        <line x1={X(100 * share)} x2={X(100 * share)} y1={-2} y2={H + 2} stroke="currentColor" strokeWidth="1.4" />
+        {DOTS.map((d) => (
+          <circle key={d.name + d.v} cx={(d.col + 0.5) * CW} cy={H - (d.at + 0.5) * CH} r={at === d ? 4.4 : 3.3} fill={KINDS[d.kind].color}
+            stroke={at === d ? 'currentColor' : 'none'} />
+        ))}
+        {/* targets bigger than the dots */}
+        {DOTS.map((d) => (
+          <rect key={d.name + d.v} x={d.col * CW} y={H - (d.at + 1) * CH} width={CW} height={CH} fill="transparent" style={{ cursor: d.v >= 0 && d.v <= MOST ? 'pointer' : 'default' }}
+            onPointerEnter={() => setAt(d)} onClick={() => { setAt(d); if (d.v >= 0 && d.v <= MOST) onPick(Math.round(d.v)) }} />
+        ))}
+        <line x1={0} x2={COLS * CW} y1={H + 0.5} y2={H + 0.5} stroke="currentColor" opacity="0.3" />
+        {[[-25, '+25%'], [0, '0'], [25, '−25%'], [50, '−50%'], [75, '−75%'], [100, '−100%']].map(([q, label]) => (
+          <text key={q} x={X(q)} y={H + 13} fontSize="9.5" textAnchor={q === 100 ? 'end' : 'middle'} dx={q === 100 ? 5 : 0} fill="currentColor" opacity="0.7">{label}</text>
+        ))}
+      </svg>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', fontSize: 11, marginTop: 4, minHeight: 32, alignContent: 'flex-start' }}>
+        {at ? <span><b>{pct(at.v)}</b> {at.name}</span> : Object.entries(KINDS).map(([k, q]) => (
+          <span key={k} style={{ whiteSpace: 'nowrap', opacity: 0.85 }}><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: 4, background: q.color, marginRight: 4 }} />{q.label}</span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function Vanish({ c, setC }) {
+  const now = Math.round(100 * c.reduce)
+  const set = (v) => setC({ ...c, reduce: v / 100 })
+  const known = ASSUME.find((a) => a.key === now)
+  return (
+    <Field label={`Przejazdów, które znikną: ${now}%`} help={(
+      <>
+        <p>
+          Część kierowców zmienia środek transportu, cel albo porę, zamiast jechać objazdem. To założenie, nie wynik
+          modelu: wybierz je według tego, co zmierzono gdzie indziej. Liczy się od przejazdów przez zamknięte
+          i zwężone odcinki — tak samo, jak w badaniach.
+        </p>
+        <p>
+          Kropka to jeden zmierzony przypadek; szare tło — środkowa połowa wyników (od −1 do −34%). Mosty i tunele mają
+          rozrzut od +2 do −80%, ale zwykle liczono je kilka tygodni po zamknięciu. Duże spadki
+          w śródmieściach to zwykle wiele zmian naraz, przez lata. Część ruchu mogła pojechać ulicami, na których nie liczono.
+        </p>
+        <p>We Wrocławiu tego nie zmierzono. Najlepiej policzyć dwa razy: przy 0% i przy 11%.</p>
+        <ul style={{ paddingLeft: 16, margin: 0 }}>
+          {SOURCES.map((s) => (
+            <li key={s.name}><a href={s.url} target="_blank" rel="noreferrer">{s.name}</a>: {s.says}{s.brief ? ' (za streszczeniem)' : ''}</li>
+          ))}
+        </ul>
+      </>
+    )}>
+      <Slider min="0" max={String(MOST)} step="1" value={now} label="Przejazdów, które znikną" onChange={set} />
+      <Chips tight small label="Założenia z badań" onPick={(k) => set(+k)} items={ASSUME.map((a) => ({ key: String(a.key), label: `${a.key}%`, on: a.key === now }))} />
+      {known && <Hint>{known.key}%: {known.note}</Hint>}
+      <Cases share={c.reduce} onPick={set} />
+    </Field>
   )
 }
 
@@ -305,22 +385,38 @@ const button = { border: 0, borderRadius: 7, padding: '8px 14px', font: '600 13p
 
 /** What is picked, and working it out: over the map. */
 export function ClosureBar({ x, setC }) {
+  // clear of the panel where it lies over the map
+  const box = useRef(null)
+  const [side, setSide] = useState(0)
+  useEffect(() => {
+    const measure = () => {
+      const map = box.current?.offsetParent?.getBoundingClientRect()
+      const panel = document.querySelector('.kit-details')?.getBoundingClientRect()
+      setSide(map && panel && !isPhone() ? Math.max(0, Math.min(map.right - panel.left, map.width - 180)) : 0)
+    }
+    measure()
+    const seen = new ResizeObserver(measure)
+    if (box.current?.offsetParent) seen.observe(box.current.offsetParent)
+    return () => seen.disconnect()
+  }, [x.empty])
   if (x.empty) return null
   const { c } = x
   const n = c.closed.length + c.narrow.length
   const m = [...c.closed, ...c.narrow].reduce((a, k) => a + x.segments[k].len, 0)
   const busy = x.part != null
+  const warming = busy && x.prep < 1
+  const share = warming ? x.prep : x.part
   const done = x.result && !x.stale
   return (
-    <div style={isPhone() ? { ...bar, top: 'auto', bottom: 96 } : bar} role="region" aria-label="Zamknięte ulice">
+    <div ref={box} style={isPhone() ? { ...bar, top: 'auto', bottom: 96 } : { ...bar, left: `calc((100% - ${side}px) / 2)`, maxWidth: `calc(100% - ${side + 24}px)` }} role="region" aria-label="Zamknięte ulice">
       {busy ? (
         <div style={{ width: 240 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-            <span>Liczenie objazdów…</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{Math.round(100 * x.part)}%</span>
+            <span>{warming ? 'Przygotowanie modelu…' : 'Liczenie objazdów…'}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{Math.round(100 * share)}%</span>
           </div>
-          <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * x.part)}
+          <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * share)}
             style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,.15)', overflow: 'hidden' }}>
-            <div style={{ height: '100%', width: `${100 * x.part}%`, background: '#ff3b5c' }} />
+            <div style={{ height: '100%', width: `${100 * share}%`, background: '#ff3b5c' }} />
           </div>
         </div>
       ) : (

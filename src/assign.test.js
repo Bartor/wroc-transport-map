@@ -96,6 +96,12 @@ describe('closure model', () => {
     expect(after[2]).toBeCloseTo(1010 - 100, 0)
   })
 
+  it('drops it from a narrowed street too', () => {
+    const { summary } = run(ready(), { capacity: [[0, 0.5]], reduce: 0.1 })
+    expect(summary.affected).toBeGreaterThan(900)
+    expect(summary.gone).toBeCloseTo(0.1 * summary.affected, 6)
+  })
+
   it('reports trips left without any way', () => {
     expect(run(ready(), { closed: [0, 1] }).summary.lost).toBeCloseTo(1510, 6)
   })

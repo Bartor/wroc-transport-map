@@ -523,7 +523,7 @@ export function closureCard({ x, title, up, down }) {
   const km = 100 * (s.after.vehKm / s.before.vehKm - 1)
   return {
     accent: '#ff3b5c', kicker: 'Model zamknięcia ulicy · KBR Wrocław 2024', title,
-    when: `Przez zamknięte odcinki jeździ ${fmtEst(s.affected)} przejazdów w 8 godzinach (6–10 i 15–19)${s.gone > 0 ? `; założenie: znika ${fmtEst(s.gone)}` : ''}`,
+    when: `Przez ${thin.size ? 'zmienione' : 'zamknięte'} odcinki jeździ ${fmtEst(s.affected)} przejazdów w 8 godzinach (6–10 i 15–19)${s.gone > 0 ? `; założenie: znika ${Math.round(100 * x.result.of.reduce)}% z nich` : ''}`,
     blocks: [
       mapBlock({
         fit: [frame4], areas: [], arcs: near.map(line).sort((a, b) => a.rank - b.rank),
@@ -536,6 +536,7 @@ export function closureCard({ x, title, up, down }) {
     notes: [
       `Przejechane kilometry w całej sieci: ${km >= 0 ? '+' : '−'}${Math.abs(km).toFixed(2).replace('.', ',')}%.`,
       'Model, nie pomiar: mediana błędu dla przekrojów, których nie widział, 17%, co dziesiąty myli się o ponad 52%.',
+      x.result.of.reduce > 0 ? 'Ile przejazdów znika, to założenie; mediana 63 przypadków z przeglądu Cairnsa i in. (2002) to 11%.' : 'Założenie: nikt nie rezygnuje z jazdy; w 63 przypadkach z przeglądu Cairnsa i in. (2002) mediana spadku to 11%.',
       'Nie zna zakazów skrętu, sygnalizacji ani wyznaczonych objazdów; liczy stan po przyzwyczajeniu się kierowców.',
     ],
     source: `Źródło: ${KBR} (zał. 3.3, badanie ankietowe, zał. 12.3), OpenStreetMap; model własny.`,

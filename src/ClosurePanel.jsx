@@ -43,13 +43,13 @@ export default function ClosurePanel({ x, onClose }) {
       {!c.closed.length && !c.narrow.length ? (
         <Hint>Naciśnij odcinki na mapie, wyszukaj ulicę na górze albo wybierz jeden z przykładów po lewej.</Hint>
       ) : !result ? (
-        <Hint>{x.part != null ? 'Liczenie objazdów…' : 'Wybierz wszystkie odcinki i naciśnij „Oblicz objazdy” na mapie.'}</Hint>
+        <Hint>{x.part != null ? x.prep < 1 ? 'Przygotowanie modelu…' : 'Liczenie objazdów…' : 'Wybierz wszystkie odcinki i naciśnij „Oblicz objazdy” na mapie.'}</Hint>
       ) : (
         <>
           {x.stale && <Warn>Wynik nie obejmuje ostatnich zmian — naciśnij „Oblicz objazdy”.</Warn>}
           <Facts>
-            <Fact label="Przejazdy przez zamknięte odcinki" tone="now">{fmtEst(s.affected)}</Fact>
-            {s.gone > 0 && <Fact label="Z tego znika (założenie)">{fmtEst(s.gone)}</Fact>}
+            <Fact label={of.narrow.length ? 'Przejazdy przez zmienione odcinki' : 'Przejazdy przez zamknięte odcinki'} tone="now">{fmtEst(s.affected)}</Fact>
+            {s.gone > 0 && <Fact label={`Z tego znika (założenie ${Math.round(100 * of.reduce)}%)`}>{fmtEst(s.gone)}</Fact>}
             <Fact label="Przejechane km, cała sieć">{kmText(s)}</Fact>
             <Fact label="Ulice z wyraźną zmianą">{up.length} więcej, {down.length} mniej</Fact>
             {s.lost > 1 && <Fact label="Przejazdy bez dojazdu">{fmtEst(s.lost)}</Fact>}
@@ -68,6 +68,7 @@ export default function ClosurePanel({ x, onClose }) {
       <Notes>
         <li>Model, nie pomiar. Dla przekrojów, których nie widział, mediana błędu to 17%, a co dziesiąty myli się o ponad 52%.</li>
         <li>Pojazdy w 8 godzinach (6–10 i 15–19). Zmian poniżej ok. {NOISE} pojazdów nie pokazujemy — to szum obliczeń.</li>
+        <li>{of.reduce > 0 ? `Założenie: znika ${Math.round(100 * of.reduce)}% przejazdów przez te odcinki.` : 'Założenie: nikt nie rezygnuje z jazdy.'} W 63 przypadkach z przeglądu Cairnsa i in. (2002) mediana to 11%, środkowa połowa 1–34%.</li>
         <li>Nie zna zakazów skrętu, programów sygnalizacji ani objazdów wyznaczonych przez miasto; liczy stan po przyzwyczajeniu się kierowców.</li>
         <li>Przy innych kalibracjach zmiany powyżej 500 pojazdów zachowują kierunek w 98–99% przypadków, a ich wielkość różni się zwykle o 8–11%.</li>
         <li>Sprawdzono na otwarciu al. Wielkiej Wyspy: kierunek zmian 2018–2024 zgodny w 85% z 13 miejsc w promieniu 2 km (sama wspólna tendencja dałaby 69%).</li>

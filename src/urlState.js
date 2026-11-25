@@ -1,4 +1,5 @@
 import { dirKeys } from './data'
+import { MOST } from './evaporation'
 
 // The view lives in the address, so a link opens on the same node, period
 // and settings - and on the same pieces left out of it. Only what differs
@@ -137,7 +138,7 @@ export function readHash(hash = window.location.hash) {
     own: q.get('own') || undefined,
     closure: q.get('v') === 'closure' ? defined({
       closed: q.has('cx') ? spans(q.get('cx')) : undefined, narrow: q.has('cn') ? spans(q.get('cn')) : undefined,
-      reduce: +q.get('cr') > 0 && +q.get('cr') <= 40 ? +q.get('cr') / 100 : undefined,
+      reduce: +q.get('cr') > 0 && +q.get('cr') <= MOST ? +q.get('cr') / 100 : undefined,
     }) : undefined,
   }
 }

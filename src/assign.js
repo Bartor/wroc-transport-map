@@ -360,18 +360,18 @@ function tally(model, flow) {
 }
 
 /**
- * What a change does. `reduce` is the share of the trips through the shut
- * streets that stop being made by car - an assumption, none by default.
+ * What a change does. `reduce` is the share of the trips through the shut or
+ * narrowed streets that stop being made by car - an assumption, none by default.
  * Returns flows on arcs before and after, and sums over the whole area.
  */
 export function run(model, change = {}, onStep = () => {}) {
   const next = changed(model, change)
-  const shut = []
+  const touched = []
   for (let a = 0; a < model.t0.length; a++) {
-    if (model.t0[a] < Infinity && next.t0[a] === Infinity) shut.push(a)
+    if (model.t0[a] < Infinity && (next.t0[a] === Infinity || next.cap[a] < model.cap[a])) touched.push(a)
   }
   // who used to pass: all that a demand cut may touch
-  const was = through(model, shut)
+  const was = through(model, touched)
   onStep(0.1)
   let { trips } = model
   let gone = 0
