@@ -12,6 +12,9 @@ const ink = (hex) => {
 export const ORDERED = ['#dbeafc', '#b3d4f6', '#83b7ec', '#5598de', '#3579c4', '#235c9c', '#173f6e']
 export const KINDS = ['#3987e5', '#0ca30c', '#c98500', '#b5179e', '#6cc5d9', '#9085e9', '#e4572e', '#f2c14e', '#1baf7a', '#d55181', '#8a93a3', '#5b6270']
 
+/** Dimensions whose options have an order. */
+export const isOrdered = (key) => ['km', 'min', 'in', 'cars', 'age', 'change'].includes(key)
+
 /** Colours for a dimension's options: its own, else by whether they have an order. */
 export const colorsOf = (d, ordered) => d.options.map((o, i) => o.color
   || (ordered ? ORDERED[Math.round((i * (ORDERED.length - 1)) / Math.max(1, d.options.length - 1))] : KINDS[i % KINDS.length]))

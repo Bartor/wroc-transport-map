@@ -9,19 +9,29 @@ import {
 import { StackedHourBars } from '@bartor-net/ui-kit/charts'
 import { dayModes, dayText, daysTable, patterns } from './days'
 import { hotOn, setHot, useHot } from './hot'
-import Stack, { Bar, colorsOf } from './Stack'
+import Stack, { Bar, colorsOf, isOrdered } from './Stack'
 import {
-  FEW, countMargin, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
+  FEW, THIN, countMargin, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
 } from './trips'
 import { draw, tripsCard, tripsName } from './surveyCards'
-import { WAYS, WAY_TEXT, flowLines, painted, pctText, unitOf } from './TripsView'
+import { KM_NOTE, StatChips, WAYS, WAY_TEXT, flowLines, painted, pctText, statIn, unitOf } from './TripsView'
 
 const MANY = 200      // rows of single trips to show
-const ORDERED = new Set(['km', 'min', 'in', 'cars', 'age', 'change'])
 const STACKS = [['goal', 'Cel podróży'], ['km', 'Długość (w linii prostej)'], ['min', 'Czas podróży'],
   ['in', 'Osób w samochodzie — kierowcy'], ['park', 'Gdzie zaparkowano — kierowcy'],
   ['reason', 'Dlaczego samochodem — kierowcy'], ['cars', 'Samochody w gospodarstwie'], ['age', 'Wiek']]
 const FREIGHT_STACKS = [['goal', 'Cel'], ['from', 'Skąd'], ['to', 'Dokąd']]
+
+/** A chart's heading with its way onto the map. */
+function Head({ children, on, onMap }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+      <h4>{children}</h4>
+      <LinkButton aria-pressed={on} onClick={onMap} title="Pokoloruj obszary na mapie według tej statystyki"
+        style={{ whiteSpace: 'nowrap', fontWeight: on ? 700 : 400 }}>{on ? '● na mapie' : 'na mapie'}</LinkButton>
+    </div>
+  )
+}
 
 const listRow = {
   display: 'grid', gridTemplateColumns: '1fr auto', columnGap: 8, width: '100%', textAlign: 'left', border: 0,
@@ -88,6 +98,13 @@ export default function TripsPanel({ x, setT, period, onClose }) {
       .filter((r) => r.n > 0 && (!perHead || r.rate != null))
       .sort((a, b) => (perHead ? b.rate - a.rate : b.w - a.w))
   }, [partner, drawn, sums, x.way, perHead])
+  // the places by the statistic the map is painted with; few trips go last
+  const ranked = useMemo(() => {
+    if (t.paint !== 'stat' || show !== 'areas') return null
+    const paint = painted(x)
+    const rows = drawn.map((q, k) => ({ key: q.key, p: q, name: placeName(q), v: paint.value[k], n: paint.n[k], text: paint.textOf(k) })).filter((r) => r.v != null)
+    return { title: paint.title, rows: rows.sort((a, b) => (b.n >= THIN) - (a.n >= THIN) || b.v - a.v) }
+  }, [t.paint, show, x, drawn])
   const small = perHead && Math.max(0, ...top.map((r) => r.rate)) < 0.25 ? 1000 : 1
   const own = places.length && places.every((q) => q.w) ? places.reduce((a, q) => a + q.w, 0) : 0
   const spotTop = useMemo(() => {
@@ -106,24 +123,35 @@ export default function TripsPanel({ x, setT, period, onClose }) {
     const paint = painted(x)
     return tripsCard({
       x, title, period, paint, wayName: WAY_TEXT[x.way], lines: flowLines(x),
-      legendTitle: show !== 'areas' ? 'Połączenia — kolor: najczęstszy środek' : partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
+      legendTitle: show !== 'areas' ? 'Połączenia — kolor: najczęstszy środek' : paint.stat ? paint.title : partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
       stacks: (S.freight ? FREIGHT_STACKS : STACKS.slice(0, 3)).map(([key, label]) => stackOf(key, label)).filter(Boolean),
-      top: top.slice(0, 12), small, perHead,
+      top: top.slice(0, 12), small, perHead, ranked, note: paint.stat?.d.key === 'km' ? KM_NOTE : null,
     })
   }
   function stackOf(key, label) {
     const d = S.D.find((q) => q.key === key)
     const sh = shares(S, baseOf(key), key)
     if (sh.filter((o) => o.n > 0).length < 2) return null
-    const colors = colorsOf(d, ORDERED.has(key))
+    const colors = colorsOf(d, isOrdered(key))
     return { key, label, parts: sh.filter((o) => o.n > 0).map((o) => ({ key: String(o.i), label: o.label, share: o.share, n: o.n, color: colors[o.i],
       title: `${S.freight ? fmt(o.w) : fmtEst(o.w)} ${unitOf(S)} · ${o.n} w próbie` })) }
   }
+  // onto the map and off it; a chart that is already filtered starts with that
+  const statOn = (key) => t.paint === 'stat' && show === 'areas' && statIn(S, t).d.key === key
+  const onMap = (key) => () => setT(statOn(key) ? { ...t, paint: 'any' }
+    : { ...t, paint: 'stat', show: 'areas', stat: { dim: key, opts: [] } })
+  const mapped = (key) => statOn(key) && (
+    <>
+      <StatChips S={S} t={t} setT={setT} />
+      {key === 'km' && <Hint>{KM_NOTE[0].toUpperCase() + KM_NOTE.slice(1)}.</Hint>}
+      {t.filters[key]?.length > 0 && <Hint>Filtr zostawia tylko część — usuń go, by porównać obszary.</Hint>}
+    </>
+  )
   const pickPlace = (p) => p && setT({ ...t, picked: t.picked.includes(p.key) && t.picked.length === 1 ? [] : [p.key] })
   const thin = stats.n < 100
   const active = S.D.filter((d) => t.filters[d.key]?.length)
   const dimOpts = S.D.map((d) => ({ value: d.key, label: d.note ? `${d.label} (${d.note})` : d.label }))
-  const splitColors = colorsOf(tab.split, ORDERED.has(tab.split.key))
+  const splitColors = colorsOf(tab.split, isOrdered(tab.split.key))
 
   return (
     <DetailsPanel pill={spot ? 'cel podróży' : one ? (one.level === 'z' ? `rejon ${one.id}` : one.city ? 'osiedle' : 'gmina') : S.freight ? 'towary' : 'podróże'}
@@ -150,7 +178,8 @@ export default function TripsPanel({ x, setT, period, onClose }) {
       {!stats.n ? <Hint>Brak podróży, które spełniają filtry.</Hint> : (
         <>
           <Block>
-            <h4>{S.freight ? 'Rodzaj pojazdu' : 'Podział modalny — podróże'}</h4>
+            <Head on={statOn('mode')} onMap={onMap('mode')}>{S.freight ? 'Rodzaj pojazdu' : 'Podział modalny — podróże'}</Head>
+            {mapped('mode')}
             <SplitBody>
               <Donut pick={pick} label="Podział" rows={modes} />
               <SplitTable pick={pick}
@@ -169,7 +198,8 @@ export default function TripsPanel({ x, setT, period, onClose }) {
             const s = stackOf(key, label)
             return s && (
               <Block key={key}>
-                <h4>{label}</h4>
+                <Head on={statOn(key)} onMap={onMap(key)}>{label}</Head>
+                {mapped(key)}
                 <Stack parts={s.parts} on={onOf(key)} onPick={toggle(key)} />
               </Block>
             )
@@ -234,6 +264,14 @@ export default function TripsPanel({ x, setT, period, onClose }) {
             </StatBlock>
           )}
 
+          {ranked && (
+            <StatBlock title={`Obszary — ${ranked.title}`}>
+              <HotList hotKey={hot.place} items={ranked.rows.slice(0, 15).map((r) => ({
+                key: r.key, title: r.name, sub: `${fmt(r.n)} w próbie${r.n < THIN ? ' — mało' : ''}`, value: r.text,
+                on: t.picked.includes(r.key), hot: { place: r.key }, hotKey: r.key, onPick: () => pickPlace(r.p),
+              }))} />
+            </StatBlock>
+          )}
           <StatBlock title={`${partner ? (x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Z czym połączone') : 'Najwięcej podróży'}${perHead ? (partner ? ` — na ${small} ${small > 1 ? 'mieszkańców' : 'mieszkańca'} tamtego obszaru` : ` na ${small > 1 ? '1000 mieszkańców' : 'mieszkańca'}`) : ''}`}>
             <HotList hotKey={hot.place} items={top.slice(0, 20).map((r) => ({
               key: r.key, title: r.p && t.picked.includes(r.key) && partner ? `${r.name} — w obrębie` : r.name,
@@ -278,7 +316,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
           <LinkButton block onClick={() => downloadCsv(tripsTable(S, idx), `${fname}.csv`)}>
             Pobierz te {many === 'podróży' ? 'podróże' : 'przejazdy'} (CSV, {fmt(stats.n)} wierszy)
           </LinkButton>
-          <LinkButton block onClick={() => downloadCsv(placesTable(S, sums, t.level), `${fname}-obszary.csv`)}>
+          <LinkButton block onClick={() => downloadCsv(placesTable(S, sums, t.level, x.passed, x.way), `${fname}-obszary.csv`)}>
             Pobierz tabelę obszarów (CSV)
           </LinkButton>
         </>

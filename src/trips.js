@@ -56,7 +56,7 @@ export const placeName = (p) => (p.level === 'd' ? p.name : p.name.includes(' - 
 export const TRIPS0 = {
   set: 'people', level: 'd', paint: 'any', way: 'home', per: 'pop', picked: [], filters: {}, many: false,
   // how it is shown: areas, flows, trips, spots or days
-  show: 'areas', names: false, top: 60, rows: 'km', split: 'mode', pattern: null,
+  show: 'areas', names: false, stat: { dim: 'km', opts: [0, 1] }, top: 60, rows: 'km', split: 'mode', pattern: null,
 }
 
 // ------------------------------------------------------------------ the modes
@@ -375,6 +375,53 @@ export function perPartner(S, idx, picked, level, way) {
   return { w, n, modes, off: [...out].map(([zone, v]) => ({ ...S.Z.outside[zone - S.Z.count], ...v })) }
 }
 
+/**
+ * Any of the panel's statistics by place: weight on each option of a dimension,
+ * and the trips that have one at all (a parked car is a driver's). With places
+ * picked, by the other end of their trips.
+ */
+export function perPlaceDim(S, idx, level, way, dim, picked) {
+  const { list, of } = S.levels[level]
+  const c = S.T.cols
+  const K = dim.options.length
+  const w = new Float64Array(list.length * K)
+  const n = new Int32Array(list.length)
+  const z = picked && new Set(picked)
+  for (const i of idx) {
+    const o = dim.of(c, i)
+    if (o < 0) continue
+    const a = of[c.f[i]]
+    const b = of[c.t[i]]
+    let at
+    const home = way === 'home' ? homeOf(c, i) : null
+    if (z) {
+      const f = z.has(c.f[i]) && (home == null || home === c.f[i])
+      const t = z.has(c.t[i]) && (home == null || (home === c.t[i] && !f))
+      at = [f && way !== 'to' ? b : -1, t && way !== 'from' && !(f && way === 'any') ? a : -1]
+    } else if (way === 'home') at = [home < 0 ? -1 : of[home]]
+    else at = way === 'from' ? [a] : way === 'to' ? [b] : a === b ? [a] : [a, b]
+    for (const p of at) {
+      if (p < 0) continue
+      w[p * K + o] += c.w[i]
+      n[p] += 1
+    }
+  }
+  return { w, n, K }
+}
+
+/** Per place: the share of some options; or, with none, the commonest one and
+ *  how far it leads. */
+export function statOf({ w, n, K }, opts) {
+  return Array.from(n, (count, p) => {
+    if (!count) return { v: null, n: 0 }
+    const row = w.subarray(p * K, (p + 1) * K)
+    const all = row.reduce((a, b) => a + b, 0)
+    if (opts.length) return { v: opts.reduce((a, o) => a + (row[o] || 0), 0) / all, n: count }
+    const best = row.reduce((m, x, i) => (x > row[m] ? i : m), 0)
+    return { v: row[best] / all, n: count, best }
+  })
+}
+
 /** What runs between two places, most of it by which mode. */
 export function mainMode(modes, from, K) {
   let best = 0
@@ -488,6 +535,8 @@ export const PAINTS = {
   jobs: { label: 'Miejsca pracy', count: true, fixed: true, v: (p) => p.jobs },
   pop: { label: 'Mieszkańcy', count: true, fixed: true, v: (p) => p.pop },
   asked: { label: 'Osoby przebadane', count: true, fixed: true, v: (p) => p.n },
+  // any statistic of the panel, see t.stat
+  stat: { label: 'Statystyka z panelu', share: true },
 }
 
 // What a count is divided by. A place with hardly anyone in it has no rate.
@@ -581,18 +630,27 @@ export function tripsTable(S, idx) {
   ]
 }
 
-/** One row per place: what the map is painted from. */
-export function placesTable(S, sums, level) {
+const OVERVIEW = ['goal', 'km', 'min', 'in', 'park', 'reason', 'cars', 'age']
+/** One row per place: what the map is painted from, and every statistic. */
+export function placesTable(S, sums, level, idx = [], way = 'any') {
   const { list } = S.levels[level]
+  const dims = OVERVIEW.map((k) => S.D.find((d) => d.key === k)).filter(Boolean)
+    .map((d) => ({ d, ...perPlaceDim(S, idx, level, way, d) }))
   return [
-    ['obszar', 'podróży w próbie', 'podróże/dobę', 'na mieszkańca',
+    ['obszar', 'podróży w próbie', 'podróże/dobę', 'na mieszkańca (6+)',
       'zaczynane/dobę', 'kończone/dobę', ...S.main.map((m) => `% ${m.label}`),
-      'śr. długość [km]', 'mieszkańcy', 'miejsca pracy', 'km²', 'osoby w badaniu'],
+      'śr. długość [km]', 'mieszkańcy', 'miejsca pracy', 'km²', 'osoby w badaniu',
+      ...dims.flatMap(({ d }) => [...d.options.map((o) => `${d.label}: ${o.label} — %`), `${d.label}: w próbie`])],
     ...list.map((p, k) => {
       const s = sums[k]
       return [placeName(p), s.n, num(s.any), p.w >= FEW ? num(s.any / p.w, 2) : '', num(s.from), num(s.to),
         ...S.main.map((m) => (s.any ? num((100 * m.of.reduce((a, x) => a + s.modes[x], 0)) / s.any, 1) : '')),
-        s.kw ? num(s.km / s.kw, 1) : '', p.pop ?? '', p.jobs ?? '', num(p.km2, 2), p.n]
+        s.kw ? num(s.km / s.kw, 1) : '', p.pop ?? '', p.jobs ?? '', num(p.km2, 2), p.n,
+        ...dims.flatMap(({ w, n, K }) => {
+          const row = w.subarray(k * K, (k + 1) * K)
+          const all = row.reduce((a, b) => a + b, 0)
+          return [...Array.from(row, (x) => (all ? num((100 * x) / all, 1) : '')), n[k]]
+        })]
     }),
   ]
 }

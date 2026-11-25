@@ -3,7 +3,7 @@
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
 import { diverging, fullName, marginOf, optionShares, rgb, shareOf } from './answers'
 import { arc } from './arcs'
-import { breaks, placeName, scale } from './trips'
+import { placeName } from './trips'
 
 const SITE = 'bartor.github.io/wroc-transport-map'
 const KBR = 'Kompleksowe Badania Ruchu Wrocław 2024'
@@ -123,13 +123,14 @@ export const listBlock = ({ title, rows }) => (ctx, y0, { W, PAD, INK, DIM, FAIN
   const top = para(ctx, title.toUpperCase(), PAD, y0, W - 2 * PAD, 14, FAINT, 600) + 8
   const half = Math.ceil(rows.length / 2)
   const cw = (W - 2 * PAD - 40) / 2
+  const valueW = (text) => { ctx.font = font(16, 600); return ctx.measureText(text).width + 20 }
   rows.forEach((r, i) => {
     const x = PAD + (i < half ? 0 : cw + 40)
     const y = top + (i % half) * 44
     ctx.textBaseline = 'top'
     ctx.font = font(16, 600)
     ctx.fillStyle = INK
-    ctx.fillText(`${i + 1}. ${wrap(ctx, r.label, cw - 110)[0]}`, x, y)
+    ctx.fillText(`${i + 1}. ${wrap(ctx, r.label, cw - 20 - valueW(r.value))[0]}`, x, y)
     ctx.textAlign = 'right'
     ctx.fillText(r.value, x + cw, y)
     ctx.textAlign = 'left'
@@ -391,23 +392,25 @@ export function filterText(S, filters) {
 }
 
 /** The trips view as a card. `paint` is what the map is painted with. */
-export function tripsCard({ x, title, period, wayName, paint, legendTitle, stacks, lines, top, small, perHead }) {
+export function tripsCard({ x, title, period, wayName, paint, legendTitle, stacks, lines, top, small, perHead, ranked, note }) {
   const { S, t, stats, places, partner, show, sums } = x
-  const { list, value, share, n } = paint
-  const sc = scale(breaks(value, share), false)
-  const f = (v) => (share ? `${Math.round(100 * v)}%` : paint.digits ? fixed(v, paint.digits) : fmt(v))
+  const { list, value, n } = paint
+  const colorAt = paint.colorOf(false)
   const picked = new Set(t.picked)
   const filters = filterText(S, t.filters)
   const own = places.length && places.every((p) => p.w) ? places.reduce((s, p) => s + p.w, 0) : 0
   const painting = show === 'areas'
   const num = (w) => (S.freight ? fmt(w) : fmtEst(w))
   const label = (p, k) => {
+    if (paint.stat && painting) {
+      return value[k] == null ? {} : { name: placeName(p), text: paint.textOf(k), sub: `n=${n[k]}`, weight: n[k] }
+    }
     if (partner) {
       const w = partner.w[k]
-      return !w ? {} : { name: placeName(p), text: `${pctText(w / stats.w)} · ${num(w)}`, sub: `${painting && value[k] != null ? `${f(value[k])} · ` : ''}n=${partner.n[k]}`, weight: w }
+      return !w ? {} : { name: placeName(p), text: `${pctText(w / stats.w)} · ${num(w)}`, sub: `${painting && value[k] != null ? `${paint.textOf(k)} · ` : ''}n=${partner.n[k]}`, weight: w }
     }
     const s = sums[k]
-    return { name: placeName(p), text: painting && value[k] != null ? paint.text(value[k]) : null, sub: s.any ? `${num(s.any)} · n=${s.n}` : null, weight: s.any }
+    return { name: placeName(p), text: painting && value[k] != null ? paint.textOf(k) : null, sub: s.any ? `${num(s.any)} · n=${s.n}` : null, weight: s.any }
   }
   return {
     accent: '#3f8bd0', kicker: S.freight ? 'Badanie przewozów towarów KBR 2024' : 'Badanie ankietowe KBR 2024 · podróże mieszkańców',
@@ -422,14 +425,15 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
       ...stacks.map((s) => stackBlock({ title: s.label, parts: s.parts })),
       mapBlock({
         title: legendTitle, fit: fitOf(list, picked), border: cityBorder(list),
-        areas: list.map((p, k) => ({ rings: p.rings, on: picked.has(p.key), c: p.c, color: !painting || value[k] == null ? null : sc.color(value[k]),
-          alpha: 0.3 + 0.7 * Math.min(1, n[k] / 20), ...label(p, k) })),
+        areas: list.map((p, k) => ({ rings: p.rings, on: picked.has(p.key), c: p.c, color: !painting || value[k] == null ? null : colorAt(k),
+          alpha: (0.3 + 0.7 * Math.min(1, n[k] / 20)) * paint.lead(k), ...label(p, k) })),
         arcs: lines.arcs.map((a) => ({ ...a, path: arc(a.from, a.to), width: show === 'trips' ? 1.4 : 8 })), rings: lines.rings,
-        legend: painting ? [...sc.steps.map((s) => ({ color: s.color, label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}` })),
-          { note: [paint.unit, 'bladsze: mniej niż 20 podróży w próbie'].filter(Boolean).join(' · ') }]
+        legend: painting ? [...paint.legend(false),
+          ...(note ? [{ note }] : []), { note: [paint.unit, 'bladsze: mniej niż 20 podróży w próbie'].filter(Boolean).join(' · ') }]
           : S.modes.map((m) => ({ color: m.color, label: m.label })),
       }),
-      ...(top.length > 1 ? [listBlock({ title: `${partner ? 'Druga strona podróży' : 'Najwięcej podróży'}${perHead ? ` na ${small > 1 ? '1000 mieszkańców' : 'mieszkańca'}` : ''}`,
+      ...(ranked ? [listBlock({ title: ranked.title, rows: ranked.rows.slice(0, 12).map((r) => ({ label: r.name, value: r.text, sub: `n=${fmt(r.n)}` })) })]
+        : top.length > 1 ? [listBlock({ title: `${partner ? 'Druga strona podróży' : 'Najwięcej podróży'}${perHead ? ` na ${small > 1 ? '1000 mieszkańców' : 'mieszkańca'}` : ''}`,
         rows: top.map((r) => ({ label: r.name, value: S.freight ? fmt(r.w) : perHead ? fixed(small * r.rate, small > 1 ? 1 : 2) : fmtEst(r.w),
           sub: `${partner ? `${pctText(r.w / stats.w)} · ` : ''}${num(r.w)}${S.freight ? '' : ' na dobę'} · n=${fmt(r.n)}` })) })] : []),
     ],

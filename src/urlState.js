@@ -30,6 +30,10 @@ function readTrip(q) {
     set: q.get('set') === 'freight' ? 'freight' : undefined,
     level: ['d', 'z'].includes(q.get('lv')) ? q.get('lv') : undefined,
     paint: q.get('pt') || undefined,
+    stat: (() => {
+      const m = /^([a-z]+):([\d.]*)$/.exec(q.get('st') || '')
+      return m ? { dim: m[1], opts: ints(m[2]) } : undefined
+    })(),
     way: ['any', 'from', 'to'].includes(q.get('way')) ? q.get('way') : undefined,
     per: ['abs', 'both', 'km2'].includes(q.get('per')) ? q.get('per') : undefined,
     picked: q.has('z') ? q.get('z').split('.').filter(Boolean) : undefined,
@@ -58,6 +62,7 @@ function putTrip(q, t) {
   if (t.set !== 'people') q.set('set', t.set)
   if (t.level !== 'd') q.set('lv', t.level)
   if (t.paint !== 'any') q.set('pt', t.paint)
+  if (t.paint === 'stat') q.set('st', `${t.stat.dim}:${t.stat.opts.join('.')}`)
   if (t.way !== 'home') q.set('way', t.way)
   if (t.per !== 'pop') q.set('per', t.per)
   if (t.picked.length) q.set('z', t.picked.join('.'))

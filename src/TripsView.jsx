@@ -10,9 +10,10 @@ import { Arcs, Rings, ZoneLayer } from './ZoneLayer'
 import { rng, scatter } from './arcs'
 import { DAY_MODES, daysOf } from './days'
 import { useHot } from './hot'
+import { colorsOf, isOrdered } from './Stack'
 import {
   PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, flowsOf, pairs, passing, perPartner,
-  perOf, perPlace, perSpot, perThousand, placeName, scale, shares, touching,
+  perOf, perPlace, perPlaceDim, perSpot, perThousand, placeName, scale, shares, statOf, touching,
 } from './trips'
 
 export const pctText = (s) => (s == null ? '—' : s > 0 && s < 0.005 ? '<1%' : `${Math.round(100 * s)}%`)
@@ -61,11 +62,38 @@ export function useTrips(S, t, hours, spots, days) {
 
 export const unitOf = (S) => (S.freight ? 'przejazdów w badaniu' : 'podróży/dobę')
 
-/** What each place is painted by: a value, how it reads, and how much it rests
- *  on - a place with a handful of trips is painted too, only faintly. */
-export function painted({ S, t, sums, partner }) {
+/** The panel's statistic that the map is painted by, where its dimension exists. */
+export const statIn = (S, t) => {
+  const d = S.D.find((q) => q.key === t.stat?.dim) || S.D[0]
+  return { d, opts: (t.stat?.opts || []).filter((o) => o < d.options.length) }
+}
+// A trip within one zone is 0 km long, and zones outside the city are large.
+export const KM_NOTE = 'podróż w obrębie rejonu ma długość 0, więc w dużych rejonach poza centrum krótkich jest za dużo'
+export const statText = ({ d, opts }) => (opts.length ? `${d.label}: ${opts.map((o) => d.options[o].label).join(' + ')}` : `${d.label} — najczęściej`)
+
+/** What each place is painted by: a value, how it reads, its colour, and how
+ *  much it rests on - a place with a handful of trips is painted too, only
+ *  faintly. */
+export function painted({ S, t, sums, partner, idx, passed, zones, way }) {
   const { list } = S.levels[t.level]
   const P = PAINTS[t.paint]
+  if (t.paint === 'stat') {
+    const stat = statIn(S, t)
+    const got = statOf(perPlaceDim(S, partner ? idx : passed, t.level, way, stat.d, partner ? zones : null), stat.opts)
+    const value = got.map((g) => g.v)
+    const kinds = !stat.opts.length
+    const colors = colorsOf(stat.d, isOrdered(stat.d.key))
+    const name = (o) => stat.d.options[o].label
+    const base = { list, P, value, n: got.map((g) => g.n), share: true, digits: 0, unit: kinds ? '' : 'podróży', stat,
+      title: statText(stat) + (stat.d.note ? ` (${stat.d.note})` : '') }
+    if (kinds) {
+      // the commonest of several, paler the less it leads
+      return { ...base, text: pctText, textOf: (k) => (got[k].v == null ? '—' : `${name(got[k].best)} ${pctText(got[k].v)}`),
+        colorOf: () => (k) => colors[got[k].best], lead: (k) => Math.min(1, 0.35 + got[k].v),
+        legend: () => stat.d.options.map((o, q) => ({ color: colors[q], label: o.label })).filter((_, q) => got.some((g) => g.best === q)) }
+    }
+    return withScale({ ...base, text: pctText })
+  }
   const per = PER[perIn(S, t)]
   const mine = new Set(t.picked)
   const plain = list.map((p, n) => {
@@ -80,14 +108,26 @@ export function painted({ S, t, sums, partner }) {
   const counted = !!partner || !!P.count
   // rates too small to read are per thousand
   const k = counted && perThousand(plain, per) ? 1000 : 1
-  const value = k === 1 ? plain : plain.map((v) => (v == null ? null : v * k))
-  const n = list.map((p, i) => (partner ? partner.n[i] : P.fixed ? THIN : sums[i].n))
+  const value = k === 1 ? plain : plain.map((x) => (x == null ? null : x * k))
+  const n = list.map((p, q) => (partner ? partner.n[q] : P.fixed ? THIN : sums[q].n))
   const digits = counted ? (per.many ? digitsFor(value) : 0) : P.digits || 0
   const noun = partner || !P.fixed ? (S.freight ? 'przejazdów' : 'podróży/dobę') : ''
   const unit = counted ? [noun, k > 1 ? per.many : per.unit].filter(Boolean).join(' ') : P.unit || ''
   const text = (x) => (x == null ? '—' : share ? pctText(x) : digits ? fixed(x, digits) : fmtEst(x))
-  return { list, P, value, n, share, digits, unit, text,
-    title: P.count && per.unit ? `${P.label} ${k > 1 ? per.many : per.unit}` : P.label }
+  return withScale({ list, P, value, n, share, digits, unit, text,
+    title: P.count && per.unit ? `${P.label} ${k > 1 ? per.many : per.unit}` : P.label })
+}
+
+/** The colours and the legend of values on a scale. */
+function withScale(p) {
+  const of = (dark) => scale(breaks(p.value, p.share), dark)
+  const f = (x) => (p.share ? `${Math.round(100 * x)}%` : p.digits ? fixed(x, p.digits) : fmt(x))
+  return { ...p, textOf: (k) => p.text(p.value[k]), lead: () => 1,
+    colorOf: (dark) => { const sc = of(dark); return (k) => sc.color(p.value[k]) },
+    legend: (dark) => of(dark).steps.map((s) => ({
+      color: s.color,
+      label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}`,
+    })) }
 }
 const alphaOf = (n) => 0.24 + 0.4 * Math.min(1, n / THIN)
 
@@ -190,11 +230,11 @@ export function TripsMap({ x, dark, onPick, setT }) {
   const p0 = useMemo(() => painted(x), [x])
   const { list, value: values, n: counts, P } = p0
   const picked = useMemo(() => new Set(t.picked), [t.picked])
-  const sc = useMemo(() => scale(breaks(values, p0.share), dark), [values, p0, dark])
+  const colorAt = useMemo(() => p0.colorOf(dark), [p0, dark])
   const items = useMemo(() => list.map((p, k) => {
     const v = show === 'areas' ? values[k] : null
-    return { p, k, v: values[k], color: v == null || (v === 0 && !P.share) ? null : sc.color(v), alpha: P.fixed && !partner ? 0.6 : alphaOf(counts[k]) }
-  }), [list, values, counts, sc, P, partner, show])
+    return { p, k, v: values[k], color: v == null || (v === 0 && !P.share) ? null : colorAt(k), alpha: (P.fixed && !partner ? 0.6 : alphaOf(counts[k])) * p0.lead(k) }
+  }), [list, values, counts, colorAt, p0, P, partner, show])
   const lines = useMemo(() => flowLines(x, { mode: hot.mode, place: hot.place, pair: hot.pair, trip: hot.trip }),
     [x, hot.mode, hot.place, hot.pair, hot.trip])
   const chains = useMemo(() => (show === 'days' ? dayLines(x, { pattern: hot.pattern, day: hot.day }) : []), [x, show, hot.pattern, hot.day])
@@ -207,20 +247,23 @@ export function TripsMap({ x, dark, onPick, setT }) {
       <MapTooltip sticky>
         <b>{placeName(p)}</b>
         {p.level === 'z' && <TipNote> · rejon {p.id}, {p.district}</TipNote>}<br />
-        {partner ? (
+        {p0.stat ? (
+          <>{p0.title}: <b>{p0.textOf(k)}</b>
+            <TipNote><br />{counts[k]} {counts[k] === 1 ? 'podróż' : 'podróży'} w próbie{partner ? ' z zaznaczonym obszarem' : ''}</TipNote></>
+        ) : partner ? (
           <>{own ? 'w obrębie: ' : ''}{v != null && <><b>{p0.text(v)}</b> {p0.unit}</>}{v == null && !own && (partner.n[k] ? '' : 'brak podróży w próbie')}
             {partner.n[k] > 0 && <TipNote> {v != null && '· '}{fmtEst(partner.w[k])} {unitOf(S)} (±{Math.round(100 * mg)}%), {partner.n[k]} w próbie</TipNote>}</>
         ) : (
           <>{P.label}: {v == null ? 'brak danych' : <><b>{p0.text(v)}</b> {p0.unit}</>}
             {!P.fixed && <TipNote><br />{fmtEst(s.any)} {unitOf(S)} (±{Math.round(100 * (mg ?? 1))}%) · {s.n} w próbie{p.pop ? ` · ${fmt(p.pop)} mieszkańców` : ''}</TipNote>}</>
         )}
-        {!partner && !P.fixed && s.n > 4 && S.main.map((m) => {
+        {!partner && !p0.stat && !P.fixed && s.n > 4 && S.main.map((m) => {
           const w = m.of.reduce((a, j) => a + s.modes[j], 0)
           return <TipRow key={m.key} color={m.color} label={m.label} value={fmtEst(w)} share={pctText(w / s.any)} />
         })}
       </MapTooltip>
     )
-  }, [sums, partner, P, p0, S, picked])
+  }, [sums, partner, P, p0, S, picked, counts])
   const tipOf = useMemo(() => (item) => tip(item), [tip])
   const flowTip = (f) => (
     <MapTooltip sticky>
@@ -234,7 +277,7 @@ export function TripsMap({ x, dark, onPick, setT }) {
   const labels = useMemo(() => (!t.names || show === 'trips' ? [] : list.map((p, k) => {
     const v = values[k]
     const lines0 = [{ text: placeName(p).replace(/-/g, '\u2011'), bold: true },
-      ...(show === 'areas' && v != null ? [{ text: p0.text(v) }] : partner && partner.n[k] ? [{ text: fmtEst(partner.w[k]) }] : [])]
+      ...(show === 'areas' && v != null ? [{ text: p0.textOf(k) }] : partner && partner.n[k] ? [{ text: fmtEst(partner.w[k]) }] : [])]
     return { key: p.key, lat: p.c[0], lon: p.c[1], r: 0, html: labelHtml(lines0), box: labelBox(lines0), weight: v ?? 0 }
   })), [t.names, show, list, values, p0, partner])
   const topSpot = perS ? Math.max(1, ...perS.w) : 1
@@ -285,17 +328,15 @@ export function tripsLegend({ x, dark }) {
       { note: show === 'flows' ? 'grubość = podróże, kółko = w obrębie obszaru, blade = mniej niż 5 w próbie'
         : `do ${MANY_TRIPS} losowych podróży z próby; domy wzdłuż ulicy, rzadkie miejsca w losowym punkcie rejonu` }]
   }
-  const sc = scale(breaks(p0.value, p0.share), dark)
-  const f = (v) => (p0.share ? `${Math.round(100 * v)}%` : p0.digits ? fixed(v, p0.digits) : fmt(v))
   const to = { from: 'z', to: 'do', any: 'z i do', home: 'mieszkańców —' }[x.way]
-  const title = partner ? `Podróże ${to} ${x.places.length === 1 ? placeName(x.places[0]) : `${x.places.length} obszary`}` : p0.title
+  const whose = `Podróże ${to} ${x.places.length === 1 ? placeName(x.places[0]) : `${x.places.length} obszary`}`
   return [
-    { title }, ...(partner && p0.unit ? [{ note: p0.unit }] : []),
+    { title: partner && !p0.stat ? whose : p0.title },
+    ...(partner ? [{ note: p0.stat ? whose : p0.unit }] : []),
     ...(!partner && !P.fixed && !S.freight ? [{ note: x.way === 'home' ? 'mieszkańców obszaru: z domu i do domu' : 'wszystkie, także przyjezdnych' }] : []),
-    ...sc.steps.map((s) => ({
-      color: s.color,
-      label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}`,
-    })),
+    ...p0.legend(dark),
+    ...(p0.stat?.d.key === 'km' ? [{ note: KM_NOTE }] : []),
+    ...(p0.stat && !p0.stat.opts.length ? [{ note: 'kolor = najczęstsza odpowiedź, bledszy = mniejsza przewaga' }] : []),
     ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek, kropka = dokąd; kółko = podróże w obrębie' }] : []),
     { note: `blade = mało podróży w próbie (pełny kolor od ${THIN})` },
   ]
@@ -318,6 +359,18 @@ function FilterField({ S, d, t, setT, base }) {
           title: `${fmt(o.n)} podróży w próbie`,
         })).map((o) => ({ ...o, label: <>{o.label} <small style={{ opacity: 0.6 }}>{pctText(sh[+o.key].share)}</small></> }))} />
     </Field>
+  )
+}
+
+/** Which part of a statistic the map shows: the commonest option, or a share. */
+export function StatChips({ S, t, setT }) {
+  const { d, opts } = statIn(S, t)
+  const set = (next) => setT({ ...t, paint: 'stat', show: 'areas', stat: { dim: d.key, opts: next } })
+  const colors = colorsOf(d, isOrdered(d.key))
+  return (
+    <Chips tight small label="Co na mapie" onPick={(k) => set(k === 'top' ? [] : opts.includes(+k) ? opts.filter((o) => o !== +k) : [...opts, +k].sort((a, b) => a - b))}
+      items={[{ key: 'top', label: 'najczęstsze', on: !opts.length, title: 'kolor = najczęstsza opcja w obszarze' },
+        ...d.options.map((o, i) => ({ key: String(i), label: `udział: ${o.label}`, on: opts.includes(i), color: colors[i] }))]} />
   )
 }
 
@@ -378,9 +431,14 @@ export const TripsControls = memo(function TripsControls({ x, setT, hasFreight, 
             { key: 'z', label: 'Rejony', on: t.level === 'z' }]} />
         </Field>
         {x.show === 'areas' && <Field label="Kolor obszarów">
-          <Select value={t.paint} label="Kolor obszarów" disabled={!!x.partner} onChange={(paint) => set({ paint })}
-            options={Object.entries(PAINTS).filter(([k]) => !S.freight || ['any', 'from', 'to', 'jobs', 'pop'].includes(k))
-              .map(([value, p]) => ({ value, label: p.label }))} />
+          <Select value={t.paint === 'stat' ? `stat:${statIn(S, t).d.key}` : t.paint} label="Kolor obszarów"
+            onChange={(val) => set(val.startsWith('stat:') ? { paint: 'stat', stat: { dim: val.slice(5), opts: [] } } : { paint: val })}
+            options={[
+              ...Object.entries(PAINTS).filter(([k]) => k !== 'stat' && (!S.freight || ['any', 'from', 'to', 'jobs', 'pop'].includes(k)))
+                .map(([value, p]) => ({ value, label: p.label })),
+              ...S.D.map((d) => ({ value: `stat:${d.key}`, label: `Statystyka: ${d.label}${d.note ? ` (${d.note})` : ''}` })),
+            ]} />
+          {t.paint === 'stat' && <StatChips S={S} t={t} setT={setT} />}
         </Field>}
         <Field label="Czyje podróże" help={(
           <p>
@@ -403,7 +461,7 @@ export const TripsControls = memo(function TripsControls({ x, setT, hasFreight, 
             items={Object.entries(PER).filter(([k]) => !(S.freight && k === 'pop'))
               .map(([key, p]) => ({ key, label: p.label, on: perIn(S, t) === key }))} />
         </Field>
-        {x.partner && <Hint>Z zaznaczonym obszarem kolor pokazuje, skąd i dokąd są podróże.</Hint>}
+        {x.partner && t.paint !== 'stat' && <Hint>Z zaznaczonym obszarem kolor pokazuje, skąd i dokąd są podróże; „Statystyka” — jakie one są.</Hint>}
         <Toggle checked={t.names} onChange={(names) => set({ names })} label="Nazwy i wartości na mapie" />
         {x.places.length > 0 && (
           <Field label={x.places.length === 1 ? placeName(x.places[0]) : `${x.places.length} zaznaczone obszary`}>

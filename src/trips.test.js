@@ -11,7 +11,7 @@ import { fullName } from './answers'
 import { arc, inside, scatter } from './arcs'
 import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days'
 import { colorsOf, partsOf } from './Stack'
-import { crossTab, crossTable, digitsFor, perSpot, perThousand } from './trips'
+import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
 const sq = (la, lo) => [[la * 1e5, lo * 1e5, 1000, 0, 0, 1000, -1000, 0]]
@@ -177,6 +177,20 @@ suite('how it is drawn', () => {
     expect(tab.rows.reduce((a, r) => a + r.share, 0)).toBeCloseTo(1)
     expect(crossTable(tab)).toHaveLength(1 + tab.rows.length)
   })
+  it('paints any statistic by place', () => {
+    const km = S.D.find((d) => d.key === 'km')
+    const any = perPlaceDim(S, all, 'z', 'any', km)
+    // zone 2: two car trips of 1.5 km, a walk of 0; the train has no length
+    expect(any.n[1]).toBe(3)
+    expect(statOf(any, [0])[1].v).toBeCloseTo(50 / 250)
+    expect(statOf(any, [])[1]).toMatchObject({ best: 2, n: 3 })
+    expect(statOf(perPlaceDim(S, all, 'z', 'home', km), [0]).map((s) => s.n)).toEqual([0, 3, 1])
+    // towards a picked place: by the other end
+    const from = perPlaceDim(S, touching(S, all, [1], 'from'), 'z', 'from', km, [1])
+    expect([...from.n]).toEqual([1, 1, 0])
+    const [head, ...rows] = placesTable(S, perPlace(S, all, 'z', 'any'), 'z', all, 'any')
+    expect(rows.every((r) => r.length === head.length)).toBe(true)
+  })
   it('counts a spot once a trip', () => {
     const p = perSpot({ ...S, T: { ...S.T, cols: { ...S.T.cols, pf: [-1, 0, -1, -1, 0], pt: [0, -1, 1, 0, 0] } } }, all, 2)
     expect([...p.n]).toEqual([4, 1])
@@ -256,7 +270,7 @@ suite('the address of a survey view', () => {
   const base = { range: [0, 24], areas: null, labels: { num: false, pct: false, declutter: true }, net: {}, sig: {}, off: new Set(), flow: {}, occupancy: null }
   const d = { range: [7, 9], flow: {} }
   it('keeps the trips', () => {
-    const trip = { ...TRIPS0, level: 'z', paint: 'car', way: 'to', per: 'km2', picked: ['z12', 'z3001'], show: 'flows', names: true, top: 100, rows: 'age', split: 'goal', pattern: '010', filters: { mode: [2, 3], km: [0] } }
+    const trip = { ...TRIPS0, level: 'z', paint: 'stat', stat: { dim: 'age', opts: [1, 2] }, way: 'to', per: 'km2', picked: ['z12', 'z3001'], show: 'flows', names: true, top: 100, rows: 'age', split: 'goal', pattern: '010', filters: { mode: [2, 3], km: [0] } }
     const back = readHash(hashOf({ ...base, view: 'trips', trip }, d))
     expect({ ...TRIPS0, ...back.trip }).toEqual(trip)
     expect(readHash(hashOf({ ...base, view: 'trips', trip: TRIPS0 }, d)).trip).toEqual({})
