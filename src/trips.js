@@ -355,7 +355,7 @@ export function averages(S, idx) {
     row('age', 'Wiek podróżujących', 'lat', 1, meanOf(people((x, i) => x.ay?.[i]), true)),
     row('size', 'Osób w ich gospodarstwie', '', 1, meanOf(people((x, i) => x.hs[i]), true)),
     row('cars', 'Samochodów w ich gospodarstwie', '', 2, meanOf(people((x, i) => x.hc[i]), true)),
-  ].filter((m) => m && m.n >= Math.min(5, idx.length))     // a lone transfer is no average
+  ].filter((m) => m && m.n >= 3)     // a lone transfer is no average
   const modes = MAIN.map((g, k) => {
     const own1 = idx.filter((i) => MAIN_AT(c.m[i]) === k)
     const of = (f) => meanOf(own1.map((i) => [f(i), c.w[i]]).filter(([v]) => v != null))

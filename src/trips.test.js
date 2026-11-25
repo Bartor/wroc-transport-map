@@ -188,7 +188,8 @@ suite('answers', () => {
     expect(of('min')).toMatchObject({ n: 5 })
     expect(of('min').v).toBeCloseTo((20 * 100 + 25 * 100 + 5 * 50 + 40 * 200 + 90 * 10) / 460)
     expect(of('day').v).toBeCloseTo((2 * 100 + 50 + 200 + 10) / 360)
-    expect(of('in').v).toBe(1)
+    // two cars are too few for an average
+    expect(of('in')).toBe(undefined)
     expect(of('kmh').v).toBeCloseTo((60 * (150 + 150 + 2400)) / (2000 + 2500 + 8000))
     expect(A.modes.map((m) => m.key)).toEqual(['car', 'pt', 'walk'])
     expect(averagesTable(A)[0]).toHaveLength(averagesTable(A).at(-1).length)
