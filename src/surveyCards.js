@@ -3,6 +3,7 @@
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
 import { diverging, fullName, marginOf, optionShares, rgb, shareOf } from './answers'
 import { arc } from './arcs'
+import { FEW_ANSWERS, smallText } from './Small'
 import { placeName } from './trips'
 
 const SITE = 'bartor.github.io/wroc-transport-map'
@@ -358,7 +359,7 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend }) {
           color: t.v == null ? null : rgb(diverging(t.v, mid, span)),
           alpha: t.v == null ? null : (0.25 + 0.75 * Math.min(1, t.n / enough)) * (Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw) ? 0.5 : 1),
           faint: t.v != null && Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw),
-          name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : pctText(t.v),
+          name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : pctText(t.v) + smallText(t.n, FEW_ANSWERS),
           sub: t.v == null ? null : `±${Math.round(100 * marginOf(q, t.row, opts, a.raw))} · n=${t.n}`, weight: t.n,
         })),
       }),
@@ -369,6 +370,7 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend }) {
           parts: optionShares(q, r, a.raw).map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.includes(o.i) })) })) })] : []),
     ],
     notes: [
+      `(!) — mniej niż ${FEW_ANSWERS} odpowiedzi.`,
       'Udziały ważone. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera.',
       !q.opinion ? 'Blade pola: różnica od średniej w granicach błędu.' : a.raw ? 'Mapa bez korekty o ankietera: odpowiedzi różnią się między ankieterami bardziej niż między osiedlami.'
         : `Wartości obszarów skorygowane o ankietera. ${a.level === 'h' ? 'Blade miejsca: mało odpowiedzi.' : 'Blade pola: różnica od średniej w granicach błędu.'}`,
@@ -403,14 +405,14 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
   const num = (w) => (S.freight ? fmt(w) : fmtEst(w))
   const label = (p, k) => {
     if (paint.stat && painting) {
-      return value[k] == null ? {} : { name: placeName(p), text: paint.textOf(k), sub: `n=${n[k]}`, weight: n[k] }
+      return value[k] == null ? {} : { name: placeName(p), text: paint.textOf(k) + smallText(n[k]), sub: `n=${n[k]}`, weight: n[k] }
     }
     if (partner) {
       const w = partner.w[k]
-      return !w ? {} : { name: placeName(p), text: `${pctText(w / stats.w)} · ${num(w)}`, sub: `${painting && value[k] != null ? `${paint.textOf(k)} · ` : ''}n=${partner.n[k]}`, weight: w }
+      return !w ? {} : { name: placeName(p), text: `${pctText(w / stats.w)} · ${num(w)}${smallText(partner.n[k])}`, sub: `${painting && value[k] != null ? `${paint.textOf(k)} · ` : ''}n=${partner.n[k]}`, weight: w }
     }
     const s = sums[k]
-    return { name: placeName(p), text: painting && value[k] != null ? paint.textOf(k) : null, sub: s.any ? `${num(s.any)} · n=${s.n}` : null, weight: s.any }
+    return { name: placeName(p), text: painting && value[k] != null ? paint.textOf(k) + smallText(s.n) : null, sub: s.any ? `${num(s.any)} · n=${s.n}` : null, weight: s.any }
   }
   return {
     accent: '#3f8bd0', kicker: S.freight ? 'Badanie przewozów towarów KBR 2024' : 'Badanie ankietowe KBR 2024 · podróże mieszkańców',
@@ -429,12 +431,12 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
           alpha: (0.3 + 0.7 * Math.min(1, n[k] / 20)) * paint.lead(k), ...label(p, k) })),
         arcs: lines.arcs.map((a) => ({ ...a, path: arc(a.from, a.to), width: show === 'trips' ? 1.4 : 8 })), rings: lines.rings,
         legend: painting ? [...paint.legend(false),
-          ...(note ? [{ note }] : []), { note: [paint.unit, 'bladsze: mniej niż 20 podróży w próbie'].filter(Boolean).join(' · ') }]
+          ...(note ? [{ note }] : []), { note: [paint.unit, 'bladsze i (!): mniej niż 20 podróży w próbie'].filter(Boolean).join(' · ') }]
           : S.modes.map((m) => ({ color: m.color, label: m.label })),
       }),
-      ...(ranked ? [listBlock({ title: ranked.title, rows: ranked.rows.slice(0, 12).map((r) => ({ label: r.name, value: r.text, sub: `n=${fmt(r.n)}` })) })]
+      ...(ranked ? [listBlock({ title: ranked.title, rows: ranked.rows.slice(0, 12).map((r) => ({ label: r.name, value: r.text + smallText(r.n), sub: `n=${fmt(r.n)}` })) })]
         : top.length > 1 ? [listBlock({ title: `${partner ? 'Druga strona podróży' : 'Najwięcej podróży'}${perHead ? ` na ${small > 1 ? '1000 mieszkańców' : 'mieszkańca'}` : ''}`,
-        rows: top.map((r) => ({ label: r.name, value: S.freight ? fmt(r.w) : perHead ? fixed(small * r.rate, small > 1 ? 1 : 2) : fmtEst(r.w),
+        rows: top.map((r) => ({ label: r.name, value: (S.freight ? fmt(r.w) : perHead ? fixed(small * r.rate, small > 1 ? 1 : 2) : fmtEst(r.w)) + smallText(r.n),
           sub: `${partner ? `${pctText(r.w / stats.w)} · ` : ''}${num(r.w)}${S.freight ? '' : ' na dobę'} · n=${fmt(r.n)}` })) })] : []),
     ],
     notes: S.freight ? ['Przejazdy w próbie, nie przeliczone na cały ruch ciężarowy.'] : [

@@ -6,6 +6,7 @@ import {
 } from '@bartor-net/ui-kit'
 import { CircleLayer, MapLabels, MapTooltip, TipNote, TipRow } from '@bartor-net/ui-kit/map'
 import ScenarioPanel from './ScenarioPanel'
+import { Small, smallText } from './Small'
 import { Arcs, Rings, ZoneLayer } from './ZoneLayer'
 import { rng, scatter } from './arcs'
 import { DAY_MODES, daysOf } from './days'
@@ -248,13 +249,13 @@ export function TripsMap({ x, dark, onPick, setT }) {
         <b>{placeName(p)}</b>
         {p.level === 'z' && <TipNote> · rejon {p.id}, {p.district}</TipNote>}<br />
         {p0.stat ? (
-          <>{p0.title}: <b>{p0.textOf(k)}</b>
+          <>{p0.title}: <b>{p0.textOf(k)}</b><Small n={counts[k]} />
             <TipNote><br />{counts[k]} {counts[k] === 1 ? 'podróż' : 'podróży'} w próbie{partner ? ' z zaznaczonym obszarem' : ''}</TipNote></>
         ) : partner ? (
-          <>{own ? 'w obrębie: ' : ''}{v != null && <><b>{p0.text(v)}</b> {p0.unit}</>}{v == null && !own && (partner.n[k] ? '' : 'brak podróży w próbie')}
+          <>{own ? 'w obrębie: ' : ''}{v != null && <><b>{p0.text(v)}</b> {p0.unit}</>}<Small n={partner.n[k]} />{v == null && !own && (partner.n[k] ? '' : 'brak podróży w próbie')}
             {partner.n[k] > 0 && <TipNote> {v != null && '· '}{fmtEst(partner.w[k])} {unitOf(S)} (±{Math.round(100 * mg)}%), {partner.n[k]} w próbie</TipNote>}</>
         ) : (
-          <>{P.label}: {v == null ? 'brak danych' : <><b>{p0.text(v)}</b> {p0.unit}</>}
+          <>{P.label}: {v == null ? 'brak danych' : <><b>{p0.text(v)}</b> {p0.unit}</>}{!P.fixed && <Small n={s.n} />}
             {!P.fixed && <TipNote><br />{fmtEst(s.any)} {unitOf(S)} (±{Math.round(100 * (mg ?? 1))}%) · {s.n} w próbie{p.pop ? ` · ${fmt(p.pop)} mieszkańców` : ''}</TipNote>}</>
         )}
         {!partner && !p0.stat && !P.fixed && s.n > 4 && S.main.map((m) => {
@@ -268,7 +269,7 @@ export function TripsMap({ x, dark, onPick, setT }) {
   const flowTip = (f) => (
     <MapTooltip sticky>
       {f.a && !f.self ? `${placeName(f.a)} ↔ ` : ''}{placeName(f.b || f.place)}{f.place ? ' — w obrębie' : ''}<br />
-      <b>{fmtEst(f.w)}</b> {unitOf(S)} <TipNote>· {f.n} w próbie{f.all ? ` · ${pctText(f.w / f.all)} podróży` : ''}</TipNote>
+      <b>{fmtEst(f.w)}</b> {unitOf(S)}<Small n={f.n} /> <TipNote>· {f.n} w próbie{f.all ? ` · ${pctText(f.w / f.all)} podróży` : ''}</TipNote>
       {f.modes && [...f.modes].map((w, m) => [w, m]).filter(([w]) => w > 0).sort((a, b) => b[0] - a[0]).slice(0, 4)
         .map(([w, m]) => <TipRow key={m} color={S.modes[m].color} label={S.modes[m].label} value={fmtEst(w)} share={pctText(w / [...f.modes].reduce((a, b) => a + b, 0))} />)}
     </MapTooltip>
@@ -277,9 +278,9 @@ export function TripsMap({ x, dark, onPick, setT }) {
   const labels = useMemo(() => (!t.names || show === 'trips' ? [] : list.map((p, k) => {
     const v = values[k]
     const lines0 = [{ text: placeName(p).replace(/-/g, '\u2011'), bold: true },
-      ...(show === 'areas' && v != null ? [{ text: p0.textOf(k) }] : partner && partner.n[k] ? [{ text: fmtEst(partner.w[k]) }] : [])]
+      ...(show === 'areas' && v != null ? [{ text: p0.textOf(k) + (P.fixed ? '' : smallText(counts[k])) }] : partner && partner.n[k] ? [{ text: fmtEst(partner.w[k]) + smallText(partner.n[k]) }] : [])]
     return { key: p.key, lat: p.c[0], lon: p.c[1], r: 0, html: labelHtml(lines0), box: labelBox(lines0), weight: v ?? 0 }
-  })), [t.names, show, list, values, p0, partner])
+  })), [t.names, show, list, values, p0, partner, counts, P])
   const topSpot = perS ? Math.max(1, ...perS.w) : 1
   return (
     <>
@@ -295,7 +296,7 @@ export function TripsMap({ x, dark, onPick, setT }) {
           tip={({ s, i }) => (
             <MapTooltip>
               <b>{s.name}</b>{s.street ? <TipNote> · ulica</TipNote> : null}<br />
-              {fmtEst(perS.w[i])} podróży/dobę <TipNote>· {perS.n[i]} w próbie</TipNote>
+              {fmtEst(perS.w[i])} podróży/dobę<Small n={perS.n[i]} /> <TipNote>· {perS.n[i]} w próbie</TipNote>
               {[...perS.modes(i)].map((w, m) => [w, m]).filter(([w]) => w > 0).sort((a, b) => b[0] - a[0]).slice(0, 4)
                 .map(([w, m]) => <TipRow key={m} color={S.modes[m].color} label={S.modes[m].label} value={fmtEst(w)} share={pctText(w / perS.w[i])} />)}
             </MapTooltip>
@@ -338,7 +339,7 @@ export function tripsLegend({ x, dark }) {
     ...(p0.stat?.d.key === 'km' ? [{ note: KM_NOTE }] : []),
     ...(p0.stat && !p0.stat.opts.length ? [{ note: 'kolor = najczęstsza odpowiedź, bledszy = mniejsza przewaga' }] : []),
     ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek, kropka = dokąd; kółko = podróże w obrębie' }] : []),
-    { note: `blade = mało podróży w próbie (pełny kolor od ${THIN})` },
+    { note: `blade i (!) = mniej niż ${THIN} podróży w próbie` },
   ]
 }
 

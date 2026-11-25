@@ -11,6 +11,7 @@ import { fullName } from './answers'
 import { arc, inside, scatter } from './arcs'
 import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days'
 import { colorsOf, partsOf } from './Stack'
+import { isSmall, smallText } from './Small'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
@@ -201,6 +202,11 @@ suite('how it is drawn', () => {
     expect(perThousand([1.4], PER.pop)).toBe(false)
     expect(perThousand([0.01], PER.abs)).toBe(false)
     expect([digitsFor([1.5]), digitsFor([52]), digitsFor([820])]).toEqual([2, 1, 0])
+  })
+  it('marks small samples, not missing ones', () => {
+    expect([0, 1, 19, 20].map((n) => isSmall(n))).toEqual([false, true, true, false])
+    expect(smallText(25, 30)).toBe(' (!)')
+    expect(smallText(25)).toBe('')
   })
   it('makes parts that add up', () => {
     const p = partsOf({ a: 5, b: 3, c: 1, inne: 1 }, 2)

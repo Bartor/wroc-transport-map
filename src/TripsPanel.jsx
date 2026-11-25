@@ -9,6 +9,7 @@ import {
 import { StackedHourBars } from '@bartor-net/ui-kit/charts'
 import { dayModes, dayText, daysTable, patterns } from './days'
 import { hotOn, setHot, useHot } from './hot'
+import { Small, isSmall } from './Small'
 import Stack, { Bar, colorsOf, isOrdered } from './Stack'
 import {
   FEW, THIN, countMargin, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
@@ -45,7 +46,7 @@ function HotList({ items, hotKey }) {
         <button key={r.key} type="button" onClick={r.onPick} {...(r.hot ? hotOn(r.hot) : {})}
           style={{ ...listRow, cursor: r.onPick ? 'pointer' : 'default', background: hotKey != null && r.hotKey === hotKey ? 'rgba(63,139,208,.28)' : r.on ? 'rgba(63,139,208,.18)' : 'none' }}>
           <span>{r.title}<br /><small style={{ opacity: 0.65 }}>{r.sub}</small></span>
-          <b style={{ fontVariantNumeric: 'tabular-nums' }}>{r.value}</b>
+          <b style={{ fontVariantNumeric: 'tabular-nums' }}>{r.value}<Small n={r.n} /></b>
         </button>
       ))}
     </div>
@@ -133,7 +134,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
     const sh = shares(S, baseOf(key), key)
     if (sh.filter((o) => o.n > 0).length < 2) return null
     const colors = colorsOf(d, isOrdered(key))
-    return { key, label, parts: sh.filter((o) => o.n > 0).map((o) => ({ key: String(o.i), label: o.label, share: o.share, n: o.n, color: colors[o.i],
+    return { key, label, n: sh.reduce((a, o) => a + o.n, 0), parts: sh.filter((o) => o.n > 0).map((o) => ({ key: String(o.i), label: o.label, share: o.share, n: o.n, color: colors[o.i],
       title: `${S.freight ? fmt(o.w) : fmtEst(o.w)} ${unitOf(S)} · ${o.n} w próbie` })) }
   }
   // onto the map and off it; a chart that is already filtered starts with that
@@ -165,7 +166,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
       <Facts>
         <Fact label={S.freight ? 'Przejazdy w próbie' : 'Podróży na dobę'} tone="now">{S.freight ? fmt(stats.n) : `${fmtEst(stats.w)}${stats.n ? ` ±${Math.round(100 * countMargin(stats.n))}%` : ''}`}</Fact>
         {!S.freight && own >= FEW && <Fact label="Na mieszkańca (6+)">{fixed(stats.w / own, 2)}</Fact>}
-        {!S.freight && <Fact label="W próbie">{fmt(stats.n)}</Fact>}
+        {!S.freight && <Fact label="W próbie">{fmt(stats.n)}<Small n={stats.n} /></Fact>}
         {stats.km != null && <Fact label="Średnio w linii prostej">{fixed(stats.km)} km</Fact>}
         {stats.min != null && <Fact label="Średni czas">{Math.round(stats.min)} min</Fact>}
         {stats.inCar != null && <Fact label="Osób w samochodzie">{fixed(stats.inCar, 2)}</Fact>}
@@ -186,7 +187,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
                 columns={[{ label: S.freight ? 'przejazdy' : 'na dobę' }, { label: '%', tone: 'strong' }, ...(S.freight ? [] : [{ label: 'próba', tone: 'dim' }])]}
                 rows={[...modes].sort((a, b) => b.value - a.value).map((r) => ({
                   key: r.key, label: r.label, color: r.color,
-                  cells: [S.freight ? fmt(r.value) : fmtEst(r.value), pctText(r.share), ...(S.freight ? [] : [fmt(r.n)])],
+                  cells: [S.freight ? fmt(r.value) : fmtEst(r.value), pctText(r.share), ...(S.freight ? [] : [<>{fmt(r.n)}<Small n={r.n} /></>])],
                 }))} />
             </SplitBody>
             <Hint>
@@ -198,7 +199,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
             const s = stackOf(key, label)
             return s && (
               <Block key={key}>
-                <Head on={statOn(key)} onMap={onMap(key)}>{label}</Head>
+                <Head on={statOn(key)} onMap={onMap(key)}>{label}<Small n={s.n} /></Head>
                 {mapped(key)}
                 <Stack parts={s.parts} on={onOf(key)} onPick={toggle(key)} />
               </Block>
@@ -225,17 +226,17 @@ export default function TripsPanel({ x, setT, period, onClose }) {
               ))}
             </div>
             {tab.rows.map((r) => (
-              <div key={r.i} style={{ marginBottom: 6, opacity: r.n < 15 ? 0.6 : 1 }}>
+              <div key={r.i} style={{ marginBottom: 6, opacity: isSmall(r.n) ? 0.7 : 1 }}>
                 <button type="button" style={{ ...listRow, padding: 0 }} onClick={() => toggle(tab.row.key)(r.i)} title="Zostaw tylko ten wiersz">
                   <span style={{ fontWeight: onOf(tab.row.key).has(String(r.i)) ? 700 : 400 }}>{r.label}</span>
                   <small style={{ opacity: 0.75 }}>
-                    <b>{pctText(r.share)}</b> · {S.freight ? fmt(r.w) : fmtEst(r.w)}{r.km != null ? ` · ${fixed(r.km)} km` : ''}{r.min != null ? ` · ${Math.round(r.min)} min` : ''} · n={fmt(r.n)}
+                    <b>{pctText(r.share)}</b> · {S.freight ? fmt(r.w) : fmtEst(r.w)}{r.km != null ? ` · ${fixed(r.km)} km` : ''}{r.min != null ? ` · ${Math.round(r.min)} min` : ''} · n={fmt(r.n)}<Small n={r.n} />
                   </small>
                 </button>
                 <Bar height={16} parts={r.parts.map((share, i) => ({ key: String(i), share, label: tab.cols[i].label, color: splitColors[i] }))} onPick={toggle(tab.split.key)} />
               </div>
             ))}
-            <Hint>Blade wiersze: mniej niż 15 podróży w próbie.</Hint>
+            <Hint>(!) — mniej niż 20 podróży w próbie, wartość orientacyjna.</Hint>
             <LinkButton block onClick={() => downloadCsv(crossTable(tab), `${fname}-zestawienie.csv`)}>Pobierz zestawienie (CSV)</LinkButton>
           </StatBlock>
 
@@ -247,7 +248,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
               </Hint>
               <Stack parts={day.modes} />
               <HotList hotKey={hot.pattern} items={day.list.slice(0, 12).map((p) => ({
-                key: p.key, title: p.label, sub: `${fmt(p.n)} w próbie`, value: pctText(p.share), on: t.pattern === p.key,
+                key: p.key, title: p.label, sub: `${fmt(p.n)} w próbie`, value: pctText(p.share), n: p.n, on: t.pattern === p.key,
                 hot: show === 'days' ? { pattern: p.key } : null, hotKey: p.key,
                 onPick: () => setT({ ...t, show: 'days', pattern: t.pattern === p.key ? null : p.key }),
               }))} />
@@ -267,7 +268,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
           {ranked && (
             <StatBlock title={`Obszary — ${ranked.title}`}>
               <HotList hotKey={hot.place} items={ranked.rows.slice(0, 15).map((r) => ({
-                key: r.key, title: r.name, sub: `${fmt(r.n)} w próbie${r.n < THIN ? ' — mało' : ''}`, value: r.text,
+                key: r.key, title: r.name, sub: `${fmt(r.n)} w próbie`, value: r.text, n: r.n,
                 on: t.picked.includes(r.key), hot: { place: r.key }, hotKey: r.key, onPick: () => pickPlace(r.p),
               }))} />
             </StatBlock>
@@ -276,14 +277,14 @@ export default function TripsPanel({ x, setT, period, onClose }) {
             <HotList hotKey={hot.place} items={top.slice(0, 20).map((r) => ({
               key: r.key, title: r.p && t.picked.includes(r.key) && partner ? `${r.name} — w obrębie` : r.name,
               sub: `${S.freight ? '' : `${fmtEst(r.w)} na dobę · `}${pctText(partner ? r.w / stats.w : null).replace('—', '') ? (partner ? `${pctText(r.w / stats.w)} · ` : '') : ''}${fmt(r.n)} w próbie`,
-              value: S.freight ? fmt(r.w) : perHead ? fixed(small * r.rate, small > 1 ? 1 : 2) : fmtEst(r.w),
+              value: S.freight ? fmt(r.w) : perHead ? fixed(small * r.rate, small > 1 ? 1 : 2) : fmtEst(r.w), n: r.n,
               on: t.picked.includes(r.key), hot: r.p ? { place: r.key } : null, hotKey: r.key, onPick: r.p ? () => pickPlace(r.p) : undefined,
             }))} />
           </StatBlock>
           {spotTop.length > 0 && (
             <StatBlock title="Konkretne cele">
               <HotList hotKey={hot.spot} items={spotTop.slice(0, 12).map((r) => ({
-                key: r.i, title: r.name, sub: `${fmt(r.n)} w próbie`, value: fmtEst(r.w), on: t.filters.spot?.[0] === r.i,
+                key: r.i, title: r.name, sub: `${fmt(r.n)} w próbie`, value: fmtEst(r.w), n: r.n, on: t.filters.spot?.[0] === r.i,
                 hot: { spot: r.i }, hotKey: r.i, onPick: () => toggle('spot')(r.i),
               }))} />
               <Hint>Adresy albo ulice w rejonie, poza domem, które podało co najmniej 5 badanych.</Hint>

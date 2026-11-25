@@ -7,6 +7,7 @@ import {
 import { MapTooltip, TipNote } from '@bartor-net/ui-kit/map'
 import { HeatImage, ZoneLayer } from './ZoneLayer'
 import Bars from './Bars'
+import { FEW_ANSWERS, Small } from './Small'
 import Stack, { Bar, KINDS, SCALE } from './Stack'
 import { answersCard, answersName, draw, everythingTable, viewTable } from './surveyCards'
 import {
@@ -65,7 +66,7 @@ export function AnswersMap({ x, onPick }) {
           <b>{p.name}</b>{p.level === 'z' && <TipNote> · {p.district}</TipNote>}<br />
           {row ? (
             <>
-              {optText(q, opts)}: <b>{pctText(v)}</b> ±{Math.round(100 * marginOf(q, row, opts, a.raw))} p.p.<br />
+              {optText(q, opts)}: <b>{pctText(v)}</b> ±{Math.round(100 * marginOf(q, row, opts, a.raw))} p.p.<Small n={n} few={FEW_ANSWERS} /><br />
               <TipNote>{n} odpowiedzi · Wrocław {pctText(mid)}</TipNote>
             </>
           ) : <TipNote>za mało odpowiedzi</TipNote>}
@@ -85,7 +86,7 @@ export function answersLegend({ x }) {
       label: t === 0 ? `${pctText(mid)} — średnia Wrocławia` : `${pctText(Math.max(0, Math.min(1, mid + t * span)))}${Math.abs(t) === 1 ? (t < 0 ? ' i mniej' : ' i więcej') : ''}`,
     })),
     { note: a.level === 'h' ? `wygładzone w promieniu ok. ${String(a.km).replace('.', ',')} km; blade = mało odpowiedzi`
-      : `blade = mało odpowiedzi (pełny kolor od ${enough(a)}) lub różnica w granicach błędu` },
+      : `blade = mało odpowiedzi lub różnica w granicach błędu; (!) = poniżej ${FEW_ANSWERS}` },
   ]
 }
 
@@ -180,7 +181,7 @@ export function AnswersPanel({ x, setA, onClose }) {
       actions={row && <ShareButtons render={() => draw(spec())} filename={`${name}.png`} title={fullName(q)} text={`KBR Wrocław 2024 — ${fullName(q)}`} />}>
       <Facts>
         <Fact label={optText(q, opts)} tone="now">{pctText(v)}{row && v != null ? ` ±${mg(row)} p.p.` : ''}</Fact>
-        <Fact label="Odpowiedzi w próbie">{row ? fmt(row[0]) : '—'}</Fact>
+        <Fact label="Odpowiedzi w próbie">{row ? <>{fmt(row[0])}<Small n={row[0]} few={FEW_ANSWERS} /></> : '—'}</Fact>
         {p && <Fact label="Wrocław">{pctText(mid)}</Fact>}
         {around && <Fact label="Gminy wokół">{pctText(shareOf(around, opts))}</Fact>}
       </Facts>
@@ -212,7 +213,7 @@ export function AnswersPanel({ x, setA, onClose }) {
           ) : by.map(({ g, r, v: s }) => (
             <div key={g.key} style={{ marginBottom: 4 }}>
               <button type="button" onClick={() => set({ group: g.key })} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', border: 0, padding: 0, background: 'none', color: 'inherit', font: 'inherit', fontSize: 12, cursor: 'pointer', fontWeight: g.key === group ? 700 : 400 }}>
-                <span>{g.label}</span><span>{opts.length > 0 && <b>{pctText(s)}</b>} <small style={{ opacity: 0.7 }}>±{mg(r)} · n={fmt(r[0])}</small></span>
+                <span>{g.label}</span><span>{opts.length > 0 && <b>{pctText(s)}</b>} <small style={{ opacity: 0.7 }}>±{mg(r)} · n={fmt(r[0])}<Small n={r[0]} few={FEW_ANSWERS} /></small></span>
               </button>
               <Bar height={16} on={new Set(opts.map(String))} onPick={(key) => toggle(+key)}
                 parts={optionShares(q, r, a.raw).map((o) => ({ key: String(o.i), label: o.label, share: o.share, color: colors[o.i] }))} />
@@ -223,7 +224,7 @@ export function AnswersPanel({ x, setA, onClose }) {
       <StatBlock title={`Wyraźnie inaczej niż Wrocław — ${level === 'd' ? 'osiedla i gminy' : 'rejony'}`}>
         {!ranked.length ? <Hint>Żaden obszar nie różni się od średniej bardziej, niż wynosi błąd.</Hint> : (
           <RankList items={(ranked.length > 14 ? [...ranked.slice(0, 7), ...ranked.slice(-7)] : ranked).map((y) => ({
-            key: y.p.key, title: y.p.name, sub: `±${mg(y.row)} p.p. · ${y.n} odpowiedzi`, value: pctText(y.v),
+            key: y.p.key, title: y.p.name, sub: `±${mg(y.row)} p.p. · ${y.n} odpowiedzi`, value: <>{pctText(y.v)}<Small n={y.n} few={FEW_ANSWERS} /></>,
             on: y.p.key === a.place, onPick: () => set({ place: y.p.key === a.place ? null : y.p.key }),
           }))} />
         )}
