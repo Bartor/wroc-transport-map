@@ -96,10 +96,11 @@ def names():
     for el in _overpass("overpass_poi.json", q):
         t, c = el.get("tags", {}), el.get("center") or el
         kind = t.get("shop") or t.get("amenity") or t.get("leisure")
-        # a ward is not the hospital
-        if "lat" in c and not re.match(r"(Klinika|Oddział|Katedra)", t["name"]):
-            # a building of a university goes by the university's name
-            name = t["operator"] if kind in ("university", "college") and t.get("operator") else t["name"]
+        part = re.match(r"(Klinika|Oddział|Katedra)[ ,]", t["name"])
+        # a building goes by its university's name, and a ward by its hospital's
+        if "lat" in c and not (part and not t.get("operator")):
+            own = kind in ("university", "college") or part
+            name = t["operator"] if own and t.get("operator") else t["name"]
             out.append((KINDS.get(kind, 0), name, c["lat"], c["lon"],
                         words(t.get("addr:street")), number(t.get("addr:housenumber"))))
     return out
