@@ -12,7 +12,7 @@ import { arc, inside, scatter } from './arcs'
 import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days'
 import { colorsOf, partsOf } from './Stack'
 import { isSmall, smallText } from './Small'
-import { meanOf, onMean, perPeopleOf, valueOf } from './answers'
+import { meanOf, onMean, perPeopleOf, pickWarning, togglePick, valueOf } from './answers'
 import { meanFor } from './trips'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
@@ -42,7 +42,7 @@ const T = {
   modes: Array.from({ length: 12 }, (_, i) => `m${i}`), park: ['ulica'], why: ['wygoda'], ages: ['a'], jobs: ['j'],
   cols: {
     ...Object.fromEntries(keys.map((k, i) => [k, ROWS.map((r) => r[i])])),
-    hs: blank(3), sx: blank(0), ed: blank(4), kd: blank(0), bd: blank(0), pk: blank(-1), x: blank(0), ag: blank(0), jb: blank(0), hc: blank(1), ps: blank(0), lc: blank(1), wr: blank(1), y: blank(0),
+    hs: blank(3), sx: blank(0), ed: blank(4), kd: blank(0), bd: blank(0), ay: blank(40), pk: blank(-1), x: blank(0), ag: blank(0), jb: blank(0), hc: blank(1), ps: blank(0), lc: blank(1), wr: blank(1), y: blank(0),
     sf: [1, 1, 0, 0, 0],
   },
 }
@@ -151,7 +151,9 @@ suite('answers', () => {
     expect(diverging(9, 0.6, 0.2, -1)).toEqual([214, 84, 28])
     expect(diverging(9, 0.6, 0.2, 1)).toEqual([31, 161, 135])
     expect(diverging(-9, 0.6, 0.2, 1)).toEqual([214, 84, 28])
-    expect(diverging(9, 0.6, 0.2, 0)).toEqual([150, 72, 178])
+    // what is neither is one hue, light for more on dark and dark on light
+    expect(diverging(9, 0.6, 0.2, 0)).toEqual([178, 218, 255])
+    expect(diverging(9, 0.6, 0.2, 0, false)).toEqual([24, 62, 110])
     expect(spanOf([{ v: 0.9, n: 50 }, { v: 0.5, n: 50 }], 0.6)).toBeGreaterThanOrEqual(0.05)
   })
   it('averages numbers', () => {
@@ -166,6 +168,17 @@ suite('answers', () => {
     expect(marginOf(q, row, [])).toBeGreaterThan((1.96 * 0.8) / 10)
     expect(meanFor(S, all, 'in').v).toBe(1)
     expect(meanFor(S, all, 'goal')).toBe(null)
+  })
+  it('lets go of every option, and says so', () => {
+    const q = { key: 'x', options: ['a', 'b'], multi: 0 }
+    expect(togglePick(q, [0], 0)).toEqual([])
+    expect(togglePick(q, [1], 0)).toEqual([0, 1])
+    expect(togglePick({ ...q, multi: 1 }, [0], 1)).toEqual([1])
+    expect(pickWarning(q, [])).toMatch(/nie wybrano/)
+    expect(pickWarning(q, [0, 1])).toMatch(/wszystkie/)
+    expect(pickWarning(q, [0])).toBe(null)
+    expect(pickWarning({ ...q, number: 1 }, [])).toBe(null)
+    expect(valueOf(q, [10, 1, 1, [500, 500]], [])).toBe(null)
   })
   it('knows what an answer means', () => {
     const u = { key: 'u1', options: ['uciążliwy ruch kołowy', 'nie odczuwam uciążliwości', 'inne rzeczy'] }
@@ -214,6 +227,9 @@ suite('how it is drawn', () => {
     expect(any.n[1]).toBe(3)
     expect(statOf(any, [0])[1].v).toBeCloseTo(50 / 250)
     expect(statOf(any, [])[1]).toMatchObject({ best: 2, n: 3 })
+    // numbers have an average as well
+    expect(any.mean[1]).toBeGreaterThan(0)
+    expect(perPlaceDim(S, all, 'z', 'any', S.D.find((d) => d.key === 'age')).mean[1]).toBeCloseTo(40)
     expect(statOf(perPlaceDim(S, all, 'z', 'home', km), [0]).map((s) => s.n)).toEqual([0, 3, 1])
     // towards a picked place: by the other end
     const from = perPlaceDim(S, touching(S, all, [1], 'from'), 'z', 'from', km, [1])
@@ -319,5 +335,7 @@ suite('the address of a survey view', () => {
   it('keeps the question', () => {
     const ask = { ...ASK0, q: 'bike', opts: [0, 1], group: 'car', level: 'h', km: 1.5, raw: true }
     expect({ ...ASK0, ...readHash(hashOf({ ...base, view: 'answers', ask }, d)).ask }).toEqual(ask)
+    const none = { ...ASK0, q: 'bike', opts: [] }
+    expect(readHash(hashOf({ ...base, view: 'answers', ask: none }, d)).ask.opts).toEqual([])
   })
 })

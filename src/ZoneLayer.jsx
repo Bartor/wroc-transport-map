@@ -99,7 +99,7 @@ export function Rings({ rings }) {
 }
 
 /** A smoothed surface as a picture over the map; thin ground fades out. */
-export function HeatImage({ surface, mid, span, sent, full = 60 }) {
+export function HeatImage({ surface, mid, span, sent, dark, full = 60 }) {
   const url = useMemo(() => {
     const { v, n, cols, rows } = surface
     const cv = document.createElement('canvas')
@@ -109,12 +109,12 @@ export function HeatImage({ surface, mid, span, sent, full = 60 }) {
     const img = g.createImageData(cols, rows)
     for (let i = 0; i < v.length; i++) {
       if (Number.isNaN(v[i])) continue
-      const c = diverging(v[i], mid, span, sent)
+      const c = diverging(v[i], mid, span, sent, dark)
       img.data.set([c[0], c[1], c[2], Math.round(205 * Math.min(1, n[i] / full) ** 0.8)], i * 4)
     }
     g.putImageData(img, 0, 0)
     return cv.toDataURL()
-  }, [surface, mid, span, sent, full])
+  }, [surface, mid, span, sent, dark, full])
   const [s, w, n, e] = surface.box
   return <ImageOverlay url={url} bounds={[[s, w], [n, e]]} opacity={0.85} interactive={false} />
 }

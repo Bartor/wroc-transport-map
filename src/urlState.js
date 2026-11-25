@@ -95,7 +95,7 @@ function putTrip(q, t) {
 
 function putAsk(q, a) {
   if (a.q !== 'tram') q.set('q', a.q)
-  if (a.opts?.length) q.set('o', a.opts.join('.'))
+  if (a.opts) q.set('o', a.opts.join('.'))
   if (a.group !== 'all') q.set('g', a.group)
   if (a.level !== 'd') q.set('lv', a.level)
   if (a.level === 'h' && a.km !== 1) q.set('km', String(a.km))

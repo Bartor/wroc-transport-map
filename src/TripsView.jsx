@@ -13,7 +13,7 @@ import { DAY_MODES, daysOf } from './days'
 import { useHot } from './hot'
 import { colorsOf, isOrdered } from './Stack'
 import {
-  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, flowsOf, pairs, passing, perPartner,
+  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, flowsOf, numberOf, pairs, passing, perPartner,
   perOf, perPlace, perPlaceDim, perSpot, perThousand, placeName, scale, shares, statOf, touching,
 } from './trips'
 
@@ -66,11 +66,13 @@ export const unitOf = (S) => (S.freight ? 'przejazdów w badaniu' : 'podróży/d
 /** The panel's statistic that the map is painted by, where its dimension exists. */
 export const statIn = (S, t) => {
   const d = S.D.find((q) => q.key === t.stat?.dim) || S.D[0]
-  return { d, opts: (t.stat?.opts || []).filter((o) => o < d.options.length) }
+  const opts = (t.stat?.opts || []).filter((o) => o < d.options.length)
+  // a number is averaged, unless some of its ranges are picked
+  return { d, opts, mean: opts.length ? null : numberOf(S, d.key) }
 }
 // A trip within one zone is 0 km long, and zones outside the city are large.
 export const KM_NOTE = 'podróż w obrębie rejonu ma długość 0, więc w dużych rejonach poza centrum krótkich jest za dużo'
-export const statText = ({ d, opts }) => (opts.length ? `${d.label}: ${opts.map((o) => d.options[o].label).join(' + ')}` : `${d.label} — najczęściej`)
+export const statText = ({ d, opts, mean }) => (mean ? `${d.label} — średnia` : opts.length ? `${d.label}: ${opts.map((o) => d.options[o].label).join(' + ')}` : `${d.label} — najczęściej`)
 
 /** What each place is painted by: a value, how it reads, its colour, and how
  *  much it rests on - a place with a handful of trips is painted too, only
@@ -80,18 +82,25 @@ export function painted({ S, t, sums, partner, idx, passed, zones, way }) {
   const P = PAINTS[t.paint]
   if (t.paint === 'stat') {
     const stat = statIn(S, t)
-    const got = statOf(perPlaceDim(S, partner ? idx : passed, t.level, way, stat.d, partner ? zones : null), stat.opts)
+    const by = perPlaceDim(S, partner ? idx : passed, t.level, way, stat.d, partner ? zones : null)
+    const got = statOf(by, stat.opts)
+    if (stat.mean) {
+      const { unit, digits } = stat.mean
+      return withScale({ list, P, value: by.mean, n: got.map((g) => g.n), share: false, digits, figures: 3, unit, stat,
+        title: `${statText(stat)} (${unit})${stat.d.note ? ` (${stat.d.note})` : ''}`,
+        text: (x) => (x == null ? '—' : `${fixed(x, digits)}`) })
+    }
     const value = got.map((g) => g.v)
     const kinds = !stat.opts.length
-    const colors = colorsOf(stat.d, isOrdered(stat.d.key))
+    const colors = (dark) => colorsOf(stat.d, isOrdered(stat.d.key), dark)
     const name = (o) => stat.d.options[o].label
     const base = { list, P, value, n: got.map((g) => g.n), share: true, digits: 0, unit: kinds ? '' : 'podróży', stat,
       title: statText(stat) + (stat.d.note ? ` (${stat.d.note})` : '') }
     if (kinds) {
       // the commonest of several, paler the less it leads
       return { ...base, text: pctText, textOf: (k) => (got[k].v == null ? '—' : `${name(got[k].best)} ${pctText(got[k].v)}`),
-        colorOf: () => (k) => colors[got[k].best], lead: (k) => Math.min(1, 0.35 + got[k].v),
-        legend: () => stat.d.options.map((o, q) => ({ color: colors[q], label: o.label })).filter((_, q) => got.some((g) => g.best === q)) }
+        colorOf: (dark) => { const c = colors(dark); return (k) => c[got[k].best] }, lead: (k) => Math.min(1, 0.35 + got[k].v),
+        legend: (dark) => stat.d.options.map((o, q) => ({ color: colors(dark)[q], label: o.label })).filter((_, q) => got.some((g) => g.best === q)) }
     }
     return withScale({ ...base, text: pctText })
   }
@@ -121,7 +130,7 @@ export function painted({ S, t, sums, partner, idx, passed, zones, way }) {
 
 /** The colours and the legend of values on a scale. */
 function withScale(p) {
-  const of = (dark) => scale(breaks(p.value, p.share), dark)
+  const of = (dark) => scale(breaks(p.value, p.share, p.figures), dark)
   const f = (x) => (p.share ? `${Math.round(100 * x)}%` : p.digits ? fixed(x, p.digits) : fmt(x))
   return { ...p, textOf: (k) => p.text(p.value[k]), lead: () => 1,
     colorOf: (dark) => { const sc = of(dark); return (k) => sc.color(p.value[k]) },
@@ -335,9 +344,9 @@ export function tripsLegend({ x, dark }) {
     { title: partner && !p0.stat ? whose : p0.title },
     ...(partner ? [{ note: p0.stat ? whose : p0.unit }] : []),
     ...(!partner && !P.fixed && !S.freight ? [{ note: x.way === 'home' ? 'mieszkańców obszaru: z domu i do domu' : 'wszystkie, także przyjezdnych' }] : []),
-    ...p0.legend(dark),
+    ...(p0.stat?.opts.length === p0.stat?.d.options.length && p0.stat ? [{ note: '(!) wybrano wszystkie odpowiedzi — wszędzie 100%' }] : p0.legend(dark)),
     ...(p0.stat?.d.key === 'km' ? [{ note: KM_NOTE }] : []),
-    ...(p0.stat && !p0.stat.opts.length ? [{ note: 'kolor = najczęstsza odpowiedź, bledszy = mniejsza przewaga' }] : []),
+    ...(p0.stat && !p0.stat.opts.length && !p0.stat.mean ? [{ note: 'kolor = najczęstsza odpowiedź, bledszy = mniejsza przewaga' }] : []),
     ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek, kropka = dokąd; kółko = podróże w obrębie' }] : []),
     { note: `blade i (!) = mniej niż ${THIN} podróży w próbie` },
   ]
@@ -363,14 +372,16 @@ function FilterField({ S, d, t, setT, base }) {
   )
 }
 
-/** Which part of a statistic the map shows: the commonest option, or a share. */
+/** Which part of a statistic the map shows: the average of a number or the
+ *  commonest option, or a share. */
 export function StatChips({ S, t, setT }) {
   const { d, opts } = statIn(S, t)
+  const number = numberOf(S, d.key)
   const set = (next) => setT({ ...t, paint: 'stat', show: 'areas', stat: { dim: d.key, opts: next } })
   const colors = colorsOf(d, isOrdered(d.key))
   return (
     <Chips tight small label="Co na mapie" onPick={(k) => set(k === 'top' ? [] : opts.includes(+k) ? opts.filter((o) => o !== +k) : [...opts, +k].sort((a, b) => a - b))}
-      items={[{ key: 'top', label: 'najczęstsze', on: !opts.length, title: 'kolor = najczęstsza opcja w obszarze' },
+      items={[{ key: 'top', label: number ? 'średnia' : 'najczęstsze', on: !opts.length, title: number ? 'kolor = średnia w obszarze' : 'kolor = najczęstsza opcja w obszarze' },
         ...d.options.map((o, i) => ({ key: String(i), label: `udział: ${o.label}`, on: opts.includes(i), color: colors[i] }))]} />
   )
 }

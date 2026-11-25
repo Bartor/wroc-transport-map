@@ -25,11 +25,23 @@ export function shareOf(row, opts, raw = false) {
 
 /** Numbers have a mean: what is shown when no option is picked. */
 export const onMean = (q, opts) => !!q.number && !opts.length
+/** What the mean is of, and how many decimals it bears. */
+export const meanLabel = (q) => q.meanLabel || `średnia liczba ${q.unit}`
+export const meanDigits = (q) => q.digits ?? 2
 export const meanOf = (row) => (row?.[5] == null ? null : row[5] / 1000)
 /** Per thousand people in those households. */
 export const perPeopleOf = (row) => (row?.[6] == null ? null : row[6])
+/** Options can all be taken off, on the way to others, or all put on: then the
+ *  map says nothing, and the legend says so. */
+export const isNone = (q, opts) => !q.number && !opts.length
+export const isWhole = (q, opts) => !q.multi && opts.length === q.options.length
+export const pickWarning = (q, opts) => (isNone(q, opts) ? '(!) nie wybrano żadnej odpowiedzi'
+  : isWhole(q, opts) ? '(!) wybrano wszystkie odpowiedzi — wszędzie 100%' : null)
+/** An option put on or taken off; of several answers the map shows one. */
+export const togglePick = (q, opts, o) => (opts.includes(o) ? opts.filter((y) => y !== o)
+  : q.multi ? [o] : [...opts, o].sort((s, t) => s - t))
 /** What is shown of a row: a mean, or a share of the options. */
-export const valueOf = (q, row, opts, raw) => (onMean(q, opts) ? meanOf(row) : shareOf(row, opts, raw))
+export const valueOf = (q, row, opts, raw) => (onMean(q, opts) ? meanOf(row) : isNone(q, opts) ? null : shareOf(row, opts, raw))
 
 /** How alike answers are between interviewers, and between rounds. */
 function rhoOf(q, opts) {
@@ -44,7 +56,7 @@ function rhoOf(q, opts) {
  * interviewer taken off, all but what he shares with the place.
  */
 export function marginOf(q, row, opts, raw = false) {
-  if (!row || row[0] < 2) return null
+  if (!row || row[0] < 2 || isNone(q, opts)) return null
   if (onMean(q, opts)) {
     const [byAsker, byRound] = q.rhoMean
     return 1.96 * q.sd * Math.sqrt((1 + byAsker * (row[1] - 1) + byRound * (row[2] - 1)) / row[0])
@@ -163,30 +175,32 @@ export const sentiment = (q, opts) => {
 }
 /** Opinions on a change are for and against; the rest is better and worse. */
 export const isOpinion = (q) => ['tram', 'bike', 'cars'].includes(q.key)
-export function sentimentNote(q, opts) {
+export function sentimentNote(q, opts, dark = true) {
   const s = sentiment(q, opts)
-  if (onMean(q, opts)) return 'fioletowy = więcej niż średnio, niebieski = mniej'
-  if (!s) return 'fioletowy = częściej niż średnio, niebieski = rzadziej'
+  if (!s) return `${dark ? 'jaśniejszy' : 'ciemniejszy'} = ${onMean(q, opts) ? 'więcej' : 'częściej'}`
   return isOpinion(q) ? 'zielony = większe poparcie zmiany niż średnio, pomarańczowy = mniejsze'
     : 'zielony = lepiej niż średnio, pomarańczowy = gorzej'
 }
 
-// From low to high, through grey at the city's own share.
+// From low to high, through grey at the city's own share. What is neither good
+// nor bad is one hue, lighter or darker: two would read as a verdict.
 const WORSE = [[214, 84, 28], [239, 163, 100]]
 const BETTER = [[124, 201, 181], [31, 161, 135]]
 const GREY = [120, 126, 138]
 const DIV = {
   1: [...WORSE, GREY, ...BETTER],
   [-1]: [...[...BETTER].reverse(), GREY, ...[...WORSE].reverse()],
-  0: [[46, 104, 173], [118, 160, 205], GREY, [190, 140, 205], [150, 72, 178]],
 }
+const PLAIN = [[24, 62, 110], [33, 98, 170], [52, 134, 218], [104, 178, 248], [178, 218, 255]]
+const PLAIN_LIGHT = [...PLAIN].reverse()
 /** The colour of an answer itself, in bars. */
-export const SENT_COLOR = { 1: '#1fa187', [-1]: '#d6541c', 0: '#9a62bd' }
+export const SENT_COLOR = { 1: '#1fa187', [-1]: '#d6541c', 0: '#3f8bd0' }
 const mix = (x, y, t) => x.map((v, i) => Math.round(v + (y[i] - v) * t))
 
-/** Colour of a share against the city's own; `span` is a whole half of it. */
-export function diverging(v, mid, span, sent = -1) {
-  const ramp = DIV[sent]
+/** Colour of a share against the city's own; `span` is a whole half of it. On
+ *  a dark ground light means more. */
+export function diverging(v, mid, span, sent = -1, dark = true) {
+  const ramp = DIV[sent] || (dark ? PLAIN : PLAIN_LIGHT)
   const t = Math.max(0, Math.min(1, (v - mid) / span / 2 + 0.5)) * (ramp.length - 1)
   const i = Math.min(ramp.length - 2, Math.floor(t))
   return mix(ramp[i], ramp[i + 1], t - i)
@@ -206,7 +220,7 @@ const pl = (x) => (x == null ? '' : String(Math.round(x * 100) / 100).replace('.
 export function answersTable(q, groups, group, places, level, raw) {
   const g = groups.find((x) => x.key === group)?.label
   return [
-    ['obszar', 'grupa', 'odpowiedzi w próbie', ...(q.number ? [`średnia liczba ${q.unit}`, ...(q.per ? [q.per] : [])] : []), ...q.options.map((o) => `% ${o}`)],
+    ['obszar', 'grupa', 'odpowiedzi w próbie', ...(q.number ? [meanLabel(q), ...(q.per ? [q.per] : [])] : []), ...q.options.map((o) => `% ${o}`)],
     ...places.map((p) => [p, rowAt(q, group, level, p.i)]).filter(([, r]) => r)
       .map(([p, r]) => [p.name, g, r[0], ...(q.number ? [pl(meanOf(r)), ...(q.per ? [perPeopleOf(r)] : [])] : []), ...optionShares(q, r, raw).map((o) => Math.round(1000 * o.share) / 10)]),
   ]

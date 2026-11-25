@@ -299,7 +299,7 @@ export default function App() {
     if (view === 'answers' && askX) {
       return {
         controls: <AnswersControls x={askX} setA={setAsk} />,
-        map: <AnswersMap x={askX} onPick={pickAsk} />, legend: answersLegend({ x: askX }),
+        map: <AnswersMap x={askX} onPick={pickAsk} dark={dark} />, legend: answersLegend({ x: askX, dark }),
         panel: <AnswersPanel x={askX} setA={setAsk} onClose={shut} loadAll={loadAnswers} />,
       }
     }

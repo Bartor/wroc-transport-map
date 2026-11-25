@@ -15,6 +15,7 @@ the traits trips are filtered by. Answers are sums over at least MIN_N people.
 import collections, json, math, os, re, sys, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ages
 import diary
 import geocode
 import places
@@ -398,9 +399,10 @@ def stage_trips(d, zones, outside, spots, ends):
             SEXES.index(p["sex"]) if p["sex"] in SEXES else 2,
             SCHOOLS.index(p["school"]) if p["school"] in SCHOOLS else -1,
             int(p["smallKids"] == "są"), int(not str(p["building"]).startswith("wielo")),
+            round(age_of(p)[0], 1),
         ))
     cols = columns(rows, ["f", "t", "m", "a0", "a1", "h", "d", "km", "o", "pk", "x", "ag", "jb",
-                          "hc", "ps", "lc", "wr", "y", "sf", "w", "pf", "pt", "p", "q", "hs", "sx", "ed", "kd", "bd"])
+                          "hc", "ps", "lc", "wr", "y", "sf", "w", "pf", "pt", "p", "q", "hs", "sx", "ed", "kd", "bd", "ay"])
     write("trips.json", {
         "n": len(rows), "modes": MODES, "acts": ACTS, "park": PARK, "why": WHY, "ages": AGES,
         "jobs": JOBS, "cols": cols,
@@ -451,6 +453,10 @@ SCALE_SHORT = ["bardzo dobry", "raczej dobry", "ani dobry, ani zły", "raczej z�
 GRADE = ["bardzo dobrze", "raczej dobrze", "ani dobrze, ani źle", "raczej źle", "bardzo źle",
          "nie mam zadania"]
 GRADE_SHORT = [*GRADE[:5], "nie mam zdania"]
+
+
+def age_of(p):
+    return ages.of(p["age"], p["sex"], "wro" if p["area"] == "Wrocław" else "out")
 
 
 def questions(d):
@@ -546,11 +552,16 @@ def questions(d):
         if q["key"] in ("kids0", "build0"):
             q["home"] = 1
     G = "Kim są badani"
-    one("age0", G, "Wiek", None,
-        ["6-15 lat", "16-19 lat", "20-24 lata", "25-44 lata", "45-60 lat (K) i 45-65 lat (M)",
-         "pow. 60 lat (K) i pow. 65 lat (M)"],
+    bands = list(ages.BANDS)
+    # asked as a band: everyone stands for the average of theirs
+    add("age0", G, "Wiek",
         ["6–15", "16–19", "20–24", "25–44", "45–60 (K) / 45–65 (M)", "ponad 60 (K) / 65 (M)"],
-        get=lambda p: p["age"])
+        lambda p: [bands.index(p["age"])], num=lambda p: age_of(p)[0], spread=lambda p: age_of(p)[1],
+        unit="lat", digits=1, meanLabel="średni wiek (lat)",
+        note="Średni wiek to szacunek: pytano tylko o przedział, a średnią każdego przedziału bierzemy "
+             "z wieku i płci wszystkich mieszkańców (GUS, 31.12.2023). Dotyczy osób od 6 lat. Według GUS "
+             "wrocławianie od 6 lat mają średnio %s roku; próba z wagami jest młodsza."
+             % ("%.1f" % ages.of_all("wro")).replace(".", ","))
     one("sex0", G, "Płeć", None, ["kobieta", "mężczyzna", "inne"], get=lambda p: p["sex"])
     one("school0", G, "Wykształcenie", None,
         ["uczeń w szkole podstawowej", "podstawowe", "zawodowe", "średnie", "wyższe"],
@@ -732,8 +743,11 @@ def stage_answers(d, zones):
         more = {}
         if number is not None:
             y = number[idx]
-            more = {"sd": round(float(y.std()), 3), "rhoMean": [round(icc(y, ai), 3), round(icc(y, wi), 3)]}
-        out.append({**{x: v for x, v in q.items() if x not in ("f", "num")}, "number": int(number is not None),
+            var = float(y.var())
+            if q.get("spread"):
+                var += float(np.mean([q["spread"](P[i]) for i in idx]))
+            more = {"sd": round(var ** 0.5, 3), "rhoMean": [round(icc(y, ai), 3), round(icc(y, wi), 3)]}
+        out.append({**{x: v for x, v in q.items() if x not in ("f", "num", "spread")}, "number": int(number is not None),
                     **more, "rho": rho[:k], "rhoGood": rho[k] if len(rho) > k else None,
                     "groups": list(tabs)})
         # the figures of each question apart: they are fetched as it is opened

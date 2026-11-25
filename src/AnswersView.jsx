@@ -11,7 +11,7 @@ import { FEW_ANSWERS, Small } from './Small'
 import Stack, { Bar, KINDS, ORDERED, SCALE } from './Stack'
 import { answersCard, answersName, draw, everythingTable, viewTable } from './surveyCards'
 import {
-  answersTable, meanOf, onMean, perPeopleOf, valueOf, clampOpts, diverging, fullName, marginOf, optionShares, rgb, rowAt, sentiment, sentimentNote, sentimentOf,
+  answersTable, meanDigits, meanLabel, meanOf, onMean, perPeopleOf, valueOf, clampOpts, diverging, isNone, isWhole, pickWarning, togglePick, fullName, marginOf, optionShares, rgb, rowAt, sentiment, sentimentNote, sentimentOf,
   SENT_COLOR, shareOf, spanOf, startOpts, surface, valuesOf,
 } from './answers'
 
@@ -42,15 +42,15 @@ export function useAnswers(A, Z, a0, tab) {
   }, [q, group, opts, a.level, a.raw, places])
   const span = useMemo(() => spanOf(vals, mid), [vals, mid])
   const heat = useMemo(() => (q && Z && a.level === 'h'
-    ? surface(q, group, opts, Z.zones, { km: a.km, box: BOX, raw: a.raw }) : null), [q, group, opts, Z, a.level, a.km, a.raw])
+    && !isNone(q, opts) ? surface(q, group, opts, Z.zones, { km: a.km, box: BOX, raw: a.raw }) : null), [q, group, opts, Z, a.level, a.km, a.raw])
   const sent = q ? sentiment(q, opts) : 0
   return q && Z ? { A, Z, a, q, group, opts, city, mid, vals, span, heat, sent } : null
 }
 
 /** Colours of a question's answers: good to bad, or kinds of things. */
 export const optColors = (q) => q.options.map((_, i) => {
-  // a number runs from light to dark
-  if (q.number || ['age0', 'school0'].includes(q.key)) return ORDERED[Math.round((i * (ORDERED.length - 1)) / Math.max(1, q.options.length - 1))]
+  // a number runs from dark to light
+  if (q.number || q.key === 'school0') return ORDERED[Math.round((i * (ORDERED.length - 1)) / Math.max(1, q.options.length - 1))]
   if (q.multi) return SENT_COLOR[sentimentOf(q, i)]
   // modes have their colours everywhere
   if (q.key === 'usual') return ['#e4572e', '#3987e5', '#b5179e', '#0ca30c'][i]
@@ -65,24 +65,24 @@ export const optColors = (q) => q.options.map((_, i) => {
 })
 const mixHex = (a, b, t) => `#${[1, 3, 5].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t).toString(16).padStart(2, '0')).join('')}`
 
-const optText = (q, opts) => (onMean(q, opts) ? `średnia liczba ${q.unit}` : opts.map((o) => q.options[o]).join(' + '))
+const optText = (q, opts) => (onMean(q, opts) ? meanLabel(q) : isNone(q, opts) ? 'nie wybrano odpowiedzi' : isWhole(q, opts) ? 'wszystkie odpowiedzi' : opts.map((o) => q.options[o]).join(' + '))
 /** A value as the question has it, and its margin. */
-const valText = (q, opts, x) => (x == null ? '—' : onMean(q, opts) ? fixed(x, 2) : pctText(x))
-const marginText = (q, opts, m) => (m == null ? '' : onMean(q, opts) ? `±${fixed(m, 2)}` : `±${Math.round(100 * m)} p.p.`)
+const valText = (q, opts, x) => (x == null ? '—' : onMean(q, opts) ? fixed(x, meanDigits(q)) : pctText(x))
+const marginText = (q, opts, m) => (m == null ? '' : onMean(q, opts) ? `±${fixed(m, meanDigits(q))}` : `±${Math.round(100 * m)} p.p.`)
 const enough = (a) => ENOUGH[a.level === 'd' ? 'd' : 'z']
 
-export function AnswersMap({ x, onPick }) {
+export function AnswersMap({ x, onPick, dark }) {
   const { a, q, opts, mid, span, vals, heat, sent } = x
   const picked = useMemo(() => new Set(a.place ? [a.place] : []), [a.place])
   const items = useMemo(() => vals.map((v) => ({
-    ...v, color: v.v == null ? null : rgb(diverging(v.v, mid, span, sent)),
+    ...v, color: v.v == null ? null : rgb(diverging(v.v, mid, span, sent, dark)),
     alpha: v.v == null ? null : (0.12 + 0.5 * Math.min(1, v.n / enough(a))) * (Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw) ? 0.5 : 1),
     // a difference the sample cannot tell from none
     faint: v.v != null && Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw),
-  })), [vals, a, mid, span, sent, q, opts])
+  })), [vals, a, mid, span, sent, q, opts, dark])
   return (
     <>
-      {heat && <HeatImage surface={heat} mid={mid} span={span} sent={sent} />}
+      {heat && <HeatImage surface={heat} mid={mid} span={span} sent={sent} dark={dark} />}
       <ZoneLayer items={items} picked={picked} onPick={onPick} quiet={!!heat} tip={({ p, row, v, n }) => (
         <MapTooltip sticky>
           <b>{p.name}</b>{p.level === 'z' && <TipNote> · {p.district}</TipNote>}<br />
@@ -98,16 +98,18 @@ export function AnswersMap({ x, onPick }) {
   )
 }
 
-export function answersLegend({ x }) {
+export function answersLegend({ x, dark = true }) {
   const { a, q, opts, mid, span, sent } = x
+  const warning = pickWarning(q, opts)
+  if (warning) return [{ title: fullName(q) }, { note: warning }, { note: 'wybierz odpowiedzi z listy albo z wykresu' }]
   return [
     { title: fullName(q) },
     { note: optText(q, opts) },
     ...[-1, -0.5, 0, 0.5, 1].map((t) => ({
-      color: rgb(diverging(mid + t * span, mid, span, sent)),
+      color: rgb(diverging(mid + t * span, mid, span, sent, dark)),
       label: t === 0 ? `${valText(q, opts, mid)} — średnia Wrocławia` : `${valText(q, opts, Math.max(0, onMean(q, opts) ? mid + t * span : Math.min(1, mid + t * span)))}${Math.abs(t) === 1 ? (t < 0 ? ' i mniej' : ' i więcej') : ''}`,
     })),
-    { note: sentimentNote(q, opts) },
+    { note: sentimentNote(q, opts, dark) },
     { note: a.level === 'h' ? `wygładzone w promieniu ok. ${String(a.km).replace('.', ',')} km; blade = mało odpowiedzi`
       : `blade = mało odpowiedzi lub różnica w granicach błędu; (!) = poniżej ${FEW_ANSWERS}` },
   ]
@@ -117,7 +119,7 @@ export function AnswersControls({ x, setA }) {
   const { A, a, q, group, opts } = x
   const set = (o) => setA({ ...a, ...o })
   const groups = [...new Set(A.questions.map((y) => y.group))]
-  const toggle = (o) => set({ opts: q.multi ? [o] : opts.includes(o) ? (opts.length > 1 || q.number ? opts.filter((y) => y !== o) : opts) : [...opts, o].sort((s, t) => s - t) })
+  const toggle = (o) => set({ opts: togglePick(q, opts, o) })
   const cell = (r) => (
     <Field key={r} label={r}>
       <Chips tight small label={r} onPick={(k) => set({ q: k, opts: null })}
@@ -131,8 +133,8 @@ export function AnswersControls({ x, setA }) {
           <p>
             Odpowiedzi z badania ankietowego KBR 2024, według miejsca zamieszkania. Kolor
             mówi, czy odpowiedź jest tam częstsza niż średnio we Wrocławiu i co to znaczy: zielony — lepiej albo
-            większe poparcie zmiany, pomarańczowy — gorzej albo mniejsze; tam, gdzie odpowiedź nie jest dobra ani
-            zła, fioletowy to częściej, a niebieski rzadziej.
+            większe poparcie zmiany, pomarańczowy — gorzej albo mniejsze. Fakty i liczby, jak wiek, nie są dobre ani złe: mają
+            jeden kolor, jaśniejszy tam, gdzie więcej (na jasnym podkładzie — ciemniejszy).
           </p>
           <p>
             Nikogo nie pytano, czy zrezygnuje z samochodu. O oceny i utrudnienia pytano tylko osoby, które
@@ -146,6 +148,7 @@ export function AnswersControls({ x, setA }) {
       <Panel title="Odpowiedź na mapie">
         <Chips tight small label="Odpowiedzi" onPick={(k) => (k === 'mean' ? set({ opts: [] }) : toggle(+k))}
           items={[...(q.number ? [{ key: 'mean', label: 'średnia', on: !opts.length }] : []), ...q.options.map((o, i) => ({ key: String(i), label: o, on: opts.includes(i), color: optColors(q)[i] }))]} />
+        {pickWarning(q, opts) && <Warn>{pickWarning(q, opts)}</Warn>}
         {q.multi ? <Hint>Można było wskazać kilka; mapa pokazuje jedną.</Hint>
           : <Hint>{q.number ? 'Średnia albo udział zaznaczonych odpowiedzi.' : 'Zaznaczone odpowiedzi są dodawane.'}</Hint>}
         <Field label="Kto odpowiadał">
@@ -163,6 +166,12 @@ export function AnswersControls({ x, setA }) {
               Odpowiedzi różnią się między ankieterami kilka razy bardziej niż między osiedlami — w pytaniu
               o wjazd do centrum sam numer ankietera wyjaśnia 38% różnic, a osiedle ponad to ok. 1%. Każdy z 42
               ankieterów pracował w kilku osiedlach Wrocławia, więc surowa mapa opinii pokazuje w dużej mierze, kto pytał.
+            </p>
+            <p>
+              To nie skutek tego, że ankieter pracował w jednej okolicy: w tym samym rejonie odpowiedzi osób pytanych
+              przez różnych ankieterów prawie się nie zgadzają (korelacja ok. 1%), a pytanych przez tego samego —
+              także ponad 4 km od siebie — zgadzają się wyraźnie (8–48%). Jeden ankieter zapisał „wszystkie auta do
+              centrum” u 98% z 492 osób; inni w tych samych rejonach u 51%.
             </p>
             <p>
               Korekta odejmuje od odpowiedzi to, o ile u danego ankietera różnią się one od reszty, z poprawką
@@ -196,10 +205,11 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
     return r && { g, r, v: valueOf(q, r, opts, a.raw) }
   }).filter(Boolean)
   const colors = optColors(q)
-  const toggle = (o) => set({ opts: opts.includes(o) ? (opts.length > 1 || q.number ? opts.filter((y) => y !== o) : opts) : [...opts, o].sort((s, t) => s - t) })
+  const toggle = (o) => set({ opts: togglePick(q, opts, o) })
+  const warning = pickWarning(q, opts)
   const around = !p && rowAt(q, group, 'a', 'out')
   const name = answersName(x, p)
-  const spec = () => answersCard({ x, p, row, by, gname, ranked, colors, optLabel: optText(q, opts), text: (y) => valText(q, opts, y), mtext: (r) => mg(r), legend: answersLegend({ x }).filter((l) => l.color) })
+  const spec = () => answersCard({ x, p, row, by, gname, ranked, colors, optLabel: optText(q, opts), text: (y) => valText(q, opts, y), mtext: (r) => mg(r), legend: answersLegend({ x, dark: false }).filter((l) => l.color) })
   return (
     <DetailsPanel pill={p ? (p.level === 'z' ? `rejon ${p.id}` : p.city ? 'osiedle' : 'gmina') : 'ankieta'} color="#d6541c"
       title={fullName(q)} subtitle={`${p ? p.name : 'Mieszkańcy Wrocławia'} · ${gname}`} onClose={onClose}
@@ -207,17 +217,18 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
       <Facts>
         <Fact label={optText(q, opts).length > 34 ? 'Wybrana odpowiedź' : optText(q, opts)} tone="now">{valText(q, opts, v)}{row && v != null ? ` ${mg(row)}` : ''}</Fact>
         <Fact label={q.home ? 'Gospodarstwa w próbie' : 'Odpowiedzi w próbie'}>{row ? <>{fmt(row[0])}<Small n={row[0]} few={FEW_ANSWERS} /></> : '—'}</Fact>
-        {!!q.number && !onMean(q, opts) && <Fact label={`Średnia liczba ${q.unit}`}>{fixed(meanOf(row), 2)}</Fact>}
+        {!!q.number && !onMean(q, opts) && <Fact label={meanLabel(q)[0].toUpperCase() + meanLabel(q).slice(1)}>{fixed(meanOf(row), meanDigits(q))}</Fact>}
         {perPeopleOf(row) != null && <Fact label={q.per[0].toUpperCase() + q.per.slice(1)}>{fmt(perPeopleOf(row))}{p ? ` (Wrocław ${fmt(perPeopleOf(city))})` : ''}</Fact>}
         {p && <Fact label="Wrocław">{valText(q, opts, mid)}</Fact>}
         {around && <Fact label="Gminy wokół">{valText(q, opts, valueOf(q, around, opts))}</Fact>}
       </Facts>
+      {warning && <Warn>{warning}</Warn>}
       {optText(q, opts).length > 34 && <Hint>„{optText(q, opts)}”</Hint>}
       {row && row[0] < 30 && <Warn>Tylko {row[0]} odpowiedzi — to za mało, by oceniać ten obszar osobno.</Warn>}
       <Block>
         <h4>Wszystkie odpowiedzi{q.multi ? ' (można było wskazać kilka)' : ''}</h4>
         {!row ? <Hint>Za mało odpowiedzi.</Hint> : q.multi ? (
-          <Bars whole onPick={(r) => set({ opts: [+r.key] })}
+          <Bars whole onPick={(r) => toggle(+r.key)}
             rows={optionShares(q, row, a.raw).sort((s, t) => t.share - s.share).map((o) => ({
               key: String(o.i), label: o.label, share: o.share, color: colors[o.i], on: opts.includes(o.i), dim: !opts.includes(o.i),
               note: p && city ? `(Wrocław ${pctText(shareOf(city, [o.i]))})` : null,
@@ -231,7 +242,7 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
           </>
         )}
       </Block>
-      {by.length > 1 && (
+      {by.length > 1 && !(q.multi && isNone(q, opts)) && (
         <Block>
           <h4>{q.multi ? `${optText(q, opts)} — kto tak odpowiada` : q.opinion ? 'Kto jak odpowiada' : 'Według grup'}</h4>
           {q.multi ? (
@@ -250,7 +261,7 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
         </Block>
       )}
       <StatBlock title={`Wyraźnie inaczej niż Wrocław — ${level === 'd' ? 'osiedla i gminy' : 'rejony'}`}>
-        {!ranked.length ? <Hint>Żaden obszar nie różni się od średniej bardziej, niż wynosi błąd.</Hint> : (
+        {warning ? <Hint>Wybierz odpowiedzi, aby porównać obszary.</Hint> : !ranked.length ? <Hint>Żaden obszar nie różni się od średniej bardziej, niż wynosi błąd.</Hint> : (
           <RankList items={(ranked.length > 14 ? [...ranked.slice(0, 7), ...ranked.slice(-7)] : ranked).map((y) => ({
             key: y.p.key, title: y.p.name, sub: `${mg(y.row)} · ${y.n} ${q.home ? 'gospodarstw' : 'odpowiedzi'}`, value: <>{valText(q, opts, y.v)}<Small n={y.n} few={FEW_ANSWERS} /></>,
             on: y.p.key === a.place, onPick: () => set({ place: y.p.key === a.place ? null : y.p.key }),
@@ -269,6 +280,7 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
       ))}>Pobierz wszystkie pytania — osiedla (CSV)</LinkButton>
       <Notes>
         <li>Udziały ważone wagami KBR. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera; różnice mniejsze niż on mogą być przypadkiem.</li>
+        {q.note && <li>{q.note}</li>}
         <li>Te same osoby pytały kierowców i niekierowców, więc różnice między grupami są pewniejsze niż same poziomy i niż różnice między osiedlami.</li>
         {!!q.home && <li>Liczone po gospodarstwach, ich wagami; grupa = gospodarstwa, w których jest choć jedna taka osoba.</li>}
         {p && !a.raw && !!q.opinion && <li>Wartości obszarów po korekcie o ankietera; poziom całego miasta bez niej.</li>}

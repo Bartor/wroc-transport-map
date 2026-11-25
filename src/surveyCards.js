@@ -1,7 +1,8 @@
 // Pictures of the survey views: what is asked or filtered, the map, the bars,
 // and the notes that have to travel with them.
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
-import { SENT_COLOR, diverging, fullName, marginOf, meanOf, optionShares, perPeopleOf, rgb, sentimentNote, shareOf, valueOf } from './answers'
+import { SENT_COLOR, diverging, fullName, marginOf, meanDigits, meanLabel, meanOf, optionShares, perPeopleOf, pickWarning, rgb, sentimentNote, shareOf, valueOf } from './answers'
+import { ORDERED } from './Stack'
 import { diffColor } from './closureColors'
 import { arc } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
@@ -45,6 +46,12 @@ export const barsBlock = ({ title, rows, color, whole }) => (ctx, y0, { W, PAD, 
   return y + 14
 }
 
+/** An order runs dark to light on the dark page, and the other way on paper. */
+const paper = (color) => {
+  const i = ORDERED.indexOf(color)
+  return i < 0 ? color : ORDERED[ORDERED.length - 1 - i]
+}
+
 /** Parts of a whole as one bar with a legend; several rows share the legend. */
 export const stackBlock = ({ title, parts, rows }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para }) => {
   let y = title ? para(ctx, title.toUpperCase(), PAD, y0, W - 2 * PAD, 14, FAINT, 600) + 8 : y0
@@ -56,12 +63,12 @@ export const stackBlock = ({ title, parts, rows }) => (ctx, y0, { W, PAD, INK, D
     for (const p of some) {
       const w = (room * p.share) / sum
       ctx.globalAlpha = p.on === false ? 0.45 : 1
-      ctx.fillStyle = p.color
+      ctx.fillStyle = paper(p.color)
       ctx.fillRect(x, y, w, h)
       const text = pctText(p.share)
       ctx.font = font(14, 700)
       if (w > ctx.measureText(text).width + 8) {
-        ctx.fillStyle = dark(p.color) ? '#ffffff' : INK
+        ctx.fillStyle = dark(paper(p.color)) ? '#ffffff' : INK
         ctx.textAlign = 'center'
         ctx.textBaseline = 'middle'
         ctx.fillText(text, x + w / 2, y + h / 2 + 1)
@@ -81,7 +88,7 @@ export const stackBlock = ({ title, parts, rows }) => (ctx, y0, { W, PAD, INK, D
       ctx.font = font(14, p.on ? 700 : 400)
       const w = ctx.measureText(text).width + 34
       if (x + w > W - PAD + 14) { x = PAD; y += 24 }
-      ctx.fillStyle = p.color
+      ctx.fillStyle = paper(p.color)
       ctx.fillRect(x, y + 3, 13, 13)
       ctx.fillStyle = DIM
       ctx.fillText(text, x + 19, y + 10)
@@ -189,7 +196,7 @@ export const mapBlock = ({ areas, fit, circles = [], arcs = [], rings = [], heat
     const img = g.createImageData(cols, rows)
     for (let i = 0; i < v.length; i++) {
       if (Number.isNaN(v[i])) continue
-      img.data.set([...diverging(v[i], heat.mid, heat.span, heat.sent), Math.round(255 * Math.min(1, n[i] / 60) ** 0.8)], i * 4)
+      img.data.set([...diverging(v[i], heat.mid, heat.span, heat.sent, false), Math.round(255 * Math.min(1, n[i] / 60) ** 0.8)], i * 4)
     }
     g.putImageData(img, 0, 0)
     const [a, b] = f.at([box[2], box[1]])
@@ -354,28 +361,29 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend, optL
       ...(!q.multi ? [(ctx, y, k) => k.para(ctx, `${optLabel}: ${text(v)} ${mtext(row)}${perPeopleOf(row) != null ? ` · ${fmt(perPeopleOf(row))} ${q.per}` : ''}`, k.PAD, y, k.W - 2 * k.PAD, 21, '#c2410c', 700) + 18] : []),
       mapBlock({
         title: `${optLabel} — ${a.level === 'h' ? 'mapa wygładzona' : a.level === 'd' ? 'według osiedli' : 'według rejonów'}`,
-        fit: fitOf(places, picked), legend: [...legend, { note: sentimentNote(q, opts) }], heat: heat && { surface: heat, mid, span, sent }, border: cityBorder(places),
+        fit: fitOf(places, picked), legend: pickWarning(q, opts) ? [{ note: pickWarning(q, opts) }] : [...legend, { note: sentimentNote(q, opts, false) }], heat: heat && { surface: heat, mid, span, sent }, border: cityBorder(places),
         areas: vals.map((t) => ({
           rings: t.p.rings, on: picked.has(t.p.key), c: t.p.c,
-          color: t.v == null ? null : rgb(diverging(t.v, mid, span, sent)),
+          color: t.v == null ? null : rgb(diverging(t.v, mid, span, sent, false)),
           alpha: t.v == null ? null : (0.25 + 0.75 * Math.min(1, t.n / enough)) * (Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw) ? 0.5 : 1),
           faint: t.v != null && Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw),
           name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : text(t.v) + smallText(t.n, FEW_ANSWERS),
           sub: t.v == null ? null : `${mtext(t.row)} · n=${t.n}`, weight: t.n,
         })),
       }),
-      ...(by.length > 1 ? [q.multi ? barsBlock({ color: SENT_COLOR[sent], whole: true, title: `${optText(q, opts)} — kto tak odpowiada`,
+      ...(by.length > 1 && !(q.multi && !opts.length) ? [q.multi ? barsBlock({ color: SENT_COLOR[sent], whole: true, title: `${optText(q, opts)} — kto tak odpowiada`,
         rows: by.map(({ g, r, v: s }) => ({ label: g.label, share: s, note: `±${Math.round(100 * marginOf(q, r, opts, a.raw))} · n=${fmt(r[0])}` })) })
         : stackBlock({ title: q.opinion ? 'Kto jak odpowiada' : 'Według grup', rows: by.map(({ g, r, v: s }) => ({ label: g.label,
           note: `${optLabel} ${text(s)} ${mtext(r)} · n=${fmt(r[0])}`,
           parts: optionShares(q, r, a.raw).map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.length ? opts.includes(o.i) : undefined })) })) })] : []),
     ],
     notes: [
+      ...(q.note ? [q.note] : []),
       `(!) — mniej niż ${FEW_ANSWERS} odpowiedzi.`,
       'Udziały ważone. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera.',
       !q.opinion ? 'Blade pola: różnica od średniej w granicach błędu.' : a.raw ? 'Mapa bez korekty o ankietera: odpowiedzi różnią się między ankieterami bardziej niż między osiedlami.'
         : `Wartości obszarów skorygowane o ankietera. ${a.level === 'h' ? 'Blade miejsca: mało odpowiedzi.' : 'Blade pola: różnica od średniej w granicach błędu.'}`,
-      ...(a.level !== 'h' && !ranked.length ? ['Żaden obszar nie różni się od średniej bardziej, niż wynosi błąd.'] : []),
+      ...(a.level !== 'h' && !ranked.length && !pickWarning(q, opts) ? ['Żaden obszar nie różni się od średniej bardziej, niż wynosi błąd.'] : []),
       ...(q.multi ? ['Można było wskazać kilka odpowiedzi.'] : []),
     ],
     source: `Źródło: ${KBR}, badanie ankietowe w gospodarstwach domowych (zał. do Raportu II) — bip.um.wroc.pl. Granice: KBR, OpenStreetMap.`,
@@ -555,7 +563,7 @@ export function viewTable(q, groups, level, key, raw) {
   return [
     ['odpowiedź', ...cols.flatMap(({ g }) => [`${g.label} — %`, `${g.label} — ± p.p.`])],
     ...q.options.map((o, i) => [o, ...cols.flatMap(({ row }) => [pp(shareOf(row, [i], raw)), pp(marginOf(q, row, [i], raw))])]),
-    ...(q.number ? [[`średnia liczba ${q.unit}`, ...cols.flatMap(({ row }) => [String(Math.round(100 * meanOf(row)) / 100).replace('.', ','), ''])]] : []),
+    ...(q.number ? [[meanLabel(q), ...cols.flatMap(({ row }) => [String(Math.round(10 ** meanDigits(q) * meanOf(row)) / 10 ** meanDigits(q)).replace('.', ','), ''])]] : []),
     ...(q.per ? [[q.per, ...cols.flatMap(({ row }) => [perPeopleOf(row), ''])]] : []),
     ['odpowiedzi w próbie', ...cols.flatMap(({ row }) => [row[0], ''])],
   ]

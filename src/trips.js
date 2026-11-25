@@ -392,9 +392,13 @@ export function perPlaceDim(S, idx, level, way, dim, picked) {
   const w = new Float64Array(list.length * K)
   const n = new Int32Array(list.length)
   const z = picked && new Set(picked)
+  const num = NUMBERS[dim.key]?.[2]
+  const sum = num && new Float64Array(list.length)
+  const sw = num && new Float64Array(list.length)
   for (const i of idx) {
     const o = dim.of(c, i)
     if (o < 0) continue
+    const x = num ? num(c, i) : null
     const a = of[c.f[i]]
     const b = of[c.t[i]]
     let at
@@ -409,9 +413,10 @@ export function perPlaceDim(S, idx, level, way, dim, picked) {
       if (p < 0) continue
       w[p * K + o] += c.w[i]
       n[p] += 1
+      if (x != null) { sum[p] += c.w[i] * x; sw[p] += c.w[i] }
     }
   }
-  return { w, n, K }
+  return { w, n, K, mean: num && Array.from(sum, (v, p) => (sw[p] ? v / sw[p] : null)) }
 }
 
 /** Per place: the share of some options; or, with none, the commonest one and
@@ -570,15 +575,14 @@ const LIGHT = [...DARK].reverse()
 
 /** Breaks for a set of values: about as many places in each, rounded; shares
  *  to whole twentieths. */
-export function breaks(values, share) {
+export function breaks(values, share, figures = 2) {
   const v = values.filter((x) => x != null && (share || x > 0)).sort((a, b) => a - b)
   if (v.length < 6) return v.slice(1)
   const q = [0.2, 0.4, 0.6, 0.8, 0.93].map((p) => v[Math.floor(p * (v.length - 1))])
   const round = (x) => {
     if (share) return Math.round(x * 20) / 20
     if (x <= 0) return 0
-    const m = 10 ** Math.floor(Math.log10(x))
-    return (Math.round((x / m) * 10) * m) / 10
+    return Number(x.toPrecision(figures))
   }
   return [...new Set(q.map(round))]
 }
@@ -640,7 +644,11 @@ export function tripsTable(S, idx) {
 const NUMBERS = {
   km: ['km', 1, (c, i) => c.km[i]], min: ['min', 0, (c, i) => c.d[i]], in: ['os.', 2, (c, i) => c.o[i] || null],
   cars: ['auta', 2, (c, i) => c.hc[i]], size: ['os.', 1, (c, i) => c.hs[i]],
+  // by the average of the band of age (etl/ages.py)
+  age: ['lat', 1, (c, i) => c.ay?.[i] ?? null],
 }
+/** A dimension's average: its unit and decimals, where it is a number. */
+export const numberOf = (S, key) => (NUMBERS[key] && !S.freight ? { unit: NUMBERS[key][0], digits: NUMBERS[key][1] } : null)
 export function meanFor(S, idx, key) {
   const m = NUMBERS[key]
   if (!m || S.freight) return null
