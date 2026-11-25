@@ -18,6 +18,7 @@ import {
   speedsLegend, stationsLegend,
 } from './MoreViews'
 import { ASK0 } from './answers'
+import { readDays } from './days'
 import { changes } from './compare'
 import { PAINTS, TRIPS0, placeName, prepare, prepareFreight, readZones } from './trips'
 
@@ -131,7 +132,7 @@ export default function App() {
     loadFile(f).then((j) => setFiles((x) => ({ ...x, [f]: j })))
   }, [])
   useEffect(() => {
-    for (const f of [...(need || []), ...(view === 'trips' ? ['freight'] : [])]) fetchFile(f)
+    for (const f of [...(need || []), ...(view === 'trips' ? ['freight', 'places', 'days'] : [])]) fetchFile(f)
   }, [need, view, fetchFile])
 
   useEffect(() => {
@@ -217,7 +218,8 @@ export default function App() {
   const people0 = useMemo(() => (files.zones && files.trips ? prepare(files.zones, files.trips) : null), [files.zones, files.trips])
   const freight = useMemo(() => (files.zones && files.freight ? prepareFreight(files.zones, files.freight) : null), [files.zones, files.freight])
   const zones = useMemo(() => (files.zones ? readZones(files.zones) : null), [files.zones])
-  const tripsX = useTrips(view === 'trips' ? (trip.set === 'freight' ? freight : people0) : null, trip, hours)
+  const dayData = useMemo(() => (files.days ? readDays(files.days) : null), [files.days])
+  const tripsX = useTrips(view === 'trips' ? (trip.set === 'freight' ? freight : people0) : null, trip, hours, files.places?.spots, dayData)
   const askX = useAnswers(view === 'answers' ? files.answers : null, zones, ask)
   const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])
   const dark = BASEMAPS[basemap].dark
@@ -254,6 +256,7 @@ export default function App() {
     }
   }, [zones, view, trip.level, ask.level])
 
+  const wantChoice = useCallback(() => fetchFile('choice'), [fetchFile])
   const sel0 = ownId ? { id: ownId } : null
   const shut = () => { setOwnPanel(false); setOwnId(null) }
   /** A survey view's parts: in the sidebar, on the map, in the panel. */
@@ -261,8 +264,8 @@ export default function App() {
     if (view === 'trips' && tripsX) {
       return {
         controls: <TripsControls x={tripsX} setT={setTrip} hasFreight={!!freight}
-          choice={files.choice} onChoice={() => fetchFile('choice')} />,
-        map: <TripsMap x={tripsX} dark={dark} onPick={pickTrip} />, legend: tripsLegend({ x: tripsX, dark }),
+          choice={files.choice} onChoice={wantChoice} />,
+        map: <TripsMap x={tripsX} dark={dark} onPick={pickTrip} setT={setTrip} />, legend: tripsLegend({ x: tripsX, dark }),
         panel: <TripsPanel x={tripsX} setT={setTrip} period={period} onClose={shut} />,
       }
     }

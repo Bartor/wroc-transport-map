@@ -33,7 +33,12 @@ function readTrip(q) {
     way: ['any', 'from', 'to'].includes(q.get('way')) ? q.get('way') : undefined,
     per: ['abs', 'both', 'km2'].includes(q.get('per')) ? q.get('per') : undefined,
     picked: q.has('z') ? q.get('z').split('.').filter(Boolean) : undefined,
-    lines: q.get('ln') === '0' ? false : undefined,
+    show: ['flows', 'trips', 'spots', 'days'].includes(q.get('sh')) ? q.get('sh') : undefined,
+    names: q.get('nm') === '1' ? true : undefined,
+    top: +q.get('top') >= 10 && +q.get('top') <= 300 ? +q.get('top') : undefined,
+    rows: q.get('x') || undefined,
+    split: q.get('y') || undefined,
+    pattern: /^[0-5]+$/.test(q.get('day') || '') ? q.get('day') : undefined,
     filters: Object.keys(f).length ? f : undefined,
   })
 }
@@ -56,7 +61,12 @@ function putTrip(q, t) {
   if (t.way !== 'home') q.set('way', t.way)
   if (t.per !== 'pop') q.set('per', t.per)
   if (t.picked.length) q.set('z', t.picked.join('.'))
-  if (!t.lines) q.set('ln', '0')
+  if (t.show !== 'areas') q.set('sh', t.show)
+  if (t.names) q.set('nm', '1')
+  if (t.top !== 60) q.set('top', String(t.top))
+  if (t.rows !== 'km') q.set('x', t.rows)
+  if (t.split !== 'mode') q.set('y', t.split)
+  if (t.pattern) q.set('day', t.pattern)
   const f = Object.entries(t.filters).map(([k, v]) => `${k}:${v.join('.')}`)
   if (f.length) q.set('f', f.join(LIST))
 }

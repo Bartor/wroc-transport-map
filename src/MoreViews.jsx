@@ -54,7 +54,7 @@ export function ChangeControls({ rows, sel, onPick }) {
         <p>
           To pojedyncze dni, a między rundami otwarto m.in. aleję Wielkiej Wyspy, zmieniła się też praca
           zdalna i organizacja ruchu. Spadek w punkcie może oznaczać mniej ruchu albo ruch gdzie indziej —
-          obwodnica urosła o 22%.
+          na obwodnicy (tylko 3 miejsca) jest go o 22% więcej.
         </p>
         <p>
           W tekście raportu trzy największe spadki mają pomylone nazwy ulic; tu obowiązują numery punktów.

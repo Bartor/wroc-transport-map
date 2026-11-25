@@ -1,13 +1,18 @@
 // The trips of the household survey (and the freight one): what is filtered,
-// and what the map is painted with. The panel is apart, with the charts.
-import { useMemo } from 'react'
-import { Chips, Field, Hint, LinkButton, Panel, Select, Toggle, fixed, fmt, fmtEst } from '@bartor-net/ui-kit'
-import { MapTooltip, TipNote, TipRow } from '@bartor-net/ui-kit/map'
-import ScenarioPanel from './ScenarioPanel'
-import { FlowLines, ZoneLayer } from './ZoneLayer'
+// and what the map shows. The panel is apart, with the charts.
+import { memo, useMemo } from 'react'
 import {
-  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, describe, pairs, passing, perPartner, perOf, perPlace, placeName, scale,
-  shares, touching,
+  Chips, Field, Hint, LinkButton, Panel, Select, Slider, Toggle, fixed, fmt, fmtEst, labelBox, labelHtml, sqrtRadius,
+} from '@bartor-net/ui-kit'
+import { CircleLayer, MapLabels, MapTooltip, TipNote, TipRow } from '@bartor-net/ui-kit/map'
+import ScenarioPanel from './ScenarioPanel'
+import { Arcs, Rings, ZoneLayer } from './ZoneLayer'
+import { rng, scatter } from './arcs'
+import { DAY_MODES, daysOf } from './days'
+import { useHot } from './hot'
+import {
+  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, flowsOf, pairs, passing, perPartner,
+  perOf, perPlace, perSpot, perThousand, placeName, scale, shares, touching,
 } from './trips'
 
 export const pctText = (s) => (s == null ? '—' : s > 0 && s < 0.005 ? '<1%' : `${Math.round(100 * s)}%`)
@@ -19,8 +24,20 @@ export const WAY_TEXT = { home: 'podróże mieszkańców: z domu i do domu', any
 const wayIn = (S, t) => (S?.freight && t.way === 'home' ? 'any' : t.way)
 const perIn = (S, t) => (S.freight && t.per === 'pop' ? 'abs' : perOf(t.paint, t.per))
 
+// The ways of showing it. A freight run has no day and no spots.
+export const SHOW = {
+  areas: { label: 'Obszary', note: 'kolor obszaru = liczba lub udział' },
+  flows: { label: 'Przepływy', note: 'najczęstsze połączenia między obszarami' },
+  trips: { label: 'Pojedyncze podróże', note: 'każda podróż z próby osobno' },
+  spots: { label: 'Cele', note: 'miejsca, które odwiedziło co najmniej 5 badanych', people: true },
+  days: { label: 'Całe dni', note: 'łańcuchy podróży: dom → praca → zakupy → dom', people: true },
+}
+const showIn = (S, t) => (S?.freight && SHOW[t.show].people ? 'areas' : t.show)
+const MANY_TRIPS = 400
+const MANY_DAYS = 220
+
 /** Everything that follows from the settings, for the map and both panels. */
-export function useTrips(S, t, hours) {
+export function useTrips(S, t, hours, spots, days) {
   const passed = useMemo(() => (S ? passing(S, { filters: t.filters, hours }) : []), [S, t.filters, hours])
   const places = useMemo(
     () => (S ? t.picked.map((k) => S.levels[t.level].byKey.get(k)).filter(Boolean) : []),
@@ -28,6 +45,7 @@ export function useTrips(S, t, hours) {
   )
   const zones = useMemo(() => (places.length ? places.flatMap((p) => p.zones) : null), [places])
   const way = wayIn(S, t)
+  const show = showIn(S, t)
   const idx = useMemo(() => (S ? touching(S, passed, zones, way) : []), [S, passed, zones, way])
   const stats = useMemo(() => (S ? describe(S, idx) : null), [S, idx])
   const sums = useMemo(() => (S ? perPlace(S, passed, t.level, way) : null), [S, passed, t.level, way])
@@ -35,98 +53,228 @@ export function useTrips(S, t, hours) {
     () => (S && zones ? perPartner(S, idx, zones, t.level, way) : null),
     [S, idx, zones, t.level, way],
   )
-  return useMemo(() => S && { S, t, hours, way, passed, places, zones, idx, stats, sums, partner },
-    [S, t, hours, way, passed, places, zones, idx, stats, sums, partner])
+  // days go by district, whatever is drawn
+  const dayRows = useMemo(() => (days && S && !S.freight
+    ? daysOf(days, zones && new Set(zones.map((k) => S.Z.zones[k].d))) : null), [days, S, zones])
+  return useMemo(() => S && { S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows },
+    [S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows])
 }
 
 export const unitOf = (S) => (S.freight ? 'przejazdów w badaniu' : 'podróży/dobę')
 
-// One or two trips between two places are an accident of who was asked.
-const FEW_TRIPS = 3
-
-/** What each place is painted by: a value, and how it reads. */
+/** What each place is painted by: a value, how it reads, and how much it rests
+ *  on - a place with a handful of trips is painted too, only faintly. */
 export function painted({ S, t, sums, partner }) {
   const { list } = S.levels[t.level]
   const P = PAINTS[t.paint]
   const per = PER[perIn(S, t)]
-  // towards a picked place: of every thousand who live (or work) elsewhere
-  const k = partner && per.many ? 1000 : 1
-  const value = list.map((p, n) => {
-    const s = sums[n]
+  const mine = new Set(t.picked)
+  const plain = list.map((p, n) => {
     const d = per.of(p)
-    if (partner) return partner.n[n] >= FEW_TRIPS && d ? (k * partner.w[n]) / d : null
-    // a share, a mean or a rate of a handful of trips is noise
-    if (!P.fixed && (!P.count || per !== PER.abs) && s.n < THIN) return null
-    const x = P.v(p, s)
+    // the picked place's own trips are no match for what it sends elsewhere
+    if (partner) return partner.n[n] && d && !mine.has(p.key) ? partner.w[n] / d : null
+    if (!P.fixed && !sums[n].n) return null
+    const x = P.v(p, sums[n])
     return x == null || !P.count ? x : d ? x / d : null
   })
-  const digits = partner ? (k > 1 ? 1 : 0) : P.count ? per.digits || 0 : P.digits || 0
   const share = !partner && !!P.share
+  const counted = !!partner || !!P.count
+  // rates too small to read are per thousand
+  const k = counted && perThousand(plain, per) ? 1000 : 1
+  const value = k === 1 ? plain : plain.map((v) => (v == null ? null : v * k))
+  const n = list.map((p, i) => (partner ? partner.n[i] : P.fixed ? THIN : sums[i].n))
+  const digits = counted ? (per.many ? digitsFor(value) : 0) : P.digits || 0
   const noun = partner || !P.fixed ? (S.freight ? 'przejazdów' : 'podróży/dobę') : ''
-  const unit = partner || P.count ? [noun, k > 1 ? per.many : per.unit].filter(Boolean).join(' ') : P.unit || ''
-  const text = (v) => (v == null ? '—' : share ? pctText(v) : digits ? fixed(v, digits) : fmtEst(v))
-  return { list, P, value, share, digits, unit, text, title: P.count && per.unit ? `${P.label} ${per.unit}` : P.label }
+  const unit = counted ? [noun, k > 1 ? per.many : per.unit].filter(Boolean).join(' ') : P.unit || ''
+  const text = (x) => (x == null ? '—' : share ? pctText(x) : digits ? fixed(x, digits) : fmtEst(x))
+  return { list, P, value, n, share, digits, unit, text,
+    title: P.count && per.unit ? `${P.label} ${k > 1 ? per.many : per.unit}` : P.label }
 }
+const alphaOf = (n) => 0.14 + 0.5 * Math.min(1, n / THIN)
 
 // -------------------------------------------------------------------- the map
-export function TripsMap({ x, dark, onPick }) {
-  const { S, t, sums, partner, places } = x
+/** Where a trip's end is drawn: at its spot, or anywhere in its zone. */
+function endOf(S, spots, zone, spot, seed) {
+  if (spots && spot >= 0) return [spots[spot].lat, spots[spot].lon]
+  return zone < S.Z.count ? scatter(S.Z.zones[zone], seed) : null
+}
+
+/** An even handful of a list, the same every time. */
+function sample(list, k, seed = 7) {
+  if (list.length <= k) return list
+  const r = rng(seed)
+  const all = [...list]
+  for (let i = 0; i < k; i++) {
+    const j = i + Math.floor(r() * (all.length - i));
+    [all[i], all[j]] = [all[j], all[i]]
+  }
+  return all.slice(0, k)
+}
+
+/** The curves and rings of a view. */
+export function flowLines(x, hot = {}) {
+  const { S, t, partner, places, show, idx, spots } = x
+  const { list } = S.levels[t.level]
+  const modeW = (f) => (hot.mode != null ? f.modes[hot.mode] : f.w)
+  const color = (f) => S.modes[hot.mode != null ? hot.mode : f.mode].color
+  if (show === 'trips') {
+    const at = new Map()
+    return { arcs: sample(idx, MANY_TRIPS).map((i) => {
+      const c = S.T.cols
+      const a = endOf(S, spots, c.f[i], c.pf ? c.pf[i] : -1, i * 2)
+      const b = endOf(S, spots, c.t[i], c.pt ? c.pt[i] : -1, i * 2 + 1)
+      const m = S.modeAt[c.m[i]]
+      return a && b && { key: `t${i}`, from: a, to: b, w: 1, color: S.modes[m].color, faint: true, i,
+        dim: hot.mode != null && hot.mode !== m, on: hot.trip === i }
+    }).filter(Boolean), rings: [], at }
+  }
+  if (partner && (show === 'areas' || show === 'flows')) {
+    const at = places.length === 1 ? places[0].c : [0, 1].map((k) => places.reduce((a, p) => a + p.c[k], 0) / places.length)
+    const mine = new Set(t.picked)
+    const all = flowsOf(S, partner, list)
+    const out = all.filter((f) => !mine.has(f.key)).sort((a, b) => b.w - a.w).slice(0, show === 'flows' ? 200 : 30)
+    const inside = all.filter((f) => mine.has(f.key))
+    const top = Math.max(1, ...all.map((f) => f.w))
+    const toward = x.way === 'to'
+    return {
+      arcs: out.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `f${f.key}`, from: toward ? f.b.c : at, to: toward ? at : f.b.c, w: modeW(f), color: color(f),
+        faint: f.n < 3, on: hot.place === f.b.key, dim: hot.place != null && hot.place !== f.b.key, hotAs: f.hotAs })),
+      rings: inside.filter((f) => modeW(f) > 0).map((f) => ({ key: `r${f.key}`, at: f.b.c, w: modeW(f), n: f.n, top, color: color(f), faint: f.n < 3, place: f.b,
+        all: partner.w.reduce((a, b) => a + b, 0) + partner.off.reduce((a, o) => a + o.w, 0) })),
+    }
+  }
+  if (show === 'flows') {
+    const all = pairs(S, x.passed, t.level, t.top)
+    const top = Math.max(1, ...all.map((f) => f.w))
+    return {
+      arcs: all.filter((f) => !f.self && modeW(f) > 0).map((f) => ({ ...f, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), faint: f.n < 5,
+        on: hot.pair === f.key, dim: (hot.pair != null && hot.pair !== f.key) || (hot.place != null && hot.place !== f.a.key && hot.place !== f.b.key) })),
+      rings: all.filter((f) => f.self && modeW(f) > 0).map((f) => ({ key: f.key, at: f.a.c, w: modeW(f), n: f.n, top, color: color(f), faint: f.n < 5, place: f.a,
+        dim: hot.place != null && hot.place !== f.a.key })),
+    }
+  }
+  return { arcs: [], rings: [] }
+}
+
+/** Whole days as chains of curves. */
+export function dayLines(x, hot = {}) {
+  const { S, t, dayRows } = x
+  const key = hot.pattern || t.pattern
+  const rows = sample((dayRows || []).filter((r) => !key || r.key === key), MANY_DAYS)
+  const D = S.levels.d.list
+  return rows.flatMap((r) => {
+    const at = r.d.map((d, i) => {
+      if (d < 0) return null
+      // the same place of the day is the same point: back home is where it began
+      const first = r.d.findIndex((e, k) => e === d && r.a[k] === r.a[i])
+      return scatter(D[d], r.i * 16 + first)
+    })
+    return r.m.map((m, i) => at[i] && at[i + 1] && { key: `${r.i}.${i}`, from: at[i], to: at[i + 1], w: 1, color: DAY_MODES[m].color,
+      faint: true, on: hot.day === r.i, dim: hot.day != null && hot.day !== r.i }).filter(Boolean)
+  })
+}
+
+export function TripsMap({ x, dark, onPick, setT }) {
+  const { S, t, sums, partner, show, spots } = x
+  const hot = useHot()
   const p0 = useMemo(() => painted(x), [x])
-  const { list, value: values, P } = p0
+  const { list, value: values, n: counts, P } = p0
   const picked = useMemo(() => new Set(t.picked), [t.picked])
   const sc = useMemo(() => scale(breaks(values, p0.share), dark), [values, p0, dark])
-  const items = useMemo(() => list.map((p, k) => ({
-    p, k, v: values[k], color: values[k] == null || (values[k] === 0 && !P.share) ? null : sc.color(values[k]),
-  })), [list, values, sc, P])
-  const flows = useMemo(() => {
-    if (!t.lines) return []
-    if (partner) {
-      const at = places.length === 1 ? places[0] : { c: [0, 1].map((i) => places.reduce((a, p) => a + p.c[i], 0) / places.length) }
-      return list.map((p, k) => ({ key: p.key, a: at, b: p, w: partner.w[k], n: partner.n[k] }))
-        .filter((f) => f.n > 1 && !picked.has(f.key)).sort((a, b) => b.w - a.w).slice(0, 25)
-    }
-    return pairs(S, x.passed, t.level, 40).filter((f) => f.n > 1)
-      .map((f) => ({ ...f, key: `${f.a.key}-${f.b.key}` }))
-  }, [t.lines, partner, places, list, picked, S, x.passed, t.level])
-  const tip = ({ p, k, v }) => {
+  const items = useMemo(() => list.map((p, k) => {
+    const v = show === 'areas' ? values[k] : null
+    return { p, k, v: values[k], color: v == null || (v === 0 && !P.share) ? null : sc.color(v), alpha: P.fixed && !partner ? 0.6 : alphaOf(counts[k]) }
+  }), [list, values, counts, sc, P, partner, show])
+  const lines = useMemo(() => flowLines(x, { mode: hot.mode, place: hot.place, pair: hot.pair, trip: hot.trip }),
+    [x, hot.mode, hot.place, hot.pair, hot.trip])
+  const chains = useMemo(() => (show === 'days' ? dayLines(x, { pattern: hot.pattern, day: hot.day }) : []), [x, show, hot.pattern, hot.day])
+  const perS = useMemo(() => (show === 'spots' && spots ? perSpot(S, x.idx, spots.length) : null), [show, spots, S, x.idx])
+  const tip = useMemo(() => function Tip({ p, k, v }) {
     const s = sums[k]
+    const own = picked.has(p.key)
+    const mg = partner ? countMargin(partner.n[k]) : countMargin(s.n)
     return (
       <MapTooltip sticky>
         <b>{placeName(p)}</b>
         {p.level === 'z' && <TipNote> · rejon {p.id}, {p.district}</TipNote>}<br />
         {partner ? (
-          <>{v == null ? (!partner.n[k] ? 'brak podróży w próbie' : partner.n[k] < FEW_TRIPS ? 'za mało podróży w próbie' : 'za mało mieszkańców') : <><b>{p0.text(v)}</b> {p0.unit}</>}
-            {partner.n[k] > 0 && <TipNote> · {fmtEst(partner.w[k])} {unitOf(S)}, {partner.n[k]} w próbie</TipNote>}</>
+          <>{own ? 'w obrębie: ' : ''}{v != null && <><b>{p0.text(v)}</b> {p0.unit}</>}{v == null && !own && (partner.n[k] ? '' : 'brak podróży w próbie')}
+            {partner.n[k] > 0 && <TipNote> {v != null && '· '}{fmtEst(partner.w[k])} {unitOf(S)} (±{Math.round(100 * mg)}%), {partner.n[k]} w próbie</TipNote>}</>
         ) : (
-          <>{P.label}: {v == null ? (!P.fixed && s.n < THIN ? 'za mało podróży w próbie' : 'brak danych')
-            : <><b>{p0.text(v)}</b> {p0.unit}</>}
-          {!P.fixed && <TipNote><br />{fmtEst(s.any)} {unitOf(S)} · {s.n} w próbie{p.pop ? ` · ${fmt(p.pop)} mieszkańców` : ''}</TipNote>}</>
+          <>{P.label}: {v == null ? 'brak danych' : <><b>{p0.text(v)}</b> {p0.unit}</>}
+            {!P.fixed && <TipNote><br />{fmtEst(s.any)} {unitOf(S)} (±{Math.round(100 * (mg ?? 1))}%) · {s.n} w próbie{p.pop ? ` · ${fmt(p.pop)} mieszkańców` : ''}</TipNote>}</>
         )}
-        {!partner && !P.fixed && s.any > 0 && s.n >= THIN && S.main.map((m) => {
+        {!partner && !P.fixed && s.n > 4 && S.main.map((m) => {
           const w = m.of.reduce((a, j) => a + s.modes[j], 0)
           return <TipRow key={m.key} color={m.color} label={m.label} value={fmtEst(w)} share={pctText(w / s.any)} />
         })}
       </MapTooltip>
     )
-  }
+  }, [sums, partner, P, p0, S, picked])
+  const tipOf = useMemo(() => (item) => tip(item), [tip])
+  const flowTip = (f) => (
+    <MapTooltip sticky>
+      {f.a && !f.self ? `${placeName(f.a)} ↔ ` : ''}{placeName(f.b || f.place)}{f.place ? ' — w obrębie' : ''}<br />
+      <b>{fmtEst(f.w)}</b> {unitOf(S)} <TipNote>· {f.n} w próbie{f.all ? ` · ${pctText(f.w / f.all)} podróży` : ''}</TipNote>
+      {f.modes && [...f.modes].map((w, m) => [w, m]).filter(([w]) => w > 0).sort((a, b) => b[0] - a[0]).slice(0, 4)
+        .map(([w, m]) => <TipRow key={m} color={S.modes[m].color} label={S.modes[m].label} value={fmtEst(w)} share={pctText(w / [...f.modes].reduce((a, b) => a + b, 0))} />)}
+    </MapTooltip>
+  )
+  const single = show === 'trips' || show === 'days'
+  const labels = useMemo(() => (!t.names || show === 'trips' ? [] : list.map((p, k) => {
+    const v = values[k]
+    const lines0 = [{ text: placeName(p).replace(/-/g, '\u2011'), bold: true },
+      ...(show === 'areas' && v != null ? [{ text: p0.text(v) }] : partner && partner.n[k] ? [{ text: fmtEst(partner.w[k]) }] : [])]
+    return { key: p.key, lat: p.c[0], lon: p.c[1], r: 0, html: labelHtml(lines0), box: labelBox(lines0), weight: v ?? 0 }
+  })), [t.names, show, list, values, p0, partner])
+  const topSpot = perS ? Math.max(1, ...perS.w) : 1
   return (
     <>
-      <ZoneLayer items={items} picked={picked} onPick={onPick} tip={tip} />
-      <FlowLines flows={flows} tip={(f) => (
-        <MapTooltip sticky>
-          {f.a.level ? `${placeName(f.a)} ↔ ` : ''}{placeName(f.b)}<br />
-          {fmtEst(f.w)} {unitOf(S)} <TipNote>· {f.n} w próbie</TipNote>
-        </MapTooltip>
-      )} />
+      <ZoneLayer items={items} picked={picked} onPick={onPick} tip={tipOf} plain={show !== 'areas'} hot={hot.place} />
+      <Arcs width={single ? 1.4 : 7} flows={[...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), hotAs: f.a ? f.hotAs || { pair: f.key } : HOT_PLACE(f.b.key) })), ...chains]} />
+      <Rings rings={lines.rings.map((r) => ({ ...r, tip: flowTip(r), hotAs: HOT_PLACE(r.place.key), onPick: () => onPick(r.place) }))} />
+      {perS && (
+        <CircleLayer points={spots.map((s, i) => ({ s, i })).filter(({ i }) => perS.n[i] > 0).sort((a, b) => perS.w[b.i] - perS.w[a.i]).map(({ s, i }) => {
+          const on = t.filters.spot?.[0] === i
+          return { key: `${i}${on ? '+' : ''}${hot.spot === i ? '!' : ''}`, lat: s.lat, lon: s.lon, i, s, r: sqrtRadius(perS.w[i], topSpot, 4, 20),
+            style: { color: on || hot.spot === i ? '#ffffff' : '#0b1016', weight: on || hot.spot === i ? 3 : 1, fillColor: S.modes[perS.mode(i)].color, fillOpacity: 0.85 } }
+        })} onPick={(p) => setT((q) => { const { spot, ...rest } = q.filters; return { ...q, filters: spot?.[0] === p.i ? rest : { ...rest, spot: [p.i] } } })}
+          tip={({ s, i }) => (
+            <MapTooltip>
+              <b>{s.name}</b>{s.street ? <TipNote> · ulica</TipNote> : null}<br />
+              {fmtEst(perS.w[i])} podróży/dobę <TipNote>· {perS.n[i]} w próbie</TipNote>
+              {[...perS.modes(i)].map((w, m) => [w, m]).filter(([w]) => w > 0).sort((a, b) => b[0] - a[0]).slice(0, 4)
+                .map(([w, m]) => <TipRow key={m} color={S.modes[m].color} label={S.modes[m].label} value={fmtEst(w)} share={pctText(w / perS.w[i])} />)}
+            </MapTooltip>
+          )} />
+      )}
+      {labels.length > 0 && <MapLabels entries={labels} declutter />}
     </>
   )
 }
+// one object a place, so that a line is not redrawn for a new one
+const hotPlaces = new Map()
+const HOT_PLACE = (key) => { if (!hotPlaces.has(key)) hotPlaces.set(key, { place: key }); return hotPlaces.get(key) }
 
-/** The legend of what is painted. */
+/** The legend of what is shown. */
 export function tripsLegend({ x, dark }) {
-  const { S, t, partner } = x
+  const { S, t, partner, show } = x
   const p0 = painted(x)
   const { P } = p0
+  const modes = (list) => list.map((m) => ({ label: m.label, color: m.color, line: true }))
+  if (show === 'days') {
+    return [{ title: 'Całe dni — czym' }, ...modes(DAY_MODES),
+      { note: `do ${MANY_DAYS} losowych dni; punkty w osiedlu losowe. Filtry podróży nie działają na całe dni.` }]
+  }
+  if (show === 'spots') {
+    return [{ title: 'Cele — najczęstszy środek' }, ...S.modes.map((m) => ({ label: m.label, color: m.color })),
+      { note: 'wielkość koła = podróże; tylko miejsca, które podało co najmniej 5 badanych' }]
+  }
+  if (show !== 'areas') {
+    return [{ title: show === 'flows' ? 'Przepływy — najczęstszy środek' : 'Pojedyncze podróże' }, ...modes(S.modes),
+      { note: show === 'flows' ? 'grubość = podróże, kółko = w obrębie obszaru, blade = mniej niż 5 w próbie'
+        : `do ${MANY_TRIPS} losowych podróży z próby; domy i rzadkie cele w losowym punkcie rejonu` }]
+  }
   const sc = scale(breaks(p0.value, p0.share), dark)
   const f = (v) => (p0.share ? `${Math.round(100 * v)}%` : p0.digits ? fixed(v, p0.digits) : fmt(v))
   const to = { from: 'z', to: 'do', any: 'z i do', home: 'mieszkańców —' }[x.way]
@@ -138,8 +286,8 @@ export function tripsLegend({ x, dark }) {
       color: s.color,
       label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}`,
     })),
-    ...(t.lines ? [{ note: 'linie: najczęstsze połączenia, grubość = liczba podróży' }] : []),
-    { note: partner || !P.fixed ? (S.freight ? 'przejazdy w próbie, nie przeliczone na miasto' : 'podróże w dniu roboczym, przeliczone na mieszkańców') : 'dane KBR 2024' },
+    ...(partner ? [{ note: 'łuki: kolor = najczęstszy środek; kółko = podróże w obrębie' }] : []),
+    { note: `blade = mało podróży w próbie (pełny kolor od ${THIN})` },
   ]
 }
 
@@ -158,7 +306,7 @@ function FilterField({ S, d, t, setT, base }) {
         items={sh.filter((o) => o.n > 0 || on.includes(o.i)).map((o) => ({
           key: String(o.i), label: o.label, on: on.includes(o.i), color: o.color,
           title: `${fmt(o.n)} podróży w próbie`,
-        }))} />
+        })).map((o) => ({ ...o, label: <>{o.label} <small style={{ opacity: 0.6 }}>{pctText(sh[+o.key].share)}</small></> }))} />
     </Field>
   )
 }
@@ -167,7 +315,7 @@ const FIRST = ['mode', 'goal', 'km', 'in', 'to']
 const TRIP_KEYS = ['why', 'min', 'from', 'park', 'reason', 'change']
 const WHO_KEYS = ['live', 'cars', 'pass', 'lic', 'age', 'job']
 
-export function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
+export const TripsControls = memo(function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
   const { S, t, stats } = x
   const set = (o) => setT({ ...t, ...o })
   const active = Object.keys(t.filters).length
@@ -204,16 +352,26 @@ export function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
             items={[{ key: 'people', label: 'Mieszkańcy', on: t.set === 'people' },
               { key: 'freight', label: 'Towary (dostawcze i ciężarowe)', on: t.set === 'freight' }]} />
         )}
+        <Field label="Widok">
+          <Chips tight label="Widok" onPick={(show) => set({ show })}
+            items={Object.entries(SHOW).filter(([, s]) => !(S.freight && s.people))
+              .map(([key, s]) => ({ key, label: s.label, on: x.show === key, title: s.note }))} />
+          <Hint>{SHOW[x.show].note}</Hint>
+        </Field>
+        {x.show === 'flows' && !x.partner && (
+          <Slider min="10" max="300" step="10" value={t.top} label="Ile połączeń" onChange={(top) => set({ top })}
+            caption={`Najczęstsze ${t.top} połączeń`} />
+        )}
         <Field label="Obszary">
           <Chips tight label="Obszary" onPick={(level) => set({ level, picked: [] })} items={[
             { key: 'd', label: 'Osiedla i gminy', on: t.level === 'd' },
             { key: 'z', label: 'Rejony', on: t.level === 'z' }]} />
         </Field>
-        <Field label="Kolor obszarów">
+        {x.show === 'areas' && <Field label="Kolor obszarów">
           <Select value={t.paint} label="Kolor obszarów" disabled={!!x.partner} onChange={(paint) => set({ paint })}
             options={Object.entries(PAINTS).filter(([k]) => !S.freight || ['any', 'from', 'to', 'jobs', 'pop'].includes(k))
               .map(([value, p]) => ({ value, label: p.label }))} />
-        </Field>
+        </Field>}
         <Field label="Czyje podróże" help={(
           <p>
             „Mieszkańców obszaru” to podróże z domu i do domu, przypisane do miejsca zamieszkania — porównują
@@ -227,8 +385,8 @@ export function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
         </Field>
         <Field label="Przelicz" help={(
           <p>
-            Mieszkańcy: szacunek użyty przez KBR (zał. 3.1), w gminach wokół — z wag badania. Miejsca pracy:
-            szacunek z danych telefonii komórkowej (zał. 12). Obszary poniżej 500 osób nie mają wskaźnika.
+            Na mieszkańca od 6 lat, których reprezentuje próba (suma wag) — te same wagi co w liczbie podróży. Miejsca
+            pracy: szacunek z danych telefonii komórkowej (zał. 12). Obszary poniżej 300 osób nie mają wskaźnika.
           </p>
         )}>
           <Chips tight small label="Przelicz" onPick={(per) => set({ per })}
@@ -236,7 +394,7 @@ export function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
               .map(([key, p]) => ({ key, label: p.label, on: perIn(S, t) === key }))} />
         </Field>
         {x.partner && <Hint>Z zaznaczonym obszarem kolor pokazuje, skąd i dokąd są podróże.</Hint>}
-        <Toggle checked={t.lines} onChange={(lines) => set({ lines })} label="Linie najczęstszych połączeń" />
+        <Toggle checked={t.names} onChange={(names) => set({ names })} label="Nazwy i wartości na mapie" />
         {x.places.length > 0 && (
           <Field label={x.places.length === 1 ? placeName(x.places[0]) : `${x.places.length} zaznaczone obszary`}>
             <Toggle checked={t.many} onChange={(many) => set({ many })} label="Klikaj kolejne, aby dodawać" />
@@ -258,6 +416,11 @@ export function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
             <LinkButton onClick={() => { const { easy: _, ...rest } = t.filters; set({ filters: rest }) }}>Usuń ten warunek</LinkButton>
           </Hint>
         )}
+        {t.filters.spot && (
+          <Hint>Tylko podróże do lub z: <b>{x.spots?.[t.filters.spot[0]]?.name}</b>{' '}
+            <LinkButton onClick={() => { const { spot: _, ...rest } = t.filters; set({ filters: rest }) }}>Usuń</LinkButton>
+          </Hint>
+        )}
         {fields(FIRST)}
         {active > 0 && <LinkButton block onClick={() => set({ filters: {} })}>Wyczyść filtry</LinkButton>}
         <Hint>{fmt(stats.n)} {S.freight ? 'przejazdów' : 'podróży'} w próbie{S.freight ? '' : ` = ${fmtEst(stats.w)} na dobę`}</Hint>
@@ -273,4 +436,4 @@ export function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
       )}
     </>
   )
-}
+})

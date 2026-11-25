@@ -34,7 +34,7 @@ export function readZones(j) {
       key: `d${i}`, i, level: 'd', name: d.name, city: d.city, rings: rings(d.g),
       zones: own.map((z) => z.i),
       c: [0, 1].map((k) => own.reduce((a, z, n) => a + z.c[k] * w[n], 0) / all),
-      pop: sum('pop'), popEst: own.some((z) => z.popEst) ? 1 : 0, jobs: sum('jobs'), firms: sum('firms'), n: sum('n'), km2: sum('km2'),
+      pop: sum('pop'), w: sum('w'), popEst: own.some((z) => z.popEst) ? 1 : 0, jobs: sum('jobs'), firms: sum('firms'), n: sum('n'), km2: sum('km2'),
       core: own.every((z) => z.core) ? 1 : 0,
     }
   })
@@ -54,7 +54,9 @@ export const placeName = (p) => (p.level === 'd' ? p.name : p.name.includes(' - 
 
 // What the trips view starts with.
 export const TRIPS0 = {
-  set: 'people', level: 'd', paint: 'any', way: 'home', per: 'pop', picked: [], filters: {}, lines: true, many: false,
+  set: 'people', level: 'd', paint: 'any', way: 'home', per: 'pop', picked: [], filters: {}, many: false,
+  // how it is shown: areas, flows, trips, spots or days
+  show: 'areas', names: false, top: 60, rows: 'km', split: 'mode', pattern: null,
 }
 
 // ------------------------------------------------------------------ the modes
@@ -149,9 +151,10 @@ export const TRIP_PRESETS = [
   { key: 'carcore', label: 'Samochodem do centrum', filters: { mode: [2, 3], to: [0], from: [1, 2, 3] } },
   { key: 'short', label: 'Samochodem do 3 km', filters: { mode: [2, 3], km: [0, 1, 2, 3] } },
   { key: 'alone', label: 'Kierowca sam', filters: { mode: [2], in: [0] } },
-  { key: 'easy', label: 'Najłatwiejsze do zastąpienia', filters: { mode: [2], in: [0], easy: [1] },
-    help: 'Sam kierowca, jedzie z wygody, dla czasu lub kosztu, do 5 km albo do lub z centrum. '
-      + 'To cechy podróży, nie deklaracja: o gotowość do zmiany nikt nie pytał.' },
+  { key: 'easy', label: 'Sam, z wygody lub dla czasu, blisko albo centrum', filters: { mode: [2], in: [0], easy: [1] },
+    help: '„Sam, z wygody lub dla czasu, blisko albo centrum”: kierowca sam, podaje wygodę, czas lub koszt, do 5 km '
+      + '(w linii prostej) albo do lub z centrum. To cechy podróży, nie deklaracja: o gotowość do zmiany nikt nie '
+      + 'pytał, a powód podawano raz na osobę.' },
   { key: 'kids', label: 'Odwożenie samochodem', filters: { mode: [2, 3], why: [5] } },
 ]
 
@@ -167,10 +170,12 @@ export function passing(S, { filters, hours }, skip) {
   const on = D.filter((d) => filters[d.key]?.length && d.key !== skip)
     .map((d) => ({ of: d.of, has: new Set(filters[d.key]) }))
   const wantEasy = !!filters.easy?.length
+  const spot = filters.spot?.length && skip !== 'spot' ? filters.spot[0] : null
   const out = []
   for (let i = 0; i < T.n; i++) {
     if (inHour && !inHour.has(c.h[i])) continue
     if (wantEasy && !easy(c, i, area)) continue
+    if (spot != null && c.pf[i] !== spot && c.pt[i] !== spot) continue
     if (on.every((d) => d.has.has(d.of(c, i)))) out.push(i)
   }
   return out
@@ -252,6 +257,10 @@ export const total = (S, idx) => idx.reduce((a, i) => a + S.T.cols.w[i], 0)
 // points for the car's share).
 const ASKER = 0.07
 const askers = (n) => Math.max(1, Math.min(30, 0.7 * (n / 2) ** 0.42))
+
+/** The 95% margin of a number of trips, as a part of it: how many people were
+ *  caught, and that some interviewers record half as many again as others. */
+export const countMargin = (n) => (n < 1 ? null : Math.min(1, 1.96 * Math.sqrt(2 / n + 0.05 / askers(n))))
 
 /**
  * The 95% margin of a share, in its own units. Weights differ, a person's
@@ -345,10 +354,12 @@ export function perPartner(S, idx, picked, level, way) {
   const size = list.length
   const w = new Float64Array(size)
   const n = new Int32Array(size)
+  const K = S.modes.length
+  const modes = new Float64Array(size * K)
   const out = new Map()      // ends off the map
   const add = (zone, i) => {
     const k = of[zone]
-    if (k >= 0) { w[k] += c.w[i]; n[k] += 1; return }
+    if (k >= 0) { w[k] += c.w[i]; n[k] += 1; modes[k * K + S.modeAt[c.m[i]]] += c.w[i]; return }
     const o = out.get(zone) || { w: 0, n: 0 }
     o.w += c.w[i]
     o.n += 1
@@ -361,28 +372,101 @@ export function perPartner(S, idx, picked, level, way) {
     if (f && way !== 'to') add(c.t[i], i)
     if (t && way !== 'from' && !(f && way === 'any')) add(c.f[i], i)
   }
-  return { w, n, off: [...out].map(([zone, v]) => ({ ...S.Z.outside[zone - S.Z.count], ...v })) }
+  return { w, n, modes, off: [...out].map(([zone, v]) => ({ ...S.Z.outside[zone - S.Z.count], ...v })) }
 }
 
-/** The busiest pairs of places, both directions together. */
+/** What runs between two places, most of it by which mode. */
+export function mainMode(modes, from, K) {
+  let best = 0
+  for (let m = 1; m < K; m++) if (modes[from + m] > modes[from + best]) best = m
+  return best
+}
+
+/** From or to the picked zones: a flow a partner, the picked place itself too. */
+export function flowsOf(S, partner, list) {
+  const K = S.modes.length
+  return list.map((p, k) => ({ key: p.key, b: p, w: partner.w[k], n: partner.n[k], mode: mainMode(partner.modes, k * K, K),
+    modes: partner.modes.subarray(k * K, (k + 1) * K) })).filter((f) => f.n > 0)
+}
+
+/** The busiest pairs of places, both directions together; a place with itself
+ *  is a pair too. */
 export function pairs(S, idx, level, top = 40) {
   const { list, of } = S.levels[level]
   const c = S.T.cols
+  const K = S.modes.length
   const by = new Map()
   for (const i of idx) {
     let a = of[c.f[i]]
     let b = of[c.t[i]]
-    if (a < 0 || b < 0 || a === b) continue
+    if (a < 0 || b < 0) continue
     if (a > b) [a, b] = [b, a]
     const k = a * 1000 + b
-    const p = by.get(k) || { a, b, w: 0, n: 0, car: 0 }
+    const p = by.get(k) || { a, b, w: 0, n: 0, modes: new Float64Array(K) }
     p.w += c.w[i]
     p.n += 1
-    if (!S.freight && (S.modeAt[c.m[i]] === 2 || S.modeAt[c.m[i]] === 3)) p.car += c.w[i]
+    p.modes[S.modeAt[c.m[i]]] += c.w[i]
     by.set(k, p)
   }
-  return [...by.values()].sort((x, y) => y.w - x.w).slice(0, top)
-    .map((p) => ({ ...p, a: list[p.a], b: list[p.b] }))
+  const all = [...by.values()].sort((x, y) => y.w - x.w)
+    .map((p) => ({ ...p, key: `${list[p.a].key}-${list[p.b].key}`, self: p.a === p.b, a: list[p.a], b: list[p.b], mode: mainMode(p.modes, 0, K) }))
+  return [...all.filter((p) => !p.self).slice(0, top), ...all.filter((p) => p.self)]
+}
+
+/** Trips to and from each spot, most of it by which mode. */
+export function perSpot(S, idx, count) {
+  const c = S.T.cols
+  const K = S.modes.length
+  const w = new Float64Array(count)
+  const n = new Int32Array(count)
+  const modes = new Float64Array(count * K)
+  for (const i of idx) {
+    for (const s of c.pf[i] === c.pt[i] ? [c.pt[i]] : [c.pf[i], c.pt[i]]) {
+      if (s < 0) continue
+      w[s] += c.w[i]
+      n[s] += 1
+      modes[s * K + S.modeAt[c.m[i]]] += c.w[i]
+    }
+  }
+  return { w, n, mode: (s) => mainMode(modes, s * K, K), modes: (s) => modes.subarray(s * K, (s + 1) * K) }
+}
+
+/** One dimension against another: a row an option, its parts by the other. */
+export function crossTab(S, idx, rowKey, splitKey) {
+  const A = S.D.find((d) => d.key === rowKey)
+  const B = S.D.find((d) => d.key === splitKey)
+  const c = S.T.cols
+  const rows = A.options.map((o, i) => ({ i, label: o.label, w: 0, n: 0, km: 0, kw: 0, min: 0, mw: 0, parts: B.options.map(() => 0) }))
+  for (const i of idx) {
+    const a = A.of(c, i)
+    if (a < 0) continue
+    const r = rows[a]
+    const w = c.w[i]
+    r.w += w
+    r.n += 1
+    if (c.km[i] != null) { r.km += w * c.km[i]; r.kw += w }
+    if (c.d[i] != null) { r.min += w * c.d[i]; r.mw += w }
+    const b = B.of(c, i)
+    if (b >= 0) r.parts[b] += w
+  }
+  const all = rows.reduce((s, r) => s + r.w, 0)
+  return {
+    row: A, split: B,
+    cols: B.options.map((o, i) => ({ i, label: o.label, color: o.color })),
+    rows: rows.filter((r) => r.n > 0).map((r) => {
+      const sum = r.parts.reduce((s, x) => s + x, 0)
+      return { ...r, share: all ? r.w / all : 0, km: r.kw ? r.km / r.kw : null, min: r.mw ? r.min / r.mw : null,
+        parts: r.parts.map((x) => (sum ? x / sum : 0)) }
+    }),
+  }
+}
+
+export function crossTable(tab) {
+  return [
+    [tab.row.label, 'podróży w próbie', 'podróży/dobę', '%', 'śr. km', 'śr. min', ...tab.cols.map((x) => `${tab.split.label}: ${x.label} — %`)],
+    ...tab.rows.map((r) => [r.label, r.n, num(r.w), num(100 * r.share, 1), r.km == null ? '' : num(r.km, 1), r.min == null ? '' : num(r.min, 0),
+      ...r.parts.map((x) => num(100 * x, 1))]),
+  ]
 }
 
 // ------------------------------------------------------------------ the paint
@@ -405,11 +489,14 @@ export const PAINTS = {
 }
 
 // What a count is divided by. A place with hardly anyone in it has no rate.
-export const FEW = 500
-const people = (p) => (p.pop || 0) + (p.jobs || 0)
+// The base is the residents the survey's weights stand for, aged 6 and more:
+// the trips are sums of the same weights. Over the city's own estimate of
+// residents the rates of some districts would be a third off.
+export const FEW = 300
+const people = (p) => (p.w || 0) + (p.jobs || 0)
 export const PER = {
-  pop: { label: 'na mieszkańca', unit: 'na mieszkańca', many: 'na 1000 mieszkańców', digits: 2,
-    of: (p) => (p.pop >= FEW ? p.pop : null) },
+  pop: { label: 'na mieszkańca', unit: 'na mieszkańca (6+)', many: 'na 1000 mieszkańców (6+)', digits: 2,
+    of: (p) => (p.w >= FEW ? p.w : null) },
   abs: { label: 'liczba', unit: '', of: () => 1 },
   both: { label: 'na mieszkańca i miejsce pracy', unit: 'na mieszkańca i miejsce pracy',
     many: 'na 1000 mieszkańców i miejsc pracy', digits: 2, of: (p) => (people(p) >= FEW ? people(p) : null) },
@@ -451,6 +538,17 @@ export function scale(br, dark = true, colors = dark ? DARK : LIGHT) {
 // ----------------------------------------------------------------- the tables
 const H = (h) => (h == null ? '' : `${h}:00`)
 
+/** The unit that keeps rates readable: per resident, or per thousand. */
+export const perThousand = (values, per) => {
+  const top = Math.max(0, ...values.filter((v) => v != null))
+  return !!per.many && top > 0 && top < 0.25
+}
+/** Decimals for numbers of this size: about three figures in all. */
+export const digitsFor = (values) => {
+  const top = Math.max(0, ...values.filter((v) => v != null))
+  return top >= 100 || top === 0 ? 0 : top >= 10 ? 1 : top >= 0.1 ? 2 : 3
+}
+
 /** One row per trip, for a list or a spreadsheet. */
 export function tripRow(S, i) {
   const { T, Z } = S
@@ -490,7 +588,7 @@ export function placesTable(S, sums, level) {
       'śr. długość [km]', 'mieszkańcy', 'miejsca pracy', 'km²', 'osoby w badaniu'],
     ...list.map((p, k) => {
       const s = sums[k]
-      return [placeName(p), s.n, num(s.any), p.pop >= FEW ? num(s.any / p.pop, 2) : '', num(s.from), num(s.to),
+      return [placeName(p), s.n, num(s.any), p.w >= FEW ? num(s.any / p.w, 2) : '', num(s.from), num(s.to),
         ...S.main.map((m) => (s.any ? num((100 * m.of.reduce((a, x) => a + s.modes[x], 0)) / s.any, 1) : '')),
         s.kw ? num(s.km / s.kw, 1) : '', p.pop ?? '', p.jobs ?? '', num(p.km2, 2), p.n]
     }),

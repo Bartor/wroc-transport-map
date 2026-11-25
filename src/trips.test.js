@@ -8,14 +8,18 @@ import { changes, ringChanges } from './compare'
 import { hashOf, readHash } from './urlState'
 import { everythingTable, filterText, viewTable } from './surveyCards'
 import { fullName } from './answers'
+import { arc, inside, scatter } from './arcs'
+import { dayModes, dayText, daysOf, patterns, readDays } from './days'
+import { colorsOf, partsOf } from './Stack'
+import { crossTab, crossTable, digitsFor, perSpot, perThousand } from './trips'
 
 // two city zones in one district, one commune around, one place further out
 const sq = (la, lo) => [[la * 1e5, lo * 1e5, 1000, 0, 0, 1000, -1000, 0]]
 const ZONES = {
   zones: [
-    { id: '1', name: 'Rynek', c: [51.11, 17.03], pop: 1000, jobs: 5000, n: 10, km2: 1, core: 1, city: 1, d: 0, g: sq(51.11, 17.03) },
-    { id: '2', name: 'Obok', c: [51.11, 17.05], pop: 3000, jobs: 100, n: 30, km2: 2, core: 0, city: 1, d: 0, g: sq(51.11, 17.05) },
-    { id: '3001', name: 'Gmina - wieś', c: [51.2, 17.2], pop: 400, jobs: 10, n: 4, km2: 9, core: 0, city: 0, d: 1, g: sq(51.2, 17.2) },
+    { id: '1', name: 'Rynek', c: [51.11, 17.03], pop: 1000, w: 900, jobs: 5000, n: 10, km2: 1, core: 1, city: 1, d: 0, g: sq(51.11, 17.03) },
+    { id: '2', name: 'Obok', c: [51.11, 17.05], pop: 3000, w: 2800, jobs: 100, n: 30, km2: 2, core: 0, city: 1, d: 0, g: sq(51.11, 17.05) },
+    { id: '3001', name: 'Gmina - wieś', c: [51.2, 17.2], pop: 400, w: 200, jobs: 10, n: 4, km2: 9, core: 0, city: 0, d: 1, g: sq(51.2, 17.2) },
   ],
   districts: [{ name: 'Stare Miasto', city: 1, g: sq(51.11, 17.03) }, { name: 'Gmina', city: 0, g: sq(51.2, 17.2) }],
   outside: [{ id: '022003', name: 'Dalej' }], core: 1500,
@@ -91,10 +95,11 @@ suite('trips', () => {
     expect(p.off).toEqual([{ id: '022003', name: 'Dalej', w: 10, n: 1 }])
     const q = perPartner(S, touching(S, all, [1], 'home'), [1], 'z', 'home')
     expect([...q.w]).toEqual([200, 50, 0])
-    expect(pairs(S, all, 'z')[0]).toMatchObject({ w: 200, car: 200 })
+    expect(pairs(S, all, 'z')[0]).toMatchObject({ w: 200, mode: 2, self: false })
+    expect(pairs(S, all, 'z').filter((p) => p.self)).toHaveLength(1)
   })
   it('gives rates only where people live', () => {
-    expect(PER.pop.of(S.Z.zones[1])).toBe(3000)
+    expect(PER.pop.of(S.Z.zones[1])).toBe(2800)
     expect(PER.pop.of(S.Z.zones[2])).toBe(null)
     expect(perOf('pop', 'pop')).toBe('km2')
     expect(perOf('any', 'pop')).toBe('pop')
@@ -118,8 +123,8 @@ suite('trips', () => {
 
 const Q = {
   key: 'tram', options: ['tak', 'nie', 'nie wiem'], good: [0], multi: 0, rho: [[0.2, 0.1], [0.2, 0.1], [0, 0]], rhoGood: null,
-  tab: { all: { a: { wro: [400, 40000, 30, 8, [600, 300, 100]] },
-    z: { 0: [50, 5000, 20, 6, [900, 50, 50], [700, 250, 50]], 1: [50, 5000, 5, 6, [500, 450, 50], [550, 400, 50]] } } },
+  tab: { all: { a: { wro: [400, 30, 8, [600, 300, 100]] },
+    z: { 0: [50, 20, 6, [900, 50, 50], [700, 250, 50]], 1: [50, 5, 6, [500, 450, 50], [550, 400, 50]] } } },
 }
 suite('answers', () => {
   it('uses corrected shares unless told otherwise', () => {
@@ -148,6 +153,60 @@ suite('answers', () => {
     const at = (lo) => s.v[Math.floor(s.rows / 2) * s.cols + Math.floor(((lo - 17) / 0.08) * s.cols)]
     expect(at(17.03)).toBeGreaterThan(at(17.05))
     expect(at(17.03)).toBeLessThanOrEqual(0.7)
+  })
+})
+
+suite('how it is drawn', () => {
+  it('bows there and back apart, and ends where it should', () => {
+    const [a, b] = [[51.1, 17], [51.1, 17.1]]
+    expect(arc(a, b)[0]).toEqual(a)
+    expect(arc(a, b).at(-1)[1]).toBeCloseTo(17.1)
+    expect(Math.sign(arc(a, b)[9][0] - 51.1)).toBe(-Math.sign(arc(b, a)[9][0] - 51.1))
+  })
+  it('scatters inside, the same every time', () => {
+    const z = S.Z.zones[0]
+    expect(inside(scatter(z, 5), z.rings)).toBe(true)
+    expect(scatter(z, 5)).toEqual(scatter(z, 5))
+    expect(scatter(z, 5)).not.toEqual(scatter(z, 6))
+  })
+  it('crosses two dimensions', () => {
+    const tab = crossTab(S, all, 'mode', 'goal')
+    const car = tab.rows.find((r) => r.i === 2)
+    expect(car).toMatchObject({ n: 2, w: 200 })
+    expect(car.parts[0]).toBe(0.5)
+    expect(tab.rows.reduce((a, r) => a + r.share, 0)).toBeCloseTo(1)
+    expect(crossTable(tab)).toHaveLength(1 + tab.rows.length)
+  })
+  it('counts a spot once a trip', () => {
+    const p = perSpot({ ...S, T: { ...S.T, cols: { ...S.T.cols, pf: [-1, 0, -1, -1, 0], pt: [0, -1, 1, 0, 0] } } }, all, 2)
+    expect([...p.n]).toEqual([4, 1])
+    expect(p.mode(1)).toBe(0)
+  })
+  it('keeps rates readable', () => {
+    expect(perThousand([0.001, null, 0.2], PER.pop)).toBe(true)
+    expect(perThousand([1.4], PER.pop)).toBe(false)
+    expect(perThousand([0.01], PER.abs)).toBe(false)
+    expect([digitsFor([1.5]), digitsFor([52]), digitsFor([820])]).toEqual([2, 1, 0])
+  })
+  it('makes parts that add up', () => {
+    const p = partsOf({ a: 5, b: 3, c: 1, inne: 1 }, 2)
+    expect(p.map((x) => x.label)).toEqual(['a', 'inne'])
+    expect(p.reduce((s, x) => s + x.share, 0)).toBeCloseTo(1)
+    expect(colorsOf(S.D[0])).toHaveLength(S.modes.length)
+  })
+})
+
+suite('whole days', () => {
+  const D = readDays({ acts: ['dom', 'praca', 'nauka', 'zakupy', 'odwożenie', 'inne'], modes: ['samochód', 'KZ', 'rower', 'pieszo', 'inne'],
+    rows: [[100, [0, 1, 0], [0, 1, 0], [0, 0], [7, 16]], [300, [0, 1, 0, 0], [0, 1, 3, 0], [1, 3, 3], [8, 15, 16]], [50, [1, 0], [1, 0], [3], [9]]] })
+  it('finds the home and the commonest chains', () => {
+    expect(D.rows.map((r) => r.home)).toEqual([0, 0, 0])
+    expect(daysOf(D, new Set([1]))).toHaveLength(0)
+    const p = patterns(D, D.rows)
+    expect(p.list[0]).toMatchObject({ key: '0130', n: 1, label: 'dom → praca → zakupy → dom' })
+    expect(p.more).toBeCloseTo(300 / 450)
+    expect(dayModes(D.rows).only[0]).toBeCloseTo(100 / 450)
+    expect(dayText(D, S.Z.districts, D.rows[0])[1]).toBe('7:00 samochód → praca, Gmina')
   })
 })
 
@@ -187,7 +246,7 @@ suite('the address of a survey view', () => {
   const base = { range: [0, 24], areas: null, labels: { num: false, pct: false, declutter: true }, net: {}, sig: {}, off: new Set(), flow: {}, occupancy: null }
   const d = { range: [7, 9], flow: {} }
   it('keeps the trips', () => {
-    const trip = { ...TRIPS0, level: 'z', paint: 'car', way: 'to', per: 'km2', picked: ['z12', 'z3001'], lines: false, filters: { mode: [2, 3], km: [0] } }
+    const trip = { ...TRIPS0, level: 'z', paint: 'car', way: 'to', per: 'km2', picked: ['z12', 'z3001'], show: 'flows', names: true, top: 100, rows: 'age', split: 'goal', pattern: '010', filters: { mode: [2, 3], km: [0] } }
     const back = readHash(hashOf({ ...base, view: 'trips', trip }, d))
     expect({ ...TRIPS0, ...back.trip }).toEqual(trip)
     expect(readHash(hashOf({ ...base, view: 'trips', trip: TRIPS0 }, d)).trip).toEqual({})

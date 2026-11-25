@@ -1,30 +1,36 @@
 import { memo, useMemo } from 'react'
-import { ImageOverlay, LayerGroup, Polygon, Polyline } from 'react-leaflet'
+import { CircleMarker, ImageOverlay, LayerGroup, Polygon, Polyline } from 'react-leaflet'
 import L from 'leaflet'
+import { arc } from './arcs'
 import { diverging } from './answers'
+import { setHot } from './hot'
 
-// Hundreds of outlines: one canvas rather than an element each. It sits under
-// the markers, which have a pane of their own above it.
-let canvas = null
-const shared = () => { canvas ||= L.canvas({ padding: 0.4 }); return canvas }
+// Hundreds of outlines: one canvas rather than an element each. Lines stay
+// elements: a second canvas on top would take the pointer from the areas.
+let areas = null
+const areaCanvas = () => { areas ||= L.canvas({ padding: 0.4 }); return areas }
 
-const Zone = memo(function Zone({ item, on, onPick, tip, quiet }) {
+const Zone = memo(function Zone({ item, on, hot, onPick, tip, quiet, plain }) {
+  const fill = quiet ? 0.001 : !item.color ? 0.05 : item.alpha ?? (item.faint ? 0.22 : 0.62)
   const style = {
-    color: on ? '#ffffff' : '#0b1016', weight: on ? 2.5 : 0.7, opacity: on ? 1 : 0.55,
-    fillColor: item.color || '#5c6675', fillOpacity: quiet ? 0.001 : !item.color ? 0.08 : item.faint ? 0.22 : 0.62,
+    color: on || hot ? '#ffffff' : plain ? '#8d99ae' : '#0b1016', weight: on ? 2.5 : hot ? 2 : 0.7,
+    opacity: on || hot ? 1 : plain ? 0.4 : 0.55,
+    fillColor: item.color || '#5c6675', fillOpacity: hot ? Math.max(fill, 0.25) : fill,
   }
   const handlers = useMemo(() => ({
     click: (e) => onPick(item.p, e.originalEvent?.shiftKey || e.originalEvent?.ctrlKey),
+    mouseover: () => setHot({ place: item.p.key }),
+    mouseout: () => setHot({}),
   }), [item.p, onPick])
   return (
-    <Polygon positions={item.p.rings} renderer={shared()} pathOptions={style} eventHandlers={handlers}>
-      {tip(item)}
+    <Polygon positions={item.p.rings} renderer={areaCanvas()} pathOptions={style} eventHandlers={handlers}>
+      {tip?.(item)}
     </Polygon>
   )
 })
 
 /** Areas coloured by value; an item without a colour is only outlined. */
-export function ZoneLayer({ items, picked, onPick, tip, quiet }) {
+export function ZoneLayer({ items, picked, onPick, tip, quiet, plain, hot }) {
   // the picked ones last, so their outline is on top
   const order = picked?.size
     ? [...items].sort((a, b) => picked.has(a.p.key) - picked.has(b.p.key)) : items
@@ -32,22 +38,51 @@ export function ZoneLayer({ items, picked, onPick, tip, quiet }) {
     <LayerGroup>
       {order.map((x) => (
         <Zone key={`${x.p.key}${picked?.has(x.p.key) ? '+' : ''}`} item={x} on={!!picked?.has(x.p.key)}
-          onPick={onPick} tip={tip} quiet={quiet} />
+          hot={hot === x.p.key} onPick={onPick} tip={tip} quiet={quiet} plain={plain} />
       ))}
     </LayerGroup>
   )
 }
 
-/** Lines between places, as wide as what runs between them. */
-export function FlowLines({ flows, tip }) {
+const Arc = memo(function Arc({ path, color, weight, opacity, tip, hotAs }) {
+  const handlers = useMemo(() => (hotAs ? {
+    mouseover: () => setHot(hotAs), mouseout: () => setHot({}),
+  } : undefined), [hotAs])
+  return (
+    <Polyline positions={path} interactive={!!hotAs} eventHandlers={handlers}
+      pathOptions={{ color, weight, opacity, lineCap: 'round' }}>
+      {tip}
+    </Polyline>
+  )
+})
+
+/** Curves between places: thin, in the colour of what runs along them. A flow
+ *  is { key, from, to, w, color, faint, dim, on, tip, hotAs }. */
+export function Arcs({ flows, width = 6 }) {
   const top = Math.max(1, ...flows.map((f) => f.w))
+  const drawn = useMemo(() => flows.map((f) => ({ ...f, path: arc(f.from, f.to) })), [flows])
   return (
     <LayerGroup>
-      {flows.map((f) => (
-        <Polyline key={f.key} positions={[f.a.c, f.b.c]}
-          pathOptions={{ color: f.color || '#ffd166', weight: 1 + 9 * Math.sqrt(f.w / top), opacity: 0.55, lineCap: 'round' }}>
-          {tip?.(f)}
-        </Polyline>
+      {drawn.map((f) => (
+        <Arc key={f.key} path={f.path} color={f.on ? '#ffffff' : f.color} tip={f.tip} hotAs={f.hotAs}
+          weight={Math.max(f.hotAs ? 1 : 0.8, width * Math.sqrt(f.w / top)) + (f.on ? 1.5 : 0)}
+          opacity={f.on ? 1 : f.dim ? 0.1 : f.faint ? 0.3 : 0.6} />
+      ))}
+    </LayerGroup>
+  )
+}
+
+/** Trips that stay where they start: a ring around the middle of the place. */
+export function Rings({ rings }) {
+  const top = Math.max(1, ...rings.map((r) => r.top ?? r.w))
+  return (
+    <LayerGroup>
+      {rings.map((r) => (
+        <CircleMarker key={r.key} center={r.at} radius={5 + 18 * Math.sqrt(r.w / top)}
+          pathOptions={{ color: r.color, weight: 3, opacity: r.dim ? 0.2 : 0.85, fillColor: r.color, fillOpacity: r.dim ? 0.03 : 0.12, dashArray: r.faint ? '3 4' : null }}
+          eventHandlers={r.hotAs ? { mouseover: () => setHot(r.hotAs), mouseout: () => setHot({}), click: r.onPick } : undefined}>
+          {r.tip}
+        </CircleMarker>
       ))}
     </LayerGroup>
   )

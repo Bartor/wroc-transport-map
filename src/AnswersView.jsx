@@ -7,6 +7,7 @@ import {
 import { MapTooltip, TipNote } from '@bartor-net/ui-kit/map'
 import { HeatImage, ZoneLayer } from './ZoneLayer'
 import Bars from './Bars'
+import Stack, { Bar, KINDS, SCALE } from './Stack'
 import { answersCard, answersName, draw, everythingTable, viewTable } from './surveyCards'
 import {
   answersTable, clampOpts, diverging, fullName, marginOf, optionShares, rgb, rowAt, shareOf, spanOf, startOpts,
@@ -20,9 +21,12 @@ const BOX = [51.02, 16.79, 51.23, 17.2]
 
 const pctText = (s) => (s == null ? '—' : `${Math.round(100 * s)}%`)
 
-export function useAnswers(A, Z, a) {
-  const q = A && (A.questions.find((x) => x.key === a.q) || A.questions[0])
-  const group = q && (q.tab[a.group] ? a.group : 'all')
+export function useAnswers(A, Z, a0) {
+  const q = A && (A.questions.find((x) => x.key === a0.q) || A.questions[0])
+  const group = q && (q.tab[a0.group] ? a0.group : 'all')
+  // groups of people are published by district only
+  const only = group !== 'all'
+  const a = useMemo(() => (only && a0.level !== 'd' ? { ...a0, level: 'd', place: a0.place?.startsWith('d') ? a0.place : null } : a0), [a0, only])
   const opts = useMemo(() => (q ? clampOpts(q, a.opts?.length ? a.opts : startOpts(q)) : []), [q, a.opts])
   const places = Z && (a.level === 'd' ? Z.districts : Z.zones)
   const city = q && rowAt(q, group, 'a', 'wro')
@@ -37,6 +41,11 @@ export function useAnswers(A, Z, a) {
     ? surface(q, group, opts, Z.zones, { km: a.km, box: BOX, raw: a.raw }) : null), [q, group, opts, Z, a.level, a.km, a.raw])
   return q && Z ? { A, Z, a, q, group, opts, city, mid, vals, span, heat } : null
 }
+
+/** Colours of a question's answers: a scale from for to against, or kinds. */
+export const optColors = (q) => q.options.map((_, i) => (q.good.length === 2 && q.options.length === 6 ? SCALE[i]
+  : q.good.length === 2 && q.options.length === 5 ? [SCALE[0], SCALE[1], SCALE[3], SCALE[4], SCALE[5]][i]
+    : KINDS[i % KINDS.length]))
 
 const optText = (q, opts) => opts.map((o) => q.options[o]).join(' + ')
 const enough = (a) => ENOUGH[a.level === 'd' ? 'd' : 'z']
@@ -85,7 +94,7 @@ export function AnswersControls({ x, setA }) {
   const { A, a, q, group, opts } = x
   const set = (o) => setA({ ...a, ...o })
   const groups = [...new Set(A.questions.map((y) => y.group))]
-  const toggle = (o) => set({ opts: q.multi ? [o] : opts.includes(o) ? (opts.length > 1 ? opts.filter((y) => y !== o) : opts) : [...opts, o].sort() })
+  const toggle = (o) => set({ opts: q.multi ? [o] : opts.includes(o) ? (opts.length > 1 ? opts.filter((y) => y !== o) : opts) : [...opts, o].sort((s, t) => s - t) })
   const cell = (r) => (
     <Field key={r} label={r}>
       <Chips tight small label={r} onPick={(k) => set({ q: k, opts: null })}
@@ -120,22 +129,24 @@ export function AnswersControls({ x, setA }) {
         </Field>
         <Field label="Widok" help={<p>Rejony i osiedla pokazują same odpowiedzi; mapa wygładzona uśrednia odpowiedzi z okolicy, więc mniej zależy od przypadku, ale rozmywa granice.</p>}>
           <Chips tight label="Widok" onPick={(level) => set({ level, place: null })} items={[
-            { key: 'd', label: 'Osiedla', on: a.level === 'd' }, { key: 'z', label: 'Rejony', on: a.level === 'z' },
-            { key: 'h', label: 'Mapa wygładzona', on: a.level === 'h' }]} />
+            { key: 'd', label: 'Osiedla', on: a.level === 'd' },
+            ...(group === 'all' ? [{ key: 'z', label: 'Rejony', on: a.level === 'z' }, { key: 'h', label: 'Mapa wygładzona', on: a.level === 'h' }] : [])]} />
+          {group !== 'all' && <Hint>Wybrana grupa — tylko według osiedli: w rejonie jest zbyt mało osób.</Hint>}
         </Field>
-        <Toggle checked={!a.raw} onChange={(on) => set({ raw: !on })} label="Skoryguj o ankietera" help={(
+        {!!q.opinion && <Toggle checked={!a.raw} onChange={(on) => set({ raw: !on })} label="Skoryguj o ankietera" help={(
           <>
             <p>
               Odpowiedzi różnią się między ankieterami kilka razy bardziej niż między osiedlami — w pytaniu
-              o wjazd do centrum sam numer ankietera wyjaśnia 38% różnic, a osiedle ponad to ok. 1%. Każdy z 46
-              ankieterów pracował w kilku osiedlach, więc surowa mapa opinii pokazuje w dużej mierze, kto pytał.
+              o wjazd do centrum sam numer ankietera wyjaśnia 38% różnic, a osiedle ponad to ok. 1%. Każdy z 42
+              ankieterów pracował w kilku osiedlach Wrocławia, więc surowa mapa opinii pokazuje w dużej mierze, kto pytał.
             </p>
             <p>
               Korekta odejmuje od odpowiedzi to, o ile u danego ankietera różnią się one od reszty, z poprawką
-              na osiedla, w których pytał. Nie usuwa całego wpływu, dlatego przedziały ± są szerokie.
+              na osiedla, w których pytał. Wygładza też część prawdziwych różnic — zostaje z nich ok. połowa —
+              bo ankieterzy pracowali na swoich terenach. Faktów, jak liczba samochodów, nie poprawiamy.
             </p>
           </>
-        )} />
+        )} />}
         {a.level === 'h' && (
           <Slider min="0.5" max="2.5" step="0.25" value={a.km} label="Wygładzenie" onChange={(km) => set({ km })}
             caption={`Wygładzenie: ${String(a.km).replace('.', ',')} km`} />
@@ -160,9 +171,11 @@ export function AnswersPanel({ x, setA, onClose }) {
     const r = p ? rowAt(q, g.key, level, p.i) : rowAt(q, g.key, 'a', 'wro')
     return r && { g, r, v: shareOf(r, opts, a.raw) }
   }).filter(Boolean)
+  const colors = optColors(q)
+  const toggle = (o) => set({ opts: opts.includes(o) ? (opts.length > 1 ? opts.filter((y) => y !== o) : opts) : [...opts, o].sort((s, t) => s - t) })
   const around = !p && rowAt(q, group, 'a', 'out')
   const name = answersName(x, p)
-  const spec = () => answersCard({ x, p, row, by, gname, ranked, legend: answersLegend({ x }).filter((l) => l.color) })
+  const spec = () => answersCard({ x, p, row, by, gname, ranked, colors, legend: answersLegend({ x }).filter((l) => l.color) })
   return (
     <DetailsPanel pill={p ? (p.level === 'z' ? `rejon ${p.id}` : p.city ? 'osiedle' : 'gmina') : 'ankieta'} color="#d6541c"
       title={fullName(q)} subtitle={`${p ? p.name : 'Mieszkańcy Wrocławia'} · ${gname}`} onClose={onClose}
@@ -176,20 +189,37 @@ export function AnswersPanel({ x, setA, onClose }) {
       {row && row[0] < 30 && <Warn>Tylko {row[0]} odpowiedzi — to za mało, by oceniać ten obszar osobno.</Warn>}
       <Block>
         <h4>Wszystkie odpowiedzi{q.multi ? ' (można było wskazać kilka)' : ''}</h4>
-        {row ? (
-          <Bars whole color="#d6541c" onPick={(r) => set({ opts: q.multi ? [+r.key] : opts.includes(+r.key) && opts.length > 1 ? opts.filter((o) => o !== +r.key) : [...new Set([...opts, +r.key])].sort() })}
-            rows={(q.multi ? optionShares(q, row, a.raw).sort((s, t) => t.share - s.share) : optionShares(q, row, a.raw)).map((o) => ({
+        {!row ? <Hint>Za mało odpowiedzi.</Hint> : q.multi ? (
+          <Bars whole color="#d6541c" onPick={(r) => set({ opts: [+r.key] })}
+            rows={optionShares(q, row, a.raw).sort((s, t) => t.share - s.share).map((o) => ({
               key: String(o.i), label: o.label, share: o.share, on: opts.includes(o.i), dim: !opts.includes(o.i),
               note: p && city ? `(Wrocław ${pctText(shareOf(city, [o.i]))})` : null,
             }))} />
-        ) : <Hint>Za mało odpowiedzi.</Hint>}
+        ) : (
+          <>
+            <Stack on={new Set(opts.map(String))} onPick={(key) => toggle(+key)}
+              parts={optionShares(q, row, a.raw).map((o) => ({ key: String(o.i), label: o.label, share: o.share, color: colors[o.i],
+                note: p && city ? `(Wrocław ${pctText(shareOf(city, [o.i]))})` : null }))} />
+            <Hint>Naciśnij odpowiedź, aby dodać ją do mapy albo usunąć.</Hint>
+          </>
+        )}
       </Block>
       {by.length > 1 && (
         <Block>
-          <h4>{optText(q, opts)} — kto tak odpowiada</h4>
-          <Bars whole color="#3f8bd0" onPick={(r) => set({ group: r.key })} rows={by.map(({ g, r, v: s }) => ({
-            key: g.key, label: g.label, share: s, on: g.key === group, note: `±${mg(r)} · n=${fmt(r[0])}`,
-          }))} />
+          <h4>{q.multi ? `${optText(q, opts)} — kto tak odpowiada` : 'Kto jak odpowiada'}</h4>
+          {q.multi ? (
+            <Bars whole color="#3f8bd0" onPick={(r) => set({ group: r.key })} rows={by.map(({ g, r, v: s }) => ({
+              key: g.key, label: g.label, share: s, on: g.key === group, note: `±${mg(r)} · n=${fmt(r[0])}`,
+            }))} />
+          ) : by.map(({ g, r, v: s }) => (
+            <div key={g.key} style={{ marginBottom: 4 }}>
+              <button type="button" onClick={() => set({ group: g.key })} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', border: 0, padding: 0, background: 'none', color: 'inherit', font: 'inherit', fontSize: 12, cursor: 'pointer', fontWeight: g.key === group ? 700 : 400 }}>
+                <span>{g.label}</span><span>{opts.length > 0 && <b>{pctText(s)}</b>} <small style={{ opacity: 0.7 }}>±{mg(r)} · n={fmt(r[0])}</small></span>
+              </button>
+              <Bar height={16} on={new Set(opts.map(String))} onPick={(key) => toggle(+key)}
+                parts={optionShares(q, r, a.raw).map((o) => ({ key: String(o.i), label: o.label, share: o.share, color: colors[o.i] }))} />
+            </div>
+          ))}
         </Block>
       )}
       <StatBlock title={`Wyraźnie inaczej niż Wrocław — ${level === 'd' ? 'osiedla i gminy' : 'rejony'}`}>
@@ -213,8 +243,8 @@ export function AnswersPanel({ x, setA, onClose }) {
       <Notes>
         <li>Udziały ważone wagami KBR. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera; różnice mniejsze niż on mogą być przypadkiem.</li>
         <li>Te same osoby pytały kierowców i niekierowców, więc różnice między grupami są pewniejsze niż same poziomy i niż różnice między osiedlami.</li>
-        {p && !a.raw && <li>Wartości obszarów po korekcie o ankietera; poziom całego miasta bez niej.</li>}
-        <li>Obszary z mniej niż {A.minN} odpowiedziami w ogóle nie są publikowane.</li>
+        {p && !a.raw && !!q.opinion && <li>Wartości obszarów po korekcie o ankietera; poziom całego miasta bez niej.</li>}
+        <li>Obszary z mniej niż {A.minN} odpowiedziami nie są pokazywane. Na udział w badaniu zgodziło się ok. 31% gospodarstw; przedziały tego nie obejmują.</li>
         <li>KBR 2024, badanie ankietowe w gospodarstwach domowych (zał. do Raportu II).</li>
       </Notes>
     </DetailsPanel>

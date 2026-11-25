@@ -5,7 +5,10 @@ import { prepare, scenario } from './choice'
 import { TRIP_PRESETS, modeAt, passing, touching } from './trips'
 
 const ALT = ['walk', 'bike', 'car', 'car', 'pt', 'pt', 'pt', 'pt', 'other']   // by TRIP_MODES
-const WHY = { 1: 'work', 10: 'work', 2: 'school', 3: 'uni', 4: 'shop', 5: 'shop' }
+// by what the trip has at its other end than home; as etl/choice.py has it, only
+// the survey's own work, school and shopping motives count as such
+const WHY = { 1: 'work', 2: 'school', 3: 'uni', 4: 'shop', 5: 'shop' }
+const HOME_WHY = (c, i) => (c.a0[i] === 0 || c.a1[i] === 0 ? WHY[c.a1[i] === 0 ? c.a0[i] : c.a1[i]] : c.a1[i] === 10 || c.a0[i] === 10 ? 'work' : null) || 'other'
 const NAMES = { car: 'samochód', pt: 'transport zbiorowy', walk: 'pieszo', bike: 'rower' }
 const SCOPES = [['into', 'do centrum'], ['core', 'do lub z centrum'], ['all', 'wszystkie']]
 const NONE = { carMin: 0, ptMin: 0, ptWait: 0, scope: 'into' }
@@ -20,7 +23,7 @@ function rowsOf(S, idx) {
   const id = (k) => (k < Z.count ? Z.zones[k].id : Z.outside[k - Z.count].id)
   return idx.map((i) => ({
     from: id(c.f[i]), to: id(c.t[i]), mode: ALT[modeAt(c.m[i])],
-    purpose: WHY[c.a1[i] === 0 ? c.a0[i] : c.a1[i]] || 'other',
+    purpose: HOME_WHY(c, i),
     cars: c.hc[i], age: c.ag[i], pass: !!c.ps[i], licence: !!c.lc[i], w: c.w[i],
   }))
 }
@@ -87,7 +90,7 @@ export default function ScenarioPanel({ x, choice, onOpen, setT }) {
               <Hint>
                 Samochodem {fmtEst(Math.abs(r.carTrips.before - r.carTrips.after))} podróży{' '}
                 {r.carTrips.after < r.carTrips.before ? 'mniej' : 'więcej'} — z {fmtEst(r.carTrips.before)}.
-                W nawiasie zakres między wariantami modelu i próby. {r.n} podróży w próbie.
+                W nawiasie szerszy z zakresów: próby (90%) albo między wariantami modelu. {r.n} podróży w próbie.
               </Hint>
               {r.n < 200 && <Warn>Mała próba — poszerz filtry lub okres.</Warn>}
             </>
@@ -97,7 +100,7 @@ export default function ScenarioPanel({ x, choice, onOpen, setT }) {
             <li>Ankieta nie pyta o ceny, więc nie ocenia opłat ani kosztu parkowania; scenariusze są w minutach.</li>
             <li>Przyjęto, że minuta w samochodzie znaczy tyle co minuta w tramwaju — osobno danych jest za mało.</li>
             <li>Rozkład jazdy z listopada 2026, ankieta z 2024; bez pociągów.</li>
-            <li>Reakcje są raczej zaniżone. Nie uwzględnia zmiany celu, liczby podróży ani zatłoczenia.</li>
+            <li>Czy reakcje są zaniżone, czy zawyżone — nie wiadomo. Nie uwzględnia zmiany celu, liczby podróży ani zatłoczenia.</li>
           </Notes>
         </>
       )}

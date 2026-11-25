@@ -2,7 +2,8 @@
 // and the notes that have to travel with them.
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
 import { diverging, fullName, marginOf, optionShares, rgb, shareOf } from './answers'
-import { breaks, scale } from './trips'
+import { arc } from './arcs'
+import { breaks, placeName, scale } from './trips'
 
 const SITE = 'bartor.github.io/wroc-transport-map'
 const KBR = 'Kompleksowe Badania Ruchu Wrocław 2024'
@@ -42,6 +43,103 @@ export const barsBlock = ({ title, rows, color, whole }) => (ctx, y0, { W, PAD, 
   return y + 14
 }
 
+/** Parts of a whole as one bar with a legend; several rows share the legend. */
+export const stackBlock = ({ title, parts, rows }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para }) => {
+  let y = title ? para(ctx, title.toUpperCase(), PAD, y0, W - 2 * PAD, 14, FAINT, 600) + 8 : y0
+  const bar = (list, h) => {
+    const some = list.filter((p) => p.share > 0)
+    let x = PAD
+    const room = W - 2 * PAD - 2 * (some.length - 1)
+    const sum = some.reduce((a, p) => a + p.share, 0) || 1
+    for (const p of some) {
+      const w = (room * p.share) / sum
+      ctx.globalAlpha = p.on === false ? 0.45 : 1
+      ctx.fillStyle = p.color
+      ctx.fillRect(x, y, w, h)
+      const text = pctText(p.share)
+      ctx.font = font(14, 700)
+      if (w > ctx.measureText(text).width + 8) {
+        ctx.fillStyle = dark(p.color) ? '#ffffff' : INK
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText(text, x + w / 2, y + h / 2 + 1)
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'top'
+      }
+      ctx.globalAlpha = 1
+      x += w + 2
+    }
+    y += h
+  }
+  const key = (list) => {
+    let x = PAD
+    ctx.textBaseline = 'middle'
+    for (const p of list.filter((q) => q.share > 0)) {
+      const text = `${p.label}${rows ? '' : ` ${pctText(p.share)}`}`
+      ctx.font = font(14, p.on ? 700 : 400)
+      const w = ctx.measureText(text).width + 34
+      if (x + w > W - PAD + 14) { x = PAD; y += 24 }
+      ctx.fillStyle = p.color
+      ctx.fillRect(x, y + 3, 13, 13)
+      ctx.fillStyle = DIM
+      ctx.fillText(text, x + 19, y + 10)
+      x += w
+    }
+    ctx.textBaseline = 'top'
+    y += 28
+  }
+  if (!rows) {
+    bar(parts, 30)
+    y += 8
+    key(parts)
+    return y + 12
+  }
+  key(rows[0].parts.map((p) => ({ ...p, share: 1 })))
+  for (const r of rows) {
+    ctx.font = font(15)
+    ctx.fillStyle = INK
+    ctx.textBaseline = 'top'
+    ctx.fillText(r.label, PAD, y)
+    if (r.note) {
+      ctx.textAlign = 'right'
+      ctx.font = font(14)
+      ctx.fillStyle = FAINT
+      ctx.fillText(r.note, W - PAD, y)
+      ctx.textAlign = 'left'
+    }
+    y += 22
+    bar(r.parts, 22)
+    y += 10
+  }
+  return y + 14
+}
+const dark = (hex) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  return 0.299 * r + 0.587 * g + 0.114 * b < 150
+}
+
+/** A ranking in two columns: what, how much, and what it rests on. */
+export const listBlock = ({ title, rows }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para, wrap }) => {
+  const top = para(ctx, title.toUpperCase(), PAD, y0, W - 2 * PAD, 14, FAINT, 600) + 8
+  const half = Math.ceil(rows.length / 2)
+  const cw = (W - 2 * PAD - 40) / 2
+  rows.forEach((r, i) => {
+    const x = PAD + (i < half ? 0 : cw + 40)
+    const y = top + (i % half) * 44
+    ctx.textBaseline = 'top'
+    ctx.font = font(16, 600)
+    ctx.fillStyle = INK
+    ctx.fillText(`${i + 1}. ${wrap(ctx, r.label, cw - 110)[0]}`, x, y)
+    ctx.textAlign = 'right'
+    ctx.fillText(r.value, x + cw, y)
+    ctx.textAlign = 'left'
+    ctx.font = font(13)
+    ctx.fillStyle = DIM
+    ctx.fillText(r.sub, x + 22, y + 20)
+  })
+  return top + half * 44 + 12
+}
+
 /** The view over some rings, in card pixels: x grows east, y grows south. */
 function frame(rings, x, y, w, maxH) {
   let [s, n, west, e] = [90, -90, 180, -180]
@@ -65,16 +163,16 @@ function frame(rings, x, y, w, maxH) {
  * a legend under it. `fit` are the rings that must be in the picture; `heat` a
  * smoothed surface drawn under the outlines.
  */
-export const mapBlock = ({ areas, fit, circles = [], heat, legend, title }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para }) => {
+export const mapBlock = ({ areas, fit, circles = [], arcs = [], rings = [], heat, legend, title, border }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para }) => {
   let y = title ? para(ctx, title, PAD, y0, W - 2 * PAD, 16, INK, 600) + 10 : y0
-  const f = frame(fit, PAD, y, W - 2 * PAD, 620)
+  const f = frame(fit, PAD, y, W - 2 * PAD, 780)
   ctx.save()
   ctx.beginPath()
   ctx.rect(PAD, y, W - 2 * PAD, f.h)
   ctx.clip()
-  const trace = (rings) => {
+  const trace = (list) => {
     ctx.beginPath()
-    for (const r of rings) {
+    for (const r of list) {
       r.forEach((p, i) => { const [a, b] = f.at(p); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
       ctx.closePath()
     }
@@ -98,19 +196,51 @@ export const mapBlock = ({ areas, fit, circles = [], heat, legend, title }) => (
   for (const s of areas) {
     trace(s.rings)
     if (!heat) {
-      ctx.globalAlpha = s.color ? (s.faint ? 0.35 : 1) : 1
-      ctx.fillStyle = s.color || '#f1f2f5'
+      ctx.fillStyle = '#f5f6f8'
       ctx.fill('evenodd')
+      if (s.color) {
+        ctx.globalAlpha = s.alpha ?? (s.faint ? 0.35 : 1)
+        ctx.fillStyle = s.color
+        ctx.fill('evenodd')
+        ctx.globalAlpha = 1
+      }
     }
-    ctx.globalAlpha = heat ? 0.35 : 1
-    ctx.strokeStyle = heat ? '#5b6270' : '#ffffff'
-    ctx.lineWidth = heat ? 0.6 : 1.2
+    ctx.strokeStyle = heat ? 'rgba(60,68,82,.35)' : 'rgba(60,68,82,.4)'
+    ctx.lineWidth = 0.8
     ctx.stroke()
-    ctx.globalAlpha = 1
+  }
+  // the city itself, heavier
+  if (border) {
+    ctx.strokeStyle = 'rgba(30,36,46,.75)'
+    ctx.lineWidth = 2
+    for (const seg of border) {
+      ctx.beginPath()
+      seg.forEach((p, i) => { const [a, b] = f.at(p); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
+      ctx.stroke()
+    }
   }
   for (const s of areas.filter((q) => q.on)) {
     trace(s.rings)
     ctx.strokeStyle = INK
+    ctx.lineWidth = 3
+    ctx.stroke()
+  }
+  ctx.lineCap = 'round'
+  const topW = Math.max(1, ...arcs.map((a) => a.w))
+  for (const c of arcs) {
+    ctx.beginPath()
+    c.path.forEach((p, i) => { const [a, b] = f.at(p); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
+    ctx.strokeStyle = c.color
+    ctx.globalAlpha = c.faint ? 0.35 : 0.7
+    ctx.lineWidth = Math.max(1, (c.width || 8) * Math.sqrt(c.w / topW))
+    ctx.stroke()
+    ctx.globalAlpha = 1
+  }
+  for (const r of rings) {
+    const [a, b] = f.at(r.at)
+    ctx.beginPath()
+    ctx.arc(a, b, 6 + 22 * Math.sqrt(r.w / (r.top || r.w)), 0, 2 * Math.PI)
+    ctx.strokeStyle = r.color
     ctx.lineWidth = 3
     ctx.stroke()
   }
@@ -124,6 +254,24 @@ export const mapBlock = ({ areas, fit, circles = [], heat, legend, title }) => (
     ctx.lineWidth = 1.2
     ctx.stroke()
   }
+  // names and numbers, where they fit: the picked one first, then the biggest
+  const taken = []
+  const halo = (text, x, yy) => { ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineJoin = 'round'; ctx.strokeText(text, x, yy); ctx.fillText(text, x, yy) }
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  for (const s of [...areas].filter((q) => q.name).sort((p, q) => (q.on || 0) - (p.on || 0) || (q.weight || 0) - (p.weight || 0))) {
+    const [a, b] = f.at(s.c)
+    if (a < PAD + 20 || a > W - PAD - 20 || b < y + 10 || b > y + f.h - 14) continue
+    const lines = [...split2(s.name).map((t) => [t, font(12, 600), INK]), ...(s.text ? [[s.text, font(13, 700), '#0b3a66']] : []), ...(s.sub ? [[s.sub, font(11, 600), '#3a4250']] : [])]
+    const w = Math.max(...lines.map(([t, ft]) => { ctx.font = ft; return ctx.measureText(t).width }))
+    const h = lines.length * 15
+    const box = [a - w / 2 - 2, b - h / 2, a + w / 2 + 2, b + h / 2]
+    if (taken.some((o) => box[0] < o[2] && box[2] > o[0] && box[1] < o[3] && box[3] > o[1])) continue
+    taken.push(box)
+    lines.forEach(([t, ft, ink], i) => { ctx.font = ft; ctx.fillStyle = ink; halo(t, a, b - h / 2 + 8 + i * 15) })
+  }
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'top'
   ctx.restore()
   y += f.h + 12
   // swatches in a row, wrapping
@@ -145,6 +293,35 @@ export const mapBlock = ({ areas, fit, circles = [], heat, legend, title }) => (
   return y + 18
 }
 
+/** A long name on two lines. */
+function split2(name) {
+  if (name.length < 15) return [name]
+  const parts = name.split(/(?<=[-\s])/)
+  if (parts.length < 2) return [name]
+  let best = 1
+  for (let i = 1; i < parts.length; i++) {
+    const d = (k) => Math.abs(parts.slice(0, k).join('').length - name.length / 2)
+    if (d(i) < d(best)) best = i
+  }
+  return [parts.slice(0, best).join('').trim(), parts.slice(best).join('').trim()]
+}
+
+/** The edge of the city: borders of its areas that no other of them shares. */
+function cityBorder(places) {
+  const key = (p) => `${p[0].toFixed(5)},${p[1].toFixed(5)}`
+  const seen = new Map()
+  for (const p of places.filter((q) => q.city)) {
+    for (const r of p.rings) {
+      r.forEach((a, i) => {
+        const b = r[(i + 1) % r.length]
+        const k = [key(a), key(b)].sort().join('|')
+        seen.set(k, seen.has(k) ? null : [a, b])
+      })
+    }
+  }
+  return [...seen.values()].filter(Boolean)
+}
+
 const footer = () => ({
   footer: `KBR Wrocław 2024 — przeglądarka map · wygenerowano ${new Date().toLocaleDateString('pl-PL')}`, site: SITE,
 })
@@ -155,7 +332,7 @@ const fitOf = (places, picked) => places.filter((p) => p.city || picked?.has(p.k
 const optText = (q, opts) => opts.map((o) => q.options[o]).join(' + ')
 
 /** The answers view as a card. `p` is the picked place, if any. */
-export function answersCard({ x, p, row, by, gname, ranked, legend }) {
+export function answersCard({ x, p, row, by, gname, ranked, colors, legend }) {
   const { Z, a, q, opts, mid, span, heat, vals } = x
   const v = shareOf(row, opts, a.raw)
   const m = row && marginOf(q, row, opts, a.raw)
@@ -168,24 +345,30 @@ export function answersCard({ x, p, row, by, gname, ranked, legend }) {
     subtitle: q.full ? `„${q.full}”` : undefined,
     when: `${p ? p.name : 'Wrocław'} · ${gname} · ${fmt(row?.[0])} odpowiedzi`,
     blocks: [
-      barsBlock({ color: '#d6541c', whole: true, rows: (q.multi ? [...list].sort((s, t) => t.share - s.share).slice(0, 12) : list)
-        .map((o) => ({ label: o.label, share: o.share, on: opts.includes(o.i), note: opts.length === 1 && opts[0] === o.i ? `±${Math.round(100 * m)} p.p.` : null })) }),
-      ...(opts.length > 1 ? [(ctx, y, k) => k.para(ctx, `${optText(q, opts)}: ${pctText(v)} ±${Math.round(100 * m)} p.p.`, k.PAD, y, k.W - 2 * k.PAD, 21, '#c2410c', 700) + 18] : []),
+      q.multi ? barsBlock({ color: '#d6541c', whole: true, rows: [...list].sort((s, t) => t.share - s.share).slice(0, 12)
+        .map((o) => ({ label: o.label, share: o.share, on: opts.includes(o.i), note: opts[0] === o.i ? `±${Math.round(100 * m)} p.p.` : null })) })
+        : stackBlock({ parts: list.map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.includes(o.i) })) }),
+      ...(!q.multi ? [(ctx, y, k) => k.para(ctx, `${optText(q, opts)}: ${pctText(v)} ±${Math.round(100 * m)} p.p.`, k.PAD, y, k.W - 2 * k.PAD, 21, '#c2410c', 700) + 18] : []),
       mapBlock({
         title: `${optText(q, opts)} — ${a.level === 'h' ? 'mapa wygładzona' : a.level === 'd' ? 'według osiedli' : 'według rejonów'}`,
-        fit: fitOf(places, picked), legend, heat: heat && { surface: heat, mid, span },
+        fit: fitOf(places, picked), legend, heat: heat && { surface: heat, mid, span }, border: cityBorder(places),
         areas: vals.map((t) => ({
-          rings: t.p.rings, on: picked.has(t.p.key),
+          rings: t.p.rings, on: picked.has(t.p.key), c: t.p.c,
           color: t.v == null || t.n < enough ? null : rgb(diverging(t.v, mid, span)),
           faint: t.v != null && Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw),
+          name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : pctText(t.v),
+          sub: t.v == null ? null : `±${Math.round(100 * marginOf(q, t.row, opts, a.raw))} · n=${t.n}`, weight: t.n,
         })),
       }),
-      ...(by.length > 1 ? [barsBlock({ color: '#3f8bd0', whole: true, title: `${optText(q, opts)} — kto tak odpowiada`,
-        rows: by.map(({ g, r, v: s }) => ({ label: g.label, share: s, note: `±${Math.round(100 * marginOf(q, r, opts, a.raw))} · n=${fmt(r[0])}` })) })] : []),
+      ...(by.length > 1 ? [q.multi ? barsBlock({ color: '#3f8bd0', whole: true, title: `${optText(q, opts)} — kto tak odpowiada`,
+        rows: by.map(({ g, r, v: s }) => ({ label: g.label, share: s, note: `±${Math.round(100 * marginOf(q, r, opts, a.raw))} · n=${fmt(r[0])}` })) })
+        : stackBlock({ title: 'Kto jak odpowiada', rows: by.map(({ g, r, v: s }) => ({ label: g.label,
+          note: `${optText(q, opts)} ${pctText(s)} ±${Math.round(100 * marginOf(q, r, opts, a.raw))} · n=${fmt(r[0])}`,
+          parts: optionShares(q, r, a.raw).map((o) => ({ label: o.label, share: o.share, color: colors[o.i], on: opts.includes(o.i) })) })) })] : []),
     ],
     notes: [
       'Udziały ważone. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera.',
-      a.raw ? 'Mapa bez korekty o ankietera: odpowiedzi różnią się między ankieterami bardziej niż między osiedlami.'
+      !q.opinion ? 'Blade pola: różnica od średniej w granicach błędu.' : a.raw ? 'Mapa bez korekty o ankietera: odpowiedzi różnią się między ankieterami bardziej niż między osiedlami.'
         : `Wartości obszarów skorygowane o ankietera. ${a.level === 'h' ? 'Blade miejsca: mało odpowiedzi.' : 'Blade pola: różnica od średniej w granicach błędu.'}`,
       ...(a.level !== 'h' && !ranked.length ? ['Żaden obszar nie różni się od średniej bardziej, niż wynosi błąd.'] : []),
       ...(q.multi ? ['Można było wskazać kilka odpowiedzi.'] : []),
@@ -207,31 +390,47 @@ export function filterText(S, filters) {
 }
 
 /** The trips view as a card. `paint` is what the map is painted with. */
-export function tripsCard({ x, title, period, wayName, paint, legendTitle, goals }) {
-  const { S, t, stats, places } = x
-  const { list, value, share } = paint
+export function tripsCard({ x, title, period, wayName, paint, legendTitle, stacks, lines, top, small, perHead }) {
+  const { S, t, stats, places, partner, show, sums } = x
+  const { list, value, share, n } = paint
   const sc = scale(breaks(value, share), false)
   const f = (v) => (share ? `${Math.round(100 * v)}%` : paint.digits ? fixed(v, paint.digits) : fmt(v))
   const picked = new Set(t.picked)
   const filters = filterText(S, t.filters)
-  const own = places.length && places.every((p) => p.pop) ? places.reduce((s, p) => s + p.pop, 0) : 0
+  const own = places.length && places.every((p) => p.w) ? places.reduce((s, p) => s + p.w, 0) : 0
+  const painting = show === 'areas'
+  const num = (w) => (S.freight ? fmt(w) : fmtEst(w))
+  const label = (p, k) => {
+    if (partner) {
+      const w = partner.w[k]
+      return !w ? {} : { name: placeName(p), text: `${pctText(w / stats.w)} · ${num(w)}`, sub: `${painting && value[k] != null ? `${f(value[k])} · ` : ''}n=${partner.n[k]}`, weight: w }
+    }
+    const s = sums[k]
+    return { name: placeName(p), text: painting && value[k] != null ? paint.text(value[k]) : null, sub: s.any ? `${num(s.any)} · n=${s.n}` : null, weight: s.any }
+  }
   return {
     accent: '#3f8bd0', kicker: S.freight ? 'Badanie przewozów towarów KBR 2024' : 'Badanie ankietowe KBR 2024 · podróże mieszkańców',
     title, subtitle: [places.length ? wayName : null, filters || null].filter(Boolean).join(' · ') || undefined,
     when: `${period} · ${S.freight ? `${fmt(stats.n)} przejazdów w próbie` : `${fmtEst(stats.w)} podróży na dobę (${fmt(stats.n)} w próbie)`}`
-      + `${!S.freight && own >= 500 ? ` · ${fixed(stats.w / own, 2)} na mieszkańca` : ''}`,
+      + `${!S.freight && own >= 300 ? ` · ${fixed(stats.w / own, 2)} na mieszkańca` : ''}`,
     blocks: [
       splitBlock({
         unit: S.freight ? 'przejazdów' : 'podróży', columns: { value: S.freight ? 'PRZEJAZDY' : 'PODRÓŻE', share: '%' },
         slices: S.modes.map((m, i) => ({ key: m.key, label: m.label, color: m.color, value: stats.mode.w[i], est: !S.freight })),
       }),
-      ...(goals.length > 1 ? [barsBlock({ title: 'Cel podróży', whole: true, color: '#3f8bd0', rows: goals.slice(0, 8) })] : []),
+      ...stacks.map((s) => stackBlock({ title: s.label, parts: s.parts })),
       mapBlock({
-        title: legendTitle, fit: fitOf(list, picked),
-        areas: list.map((p, k) => ({ rings: p.rings, on: picked.has(p.key), color: value[k] == null ? null : sc.color(value[k]) })),
-        legend: [...sc.steps.map((s) => ({ color: s.color, label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}` })),
-          { note: [paint.unit, 'szare: za mało podróży lub mieszkańców'].filter(Boolean).join(' · ') }],
+        title: legendTitle, fit: fitOf(list, picked), border: cityBorder(list),
+        areas: list.map((p, k) => ({ rings: p.rings, on: picked.has(p.key), c: p.c, color: !painting || value[k] == null ? null : sc.color(value[k]),
+          alpha: 0.3 + 0.7 * Math.min(1, n[k] / 20), ...label(p, k) })),
+        arcs: lines.arcs.map((a) => ({ ...a, path: arc(a.from, a.to), width: show === 'trips' ? 1.4 : 8 })), rings: lines.rings,
+        legend: painting ? [...sc.steps.map((s) => ({ color: s.color, label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}` })),
+          { note: [paint.unit, 'bladsze: mniej niż 20 podróży w próbie'].filter(Boolean).join(' · ') }]
+          : S.modes.map((m) => ({ color: m.color, label: m.label })),
       }),
+      ...(top.length > 1 ? [listBlock({ title: `${partner ? 'Druga strona podróży' : 'Najwięcej podróży'}${perHead ? ` na ${small > 1 ? '1000 mieszkańców' : 'mieszkańca'}` : ''}`,
+        rows: top.map((r) => ({ label: r.name, value: S.freight ? fmt(r.w) : perHead ? fixed(small * r.rate, small > 1 ? 1 : 2) : fmtEst(r.w),
+          sub: `${partner ? `${pctText(r.w / stats.w)} · ` : ''}${num(r.w)}${S.freight ? '' : ' na dobę'} · n=${fmt(r.n)}` })) })] : []),
     ],
     notes: S.freight ? ['Przejazdy w próbie, nie przeliczone na cały ruch ciężarowy.'] : [
       'Dzienniczki podróży z jednego dnia roboczego (wtorek–czwartek), przeliczone na mieszkańców Wrocławia i 9 gmin wagami KBR. Bez przyjezdnych z dalszych okolic.',
@@ -239,7 +438,7 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, goals
       ...(t.filters.mode ? [] : [`${stats.main.map((m) => `${m.label} ${pctText(m.share)}${m.margin ? ` ±${Math.round(100 * m.margin)} p.p.` : ''}`).join(', ')} (95%).`]),
       ...(stats.n < 100 ? [`Tylko ${fmt(stats.n)} podróży w próbie — udziały orientacyjne.`] : []),
     ],
-    source: `Źródło: ${KBR}, ${S.freight ? 'zał. 10.3' : 'badanie ankietowe w gospodarstwach domowych; mieszkańcy: zał. 3.1'} — bip.um.wroc.pl.`,
+    source: `Źródło: ${KBR}, ${S.freight ? 'zał. 10.3' : 'badanie ankietowe w gospodarstwach domowych; na mieszkańca: od 6 lat, z wag badania'} — bip.um.wroc.pl.`,
     ...footer(),
   }
 }

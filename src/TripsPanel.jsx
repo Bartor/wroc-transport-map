@@ -1,66 +1,142 @@
-// What the filtered trips are, in numbers.
+// What the filtered trips are, in numbers. Every chart filters: a press on a
+// part keeps only it, here, on the map and in the sidebar, while the chart
+// itself goes on showing all of its parts.
 import { useMemo, useState } from 'react'
 import {
-  Block, DataTable, DetailsPanel, Donut, Fact, Facts, Hint, LinkButton, Notes, RankList, ShareButtons,
-  SplitBody, SplitTable, StatBlock, Warn, downloadCsv, fixed, fmt, fmtEst, hourRuns, usePick,
+  Block, Chips, DataTable, DetailsPanel, Donut, Fact, Facts, Hint, LinkButton, Notes, Select, ShareButtons,
+  SplitBody, SplitTable, StatBlock, Warn, downloadCsv, fixed, fmt, fmtEst, hourRuns,
 } from '@bartor-net/ui-kit'
 import { StackedHourBars } from '@bartor-net/ui-kit/charts'
-import Bars from './Bars'
-import { FEW, THIN, placeName, placesTable, shares, tripRow, tripsTable } from './trips'
+import { dayModes, dayText, daysTable, DAY_MODES, patterns } from './days'
+import { hotOn, setHot, useHot } from './hot'
+import Stack, { Bar, colorsOf } from './Stack'
+import {
+  FEW, countMargin, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
+} from './trips'
 import { draw, tripsCard, tripsName } from './surveyCards'
-import { WAYS, WAY_TEXT, painted, pctText, unitOf } from './TripsView'
+import { WAYS, WAY_TEXT, flowLines, painted, pctText, unitOf } from './TripsView'
 
 const MANY = 200      // rows of single trips to show
-const BARS = [['goal', 'Cel podróży'], ['why', 'Motyw (tam i z powrotem)'], ['km', 'Długość'], ['min', 'Czas podróży'],
+const ORDERED = new Set(['km', 'min', 'in', 'cars', 'age', 'change'])
+const STACKS = [['goal', 'Cel podróży'], ['km', 'Długość (w linii prostej)'], ['min', 'Czas podróży'],
   ['in', 'Osób w samochodzie — kierowcy'], ['park', 'Gdzie zaparkowano — kierowcy'],
   ['reason', 'Dlaczego samochodem — kierowcy'], ['cars', 'Samochody w gospodarstwie'], ['age', 'Wiek']]
-const FREIGHT_BARS = [['goal', 'Cel'], ['from', 'Skąd'], ['to', 'Dokąd']]
-const ORDERED = new Set(['km', 'min', 'in', 'cars', 'age'])
+const FREIGHT_STACKS = [['goal', 'Cel'], ['from', 'Skąd'], ['to', 'Dokąd']]
+
+const listRow = {
+  display: 'grid', gridTemplateColumns: '1fr auto', columnGap: 8, width: '100%', textAlign: 'left', border: 0,
+  background: 'none', color: 'inherit', font: 'inherit', padding: '5px 6px', borderRadius: 4, cursor: 'pointer',
+}
+/** A ranking whose rows light up the map, and are lit by it. */
+function HotList({ items, hotKey }) {
+  return (
+    <div>
+      {items.map((r) => (
+        <button key={r.key} type="button" onClick={r.onPick} {...(r.hot ? hotOn(r.hot) : {})}
+          style={{ ...listRow, cursor: r.onPick ? 'pointer' : 'default', background: hotKey != null && r.hotKey === hotKey ? 'rgba(63,139,208,.28)' : r.on ? 'rgba(63,139,208,.18)' : 'none' }}>
+          <span>{r.title}<br /><small style={{ opacity: 0.65 }}>{r.sub}</small></span>
+          <b style={{ fontVariantNumeric: 'tabular-nums' }}>{r.value}</b>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 export default function TripsPanel({ x, setT, period, onClose }) {
-  const { S, t, stats, idx, places, partner, sums } = x
-  const pick = usePick()
+  const { S, t, stats, idx, places, partner, sums, show, spots } = x
+  const hot = useHot()
   const [list, setList] = useState(false)
   const one = places.length === 1 ? places[0] : null
-  const title = one ? placeName(one) : places.length ? `${places.length} obszary razem` : 'Wszystkie obszary'
-  const rows = S.modes.map((m, i) => ({ key: m.key, label: m.label, color: m.color, value: stats.mode.w[i], n: stats.mode.n[i] }))
-    .filter((r) => r.n > 0)
+  const spot = t.filters.spot && spots ? spots[t.filters.spot[0]] : null
+  const title = spot ? spot.name : one ? placeName(one) : places.length ? `${places.length} obszary razem` : 'Wszystkie obszary'
   const { list: drawn } = S.levels[t.level]
   const perHead = !S.freight && t.per === 'pop'
+  const many = S.freight ? 'przejazdów' : 'podróży'
+
+  // a chart is counted without its own filter, or it would show one part only
+  const baseOf = useMemo(() => {
+    const memo = {}
+    return (key) => (!t.filters[key]?.length ? idx
+      : memo[key] ||= touching(S, passing(S, { filters: t.filters, hours: x.hours }, key), x.zones, x.way))
+  }, [S, idx, t.filters, x.hours, x.zones, x.way])
+  const toggle = (key) => (k) => {
+    const i = +k
+    const on = t.filters[key] || []
+    const next = on.includes(i) ? on.filter((y) => y !== i) : [...on, i]
+    const { [key]: _, ...rest } = t.filters
+    setT({ ...t, filters: next.length ? { ...rest, [key]: next } : rest })
+  }
+  const onOf = (key) => new Set((t.filters[key] || []).map(String))
+
+  // the modes: hover lights the map, a press filters
+  const modes = useMemo(() => {
+    const sh = shares(S, baseOf('mode'), 'mode')
+    return sh.map((o) => ({ key: String(o.i), label: o.label, color: S.modes[o.i].color, value: o.w, n: o.n, share: o.share })).filter((o) => o.n > 0)
+  }, [S, baseOf])
+  const modeOn = onOf('mode')
+  const pick = {
+    active: hot.mode != null ? new Set([...modeOn, String(hot.mode)]) : modeOn, pinned: modeOn, toggle: toggle('mode'),
+    on: (key) => ({ onMouseEnter: () => setHot({ mode: +key }), onMouseLeave: () => setHot({}), onClick: () => toggle('mode')(key) }),
+  }
+
   const top = useMemo(() => {
     const out = partner
       ? [...drawn.map((p, k) => ({ key: p.key, name: placeName(p), p, w: partner.w[k], n: partner.n[k] })),
         ...partner.off.map((o) => ({ key: `o${o.id}`, name: o.name, w: o.w, n: o.n }))]
       : drawn.map((p, k) => ({ key: p.key, name: placeName(p), p, w: x.way === 'from' ? sums[k].from : x.way === 'to' ? sums[k].to : sums[k].any, n: sums[k].n }))
-    // per resident by default; a handful of trips, or of people, has no rate
-    return out.map((r) => ({ ...r, rate: r.p?.pop >= FEW ? r.w / r.p.pop : null }))
-      .filter((r) => r.n > 0 && (!perHead || (r.rate != null && r.n >= (partner ? 5 : THIN))))
+    return out.map((r) => ({ ...r, rate: r.p?.w >= FEW ? r.w / r.p.w : null }))
+      .filter((r) => r.n > 0 && (!perHead || r.rate != null))
       .sort((a, b) => (perHead ? b.rate - a.rate : b.w - a.w))
   }, [partner, drawn, sums, x.way, perHead])
-  const own = places.length && places.every((q) => q.pop) ? places.reduce((a, q) => a + q.pop, 0) : 0
+  const small = perHead && Math.max(0, ...top.map((r) => r.rate)) < 0.25 ? 1000 : 1
+  const own = places.length && places.every((q) => q.w) ? places.reduce((a, q) => a + q.w, 0) : 0
+  const spotTop = useMemo(() => {
+    if (!spots || S.freight) return []
+    const s = perSpot(S, idx, spots.length)
+    return spots.map((q, i) => ({ i, name: q.name, w: s.w[i], n: s.n[i], street: q.street })).filter((r) => r.n > 0 && !r.street).sort((a, b) => b.w - a.w)
+  }, [spots, S, idx])
+  const tab = useMemo(() => {
+    const has = (k) => S.D.some((d) => d.key === k)
+    return crossTab(S, idx, has(t.rows) ? t.rows : 'mode', has(t.split) ? t.split : 'goal')
+  }, [S, idx, t.rows, t.split])
+  const day = useMemo(() => (x.dayRows && x.days ? { ...patterns(x.days, x.dayRows), modes: dayModes(x.dayRows) } : null), [x.dayRows, x.days])
+
   const fname = tripsName(title, period, x.way, t.filters)
-  const wayName = WAY_TEXT[x.way]
   const spec = () => {
     const paint = painted(x)
     return tripsCard({
-      x, title, period, paint, wayName,
-      legendTitle: partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
-      goals: shares(S, idx, 'goal').filter((o) => o.n > 0).sort((a, b) => b.w - a.w).map((o) => ({ label: o.label, share: o.share, note: `${o.n} w próbie` })),
+      x, title, period, paint, wayName: WAY_TEXT[x.way], lines: flowLines(x),
+      legendTitle: show !== 'areas' ? 'Połączenia — kolor: najczęstszy środek' : partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
+      stacks: (S.freight ? FREIGHT_STACKS : STACKS.slice(0, 3)).map(([key, label]) => stackOf(key, label)).filter(Boolean),
+      top: top.slice(0, 12), small, perHead,
     })
   }
-  const pickPlace = (p) => p && setT({ ...t, picked: [p.key] })
+  function stackOf(key, label) {
+    const d = S.D.find((q) => q.key === key)
+    const sh = shares(S, baseOf(key), key)
+    if (sh.filter((o) => o.n > 0).length < 2) return null
+    const colors = colorsOf(d, ORDERED.has(key))
+    return { key, label, parts: sh.filter((o) => o.n > 0).map((o) => ({ key: String(o.i), label: o.label, share: o.share, n: o.n, color: colors[o.i],
+      title: `${S.freight ? fmt(o.w) : fmtEst(o.w)} ${unitOf(S)} · ${o.n} w próbie` })) }
+  }
+  const pickPlace = (p) => p && setT({ ...t, picked: t.picked.includes(p.key) && t.picked.length === 1 ? [] : [p.key] })
   const thin = stats.n < 100
-  const many = S.freight ? 'przejazdów' : 'podróży'
-  const names = { f: 'skąd', t: 'dokąd' }
+  const active = S.D.filter((d) => t.filters[d.key]?.length)
+  const dimOpts = S.D.map((d) => ({ value: d.key, label: d.note ? `${d.label} (${d.note})` : d.label }))
+  const splitColors = colorsOf(tab.split, ORDERED.has(tab.split.key))
 
   return (
-    <DetailsPanel pill={one ? (one.level === 'z' ? `rejon ${one.id}` : one.city ? 'osiedle' : 'gmina') : S.freight ? 'towary' : 'podróże'}
+    <DetailsPanel pill={spot ? 'cel podróży' : one ? (one.level === 'z' ? `rejon ${one.id}` : one.city ? 'osiedle' : 'gmina') : S.freight ? 'towary' : 'podróże'}
       title={title} color="#3f8bd0" onClose={onClose}
       actions={stats.n > 0 && <ShareButtons render={() => draw(spec())} filename={`${fname}.png`} title={title} text={`KBR Wrocław 2024 — podróże: ${title}`} />}
       subtitle={`${S.freight ? 'Przewozy towarów' : 'Podróże mieszkańców'} · ${period}${places.length ? ` · ${WAYS.find((w) => w[0] === x.way)[1]}` : ''}`}>
+      {active.length > 0 && (
+        <Chips small label="Aktywne filtry — naciśnij, aby usunąć" onPick={(key) => { const { [key]: _, ...rest } = t.filters; setT({ ...t, filters: rest }) }}
+          items={active.map((d) => ({ key: d.key, on: true, label: `${d.label}: ${t.filters[d.key].map((i) => d.options[i]?.label).join(', ')} ×` }))} />
+      )}
       <Facts>
-        <Fact label={S.freight ? 'Przejazdy w próbie' : 'Podróży na dobę'} tone="now">{S.freight ? fmt(stats.n) : fmtEst(stats.w)}</Fact>
-        {!S.freight && own >= FEW && <Fact label="Na mieszkańca">{fixed(stats.w / own, 2)}</Fact>}
+        <Fact label={S.freight ? 'Przejazdy w próbie' : 'Podróży na dobę'} tone="now">{S.freight ? fmt(stats.n) : `${fmtEst(stats.w)}${stats.n ? ` ±${Math.round(100 * countMargin(stats.n))}%` : ''}`}</Fact>
+        {!S.freight && own >= FEW && <Fact label="Na mieszkańca (6+)">{fixed(stats.w / own, 2)}</Fact>}
         {!S.freight && <Fact label="W próbie">{fmt(stats.n)}</Fact>}
         {stats.km != null && <Fact label="Średnio w linii prostej">{fixed(stats.km)} km</Fact>}
         {stats.min != null && <Fact label="Średni czas">{Math.round(stats.min)} min</Fact>}
@@ -76,21 +152,28 @@ export default function TripsPanel({ x, setT, period, onClose }) {
           <Block>
             <h4>{S.freight ? 'Rodzaj pojazdu' : 'Podział modalny — podróże'}</h4>
             <SplitBody>
-              <Donut pick={pick} label="Podział" rows={rows} />
+              <Donut pick={pick} label="Podział" rows={modes} />
               <SplitTable pick={pick}
                 columns={[{ label: S.freight ? 'przejazdy' : 'na dobę' }, { label: '%', tone: 'strong' }, ...(S.freight ? [] : [{ label: 'próba', tone: 'dim' }])]}
-                rows={[...rows].sort((a, b) => b.value - a.value).map((r) => ({
+                rows={[...modes].sort((a, b) => b.value - a.value).map((r) => ({
                   key: r.key, label: r.label, color: r.color,
-                  cells: [S.freight ? fmt(r.value) : fmtEst(r.value), pctText(r.value / stats.w), ...(S.freight ? [] : [fmt(r.n)])],
+                  cells: [S.freight ? fmt(r.value) : fmtEst(r.value), pctText(r.share), ...(S.freight ? [] : [fmt(r.n)])],
                 }))} />
             </SplitBody>
-            {!S.freight && (
-              <Hint>
-                {stats.main.map((m) => `${m.label} ${pctText(m.share)}${m.margin ? ` ±${Math.round(100 * m.margin)}` : ''}`).join(' · ')}
-                {' '}(± punkty procentowe, 95%, z uwzględnieniem różnic między ankieterami).
-              </Hint>
-            )}
+            <Hint>
+              {!S.freight && !t.filters.mode && `${stats.main.map((m) => `${m.label} ${pctText(m.share)}${m.margin ? ` ±${Math.round(100 * m.margin)}` : ''}`).join(' · ')} (± p.p., 95%). `}
+              Naciśnij część dowolnego wykresu, aby zostawić tylko ją — w panelu i na mapie.
+            </Hint>
           </Block>
+          {(S.freight ? FREIGHT_STACKS : STACKS).map(([key, label]) => {
+            const s = stackOf(key, label)
+            return s && (
+              <Block key={key}>
+                <h4>{label}</h4>
+                <Stack parts={s.parts} on={onOf(key)} onPick={toggle(key)} />
+              </Block>
+            )
+          })}
           <Block>
             <h4>{S.freight ? 'Przejazdy' : 'Podróże'} według godziny rozpoczęcia</h4>
             <StackedHourBars kind="trips" hours={x.hours} unit={unitOf(S).replace('/dobę', '')}
@@ -98,39 +181,93 @@ export default function TripsPanel({ x, setT, period, onClose }) {
                 .filter((p) => p.values.some((v) => v))} />
             {x.hours.length < 24 && <Hint>Tylko podróże rozpoczęte w godzinach {hourRuns(x.hours)}.</Hint>}
           </Block>
-          {(S.freight ? FREIGHT_BARS : BARS).map(([key, label]) => {
-            const sh = shares(S, idx, key).filter((o) => o.n > 0)
-            if (sh.length < 2) return null
-            return (
-              <Block key={key}>
-                <h4>{label}</h4>
-                <Bars rows={(ORDERED.has(key) ? sh : [...sh].sort((a, b) => b.w - a.w)).map((o) => ({
-                  key: String(o.i), label: o.label, share: o.share, title: `${S.freight ? fmt(o.w) : fmtEst(o.w)} ${unitOf(S)} · ${o.n} w próbie`,
+
+          <StatBlock title="Zestawienie — jedno według drugiego">
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <label><small>Wiersze</small><Select label="Wiersze" value={tab.row.key} options={dimOpts} onChange={(rows) => setT({ ...t, rows })} /></label>
+              <label><small>Podział paska</small><Select label="Podział paska" value={tab.split.key} options={dimOpts} onChange={(split) => setT({ ...t, split })} /></label>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 10px', fontSize: 11, margin: '6px 0' }}>
+              {tab.cols.filter((c) => tab.rows.some((r) => r.parts[c.i] > 0)).map((c) => (
+                <span key={c.i} style={{ display: 'inline-flex', gap: 5, alignItems: 'center' }}>
+                  <span style={{ width: 9, height: 9, borderRadius: 2, background: splitColors[c.i] }} />{c.label}
+                </span>
+              ))}
+            </div>
+            {tab.rows.map((r) => (
+              <div key={r.i} style={{ marginBottom: 6, opacity: r.n < 15 ? 0.6 : 1 }}>
+                <button type="button" style={{ ...listRow, padding: 0 }} onClick={() => toggle(tab.row.key)(r.i)} title="Zostaw tylko ten wiersz">
+                  <span style={{ fontWeight: onOf(tab.row.key).has(String(r.i)) ? 700 : 400 }}>{r.label}</span>
+                  <small style={{ opacity: 0.75 }}>
+                    <b>{pctText(r.share)}</b> · {S.freight ? fmt(r.w) : fmtEst(r.w)}{r.km != null ? ` · ${fixed(r.km)} km` : ''}{r.min != null ? ` · ${Math.round(r.min)} min` : ''} · n={fmt(r.n)}
+                  </small>
+                </button>
+                <Bar height={16} parts={r.parts.map((share, i) => ({ key: String(i), share, label: tab.cols[i].label, color: splitColors[i] }))} onPick={toggle(tab.split.key)} />
+              </div>
+            ))}
+            <Hint>Blade wiersze: mniej niż 15 podróży w próbie.</Hint>
+            <LinkButton block onClick={() => downloadCsv(crossTable(tab), `${fname}-zestawienie.csv`)}>Pobierz zestawienie (CSV)</LinkButton>
+          </StatBlock>
+
+          {day && day.n > 0 && (
+            <StatBlock title="Całe dni — łańcuchy podróży">
+              <Hint>
+                {fmt(day.n)} osób z próby{places.length ? ' mieszkających tutaj' : ''}, które wyszły z domu: średnio {fixed(day.trips)} podróży,{' '}
+                {pctText(day.more)} dni to więcej niż tam i z powrotem. Samym samochodem {pctText(day.modes.only[0])}, samym transportem
+                zbiorowym {pctText(day.modes.only[1])}, tylko pieszo {pctText(day.modes.only[3])}, różnie {pctText(day.modes.mixed)}.
+              </Hint>
+              <HotList hotKey={hot.pattern} items={day.list.slice(0, 12).map((p) => ({
+                key: p.key, title: p.label, sub: `${fmt(p.n)} w próbie`, value: pctText(p.share), on: t.pattern === p.key,
+                hot: show === 'days' ? { pattern: p.key } : null, hotKey: p.key,
+                onPick: () => setT({ ...t, show: 'days', pattern: t.pattern === p.key ? null : p.key }),
+              }))} />
+              {show !== 'days' && <Hint>Naciśnij łańcuch, aby zobaczyć te dni na mapie.</Hint>}
+              {show === 'days' && (
+                <HotList hotKey={hot.day} items={x.dayRows.filter((r) => !t.pattern || r.key === t.pattern).slice(0, 25).map((r) => ({
+                  key: r.i, title: dayText(x.days, S.Z.districts, r).join(' · '), sub: `waga ${r.w}`, value: '', hot: { day: r.i }, hotKey: r.i,
                 }))} />
-              </Block>
-            )
-          })}
-          <StatBlock title={`${partner ? (x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Z czym połączone') : 'Najwięcej podróży'}${perHead ? (partner ? ' — na 1000 mieszkańców tamtego obszaru' : ' na mieszkańca') : ''}`}>
-            <RankList items={top.slice(0, 15).map((r) => ({
-              key: r.key, title: r.name, sub: `${perHead ? `${fmtEst(r.w)} na dobę · ` : ''}${fmt(r.n)} w próbie`,
-              value: S.freight ? fmt(r.w) : !perHead ? fmtEst(r.w) : partner ? fixed(1000 * r.rate, 0) : fixed(r.rate, 2), on: t.picked.includes(r.key), onPick: () => pickPlace(r.p),
+              )}
+              <Hint>Dni nie zależą od filtrów podróży; miejsca są znane z dokładnością do osiedla. {DAY_MODES.length > 0 && 'Osoby, które nie wyszły z domu, są pominięte.'}</Hint>
+              <LinkButton block onClick={() => downloadCsv(daysTable(x.days, S.Z.districts, x.dayRows), `${fname}-dni.csv`)}>
+                Pobierz dni (CSV, {fmt(day.n)} wierszy)
+              </LinkButton>
+            </StatBlock>
+          )}
+
+          <StatBlock title={`${partner ? (x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Z czym połączone') : 'Najwięcej podróży'}${perHead ? (partner ? ` — na ${small} ${small > 1 ? 'mieszkańców' : 'mieszkańca'} tamtego obszaru` : ` na ${small > 1 ? '1000 mieszkańców' : 'mieszkańca'}`) : ''}`}>
+            <HotList hotKey={hot.place} items={top.slice(0, 20).map((r) => ({
+              key: r.key, title: r.p && t.picked.includes(r.key) && partner ? `${r.name} — w obrębie` : r.name,
+              sub: `${S.freight ? '' : `${fmtEst(r.w)} na dobę · `}${pctText(partner ? r.w / stats.w : null).replace('—', '') ? (partner ? `${pctText(r.w / stats.w)} · ` : '') : ''}${fmt(r.n)} w próbie`,
+              value: S.freight ? fmt(r.w) : perHead ? fixed(small * r.rate, small > 1 ? 1 : 2) : fmtEst(r.w),
+              on: t.picked.includes(r.key), hot: r.p ? { place: r.key } : null, hotKey: r.key, onPick: r.p ? () => pickPlace(r.p) : undefined,
             }))} />
           </StatBlock>
+          {spotTop.length > 0 && (
+            <StatBlock title="Konkretne cele">
+              <HotList hotKey={hot.spot} items={spotTop.slice(0, 12).map((r) => ({
+                key: r.i, title: r.name, sub: `${fmt(r.n)} w próbie`, value: fmtEst(r.w), on: t.filters.spot?.[0] === r.i,
+                hot: { spot: r.i }, hotKey: r.i, onPick: () => toggle('spot')(r.i),
+              }))} />
+              <Hint>Adresy poza domem, które podało co najmniej 5 badanych — ok. jednej czwartej końców podróży.</Hint>
+            </StatBlock>
+          )}
           <StatBlock title={`Pojedyncze ${S.freight ? 'przejazdy' : 'podróże'}`}>
             <LinkButton onClick={() => setList(!list)}>
               {list ? 'Ukryj listę' : `Pokaż listę (${fmt(Math.min(MANY, stats.n))} z ${fmt(stats.n)})`}
             </LinkButton>
             {list && (
               <DataTable caption="Pojedyncze podróże" sortBy="column" density="compact" maxHeight="26rem"
-                labelHead={names.f} labelWidth="8rem"
-                columns={[{ key: 't', head: names.t, align: 'left' }, { key: 'h', head: 'godz.' }, { key: 'm', head: 'czym', align: 'left' },
+                labelHead="skąd" labelWidth="8rem"
+                columns={[{ key: 't', head: 'dokąd', align: 'left' }, { key: 'h', head: 'godz.' }, { key: 'm', head: 'czym', align: 'left' },
                   { key: 'a', head: 'cel', align: 'left' }, ...(S.freight ? [] : [{ key: 'km', head: 'km' }, { key: 'd', head: 'min' }, { key: 'o', head: 'os.' }])]}
                 rows={idx.slice(0, MANY).map((i) => {
                   const r = tripRow(S, i)
                   const txt = (s) => ({ content: s, value: s })
+                  const end = (k, q) => (spots && k >= 0 ? spots[k].name : q.name)
+                  const c = S.T.cols
                   return {
-                    id: String(i), label: r.from.name, labelValue: r.from.name,
-                    cells: [txt(r.to.name), r.hour == null ? null : { content: `${r.hour}`, value: r.hour }, txt(r.mode), txt(r.act),
+                    id: String(i), label: end(c.pf ? c.pf[i] : -1, r.from), labelValue: r.from.name,
+                    cells: [txt(end(c.pt ? c.pt[i] : -1, r.to)), r.hour == null ? null : { content: `${r.hour}`, value: r.hour }, txt(r.mode), txt(r.act),
                       ...(S.freight ? [] : [r.km == null ? null : { content: fixed(r.km), value: r.km },
                         r.min == null ? null : { content: `${r.min}`, value: r.min },
                         r.inCar == null ? null : { content: `${r.inCar}`, value: r.inCar }])],
@@ -154,9 +291,10 @@ export default function TripsPanel({ x, setT, period, onClose }) {
           </>
         ) : (
           <>
-            <li>Dzienniczki podróży, dni wtorek–czwartek, kwiecień–czerwiec 2024; wagi KBR odtwarzają opublikowane przez miasto 1 397 390 podróży na dobę.</li>
+            <li>Dzienniczki podróży, wtorek–czwartek, kwiecień–czerwiec 2024; wagi KBR odtwarzają opublikowane 1 397 390 podróży mieszkańców Wrocławia na dobę (1 729 009 z gminami).</li>
+            <li>„Na mieszkańca” dzieli przez osoby od 6 lat, które reprezentuje próba. Liczba podróży na osobę zależy od ankietera bardziej niż od osiedla (od 1,1 do 2,6), więc różnice między osiedlami do ok. 25% mogą być przypadkiem.</li>
             <li>Mieszkańcy Wrocławia i 9 gmin, od 6 lat. Bez przyjezdnych z dalszych okolic, taksówek pustych i dostaw.</li>
-            <li>Najdokładniejszym miejscem jest rejon; nie ma adresów ani niczego, co łączy podróże jednej osoby.</li>
+            <li>Domy nie są dokładniejsze niż rejon; adresy tylko miejsc poza domem, które odwiedziło co najmniej 5 badanych.</li>
           </>
         )}
       </Notes>

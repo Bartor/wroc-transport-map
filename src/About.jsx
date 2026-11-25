@@ -191,22 +191,24 @@ export default function About({ data, onClose }) {
           spoza 9 gmin. Długość to linia prosta między środkami rejonów.
         </li>
         <li>
-          <b>Na mieszkańca.</b> Obszary różnią się wielkością, więc domyślnie mapa dzieli przez liczbę mieszkańców
-          (szacunek z zał. 3.1) i liczy podróże z domu i do domu.
+          <b>Na mieszkańca.</b> Obszary różnią się wielkością, więc domyślnie mapa liczy podróże z domu i do domu
+          na mieszkańca od 6 lat (z wag badania). Ankieterzy zapisywali od 1,1 do 2,6 podróży na osobę, więc różnice
+          między osiedlami do ok. 25% mogą być przypadkiem.
         </li>
         <li>
           <b>Ankieter.</b> Odpowiedzi zależą od tego, kto pytał, bardziej niż od osiedla: w pytaniu o wjazd do
           centrum ankieter wyjaśnia 38% różnic, osiedle ponad to ok. 1%. Dlatego mapa odpowiedzi jest domyślnie
           skorygowana o ankietera, a przedziały są szerokie. Poparcie dla priorytetu tramwajów to 60%,
-          a przy losowaniu ankieterów 54–66%; wśród kierowców 48% (40–56%).
+          a przy losowaniu ankieterów 54–66%; wśród osób jeżdżących na co dzień samochodem 48% (40–56%). Przedziały nie
+          obejmują tego, że na udział zgodziło się ok. 31% gospodarstw.
         </li>
         <li>
-          <b>Zmiana środka.</b> Nikogo nie zapytano, czy zrezygnuje z samochodu. Filtr „najłatwiejsze do zastąpienia”
-          opisuje cechy podróży, a „Co gdyby” to model o słabej i niepewnej reakcji na czas.
+          <b>Zmiana środka.</b> Nikogo nie zapytano, czy zrezygnuje z samochodu. Gotowe filtry opisują cechy podróży, a „Co gdyby” to model o słabej i niepewnej reakcji na czas.
         </li>
         <li>
-          <b>Prywatność.</b> Miasto publikuje pełną bazę, z adresami. Ta strona używa tylko rejonów: nie czyta ulic,
-          numerów, szkół ani miejsc pracy i nie łączy podróży jednej osoby.
+          <b>Prywatność.</b> Miasto publikuje pełną bazę, z adresami domów. Ta strona nie pokazuje domów dokładniej niż
+          rejon, a adresy tylko miejsc poza domem, które odwiedziło co najmniej 5 badanych. Cechy i waga podróży
+          często pozwalają jednak rozpoznać, które należą do jednej osoby.
         </li>
       </ul>
       <p>

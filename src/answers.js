@@ -1,7 +1,7 @@
 // Answers to the survey's questions, by where the people who gave them live.
 // answers.json holds, per question and group of people, rows for zones,
-// districts and wholes: [people, their weight, how bunched they are by
-// interviewer, and by round, thousandths on each option, the same corrected].
+// districts and wholes: [people, how bunched they are by interviewer, and by
+// round, thousandths on each option, the same corrected - opinions only].
 //
 // Who asked matters more than where: between interviewers the answers differ
 // several times as much as between districts. The corrected weights have the
@@ -17,8 +17,8 @@ export const rowAt = (q, group, level, key) => q.tab[group]?.[level]?.[key] || n
  *  answer that is a plain sum; with several it can pass 100%, so it is shown
  *  for one option at a time (see clampOpts). */
 export function shareOf(row, opts, raw = false) {
-  if (!row || !row[1]) return null
-  const w = (!raw && row[5]) || row[4]
+  if (!row) return null
+  const w = (!raw && row[4]) || row[3]
   return Math.max(0, Math.min(1, opts.reduce((a, o) => a + (w[o] || 0), 0) / 1000))
 }
 
@@ -38,8 +38,8 @@ export function marginOf(q, row, opts, raw = false) {
   // the city's share: a place's own is extreme by chance as often as not
   const s = Math.min(0.95, Math.max(0.05, shareOf(rowAt(q, 'all', 'a', 'wro') || row, opts, true)))
   const [byAsker, byRound] = rhoOf(q, opts)
-  const corrected = !raw && row[5]
-  const deff = 1 + byRound * (row[3] - 1) + (corrected ? 0.25 : 1) * byAsker * (row[2] - 1)
+  const corrected = !raw && row[4]
+  const deff = 1 + byRound * (row[2] - 1) + (corrected ? 0.25 : 1) * byAsker * (row[1] - 1)
   return Math.min(1, 1.96 * Math.sqrt((s * (1 - s) * deff) / row[0]))
 }
 
@@ -52,7 +52,7 @@ function biggest(q) {
   // "nothing bothers me" and "other" say least about a place
   q.options.forEach((o, i) => {
     if (/^(nie odczuwam|inne)/.test(o)) return
-    if (row[4][i] > row[4][best]) best = i
+    if (row[3][i] > row[3][best]) best = i
   })
   return best
 }
@@ -92,8 +92,8 @@ export function surface(q, group, opts, zones, { km = 1, cols = 130, box, raw } 
   for (const z of zones) {
     const row = rowAt(q, group, 'z', z.i)
     if (!row) continue
-    pts.push({ x: z.c[1] * KX, y: z.c[0] * KY, n: row[0], w: row[1],
-      k: shareOf(row, opts, raw) * row[1] })
+    pts.push({ x: z.c[1] * KX, y: z.c[0] * KY, n: row[0], w: row[0],
+      k: shareOf(row, opts, raw) * row[0] })
   }
   const [s, west, n, east] = box
   const rows = Math.round((cols * (n - s) * KY) / ((east - west) * KX))

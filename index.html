@@ -31,6 +31,10 @@
     <meta name="twitter:description"
       content="Podział modalny w węzłach Wrocławia, liczony w osobach — na podstawie KBR 2024." />
     <meta name="twitter:image" content="https://bartor.github.io/wroc-transport-map/og.png" />
+    <style>
+      /* a click on a shape is not a place to type */
+      .leaflet-container path:focus, .leaflet-container canvas:focus, .leaflet-container:focus { outline: none; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

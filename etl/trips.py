@@ -1,26 +1,30 @@
 # -*- coding: utf-8 -*-
-"""The household survey for the app: zones, trips between them, and answers.
+"""The household survey for the app: zones, trips between them, days, answers.
 
     python etl/trips.py          # data/kbr + etl/cache/diary.json -> public/data
 
 zones.json    zone and district outlines, residents, jobs
 trips.json    one row per reported trip, between zones; by column
 answers.json  how each question was answered, summed over zones
+days.json     each person's day as a chain of districts and purposes
+places.json   places at least five people went to, see places.py
 freight.json  the freight survey's trips, between zones; by column
 
-Nothing finer than a zone goes out. A trip carries no person or household, only
-the few traits trips are filtered by, and rows are sorted so that one person's
-trips are not neighbours. Answers are sums; a zone with fewer than MIN_N people
-in a group has none.
+A home is never placed closer than its zone, or in days.json its district; a
+trip carries no person or household, only the traits trips are filtered by. Those
+and the weight still often tell one person's trips apart from the next one's -
+the city publishes far more. Answers are sums, of at least MIN_N people; groups
+of people only by district.
 """
 import collections, json, math, os, re, sys, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import diary
 import geocode
+import places
 
 OUT = os.path.join(diary.ROOT, "public", "data")
-MIN_N = 5
+MIN_N = 10
 CORE_M = 1500           # a zone with its middle this near the Rynek is the core
 CENTRE = (51.1097, 17.0324)
 KM_LON = math.cos(math.radians(51.11))
@@ -276,7 +280,9 @@ def stage_zones(d):
         zones.append({"id": zid, "name": names.get(zid, zid),
                       "c": [round(c[0], 5), round(c[1], 5)],
                       "pop": pop.get(zid) if zid in pop else round(est[zid] * grow) or None,
-                      "popEst": int(zid not in pop), "jobs": z["L_mp"], "firms": z["L_pg"],
+                      "popEst": int(zid not in pop),
+                      # people the trips stand for: the base of every rate
+                      "w": round(est[zid]), "jobs": z["L_mp"], "firms": z["L_pg"],
                       "n": people.get(zid, 0), "km2": round(area * 111.32 ** 2 * KM_LON, 3),
                       "core": int(dist <= CORE_M and city), "city": int(city)})
         member[where].append(i)
@@ -298,7 +304,7 @@ def stage_zones(d):
                 outside.setdefault(c, str(g or "poza obszarem").title())
     out = [{"id": c, "name": n} for c, n in sorted(outside.items(), key=lambda kv: kv[1])]
     write("zones.json", {"zones": zones, "districts": districts, "outside": out, "core": CORE_M})
-    return zones, out
+    return zones, out, shapes
 
 
 # ----------------------------------------------------------------------- trips
@@ -357,7 +363,7 @@ def columns(rows, keys):
     return {k: [r[i] for r in rows] for i, k in enumerate(keys)}
 
 
-def stage_trips(d, zones, outside):
+def stage_trips(d, zones, outside, spots, ends):
     at = {z["id"]: i for i, z in enumerate([*zones, *outside])}
     P = d["people"]
     # the reason for driving was asked once a person, not once a trip
@@ -367,7 +373,7 @@ def stage_trips(d, zones, outside):
             why[t["person"]] = [t.get("whyCar1"), t.get("whyCar2")]
     reason = lambda v: WHY.index(v) if v in WHY else len(WHY) - 1
     rows = []
-    for t in d["trips"]:
+    for t, end in zip(d["trips"], ends):
         p = P[t["person"]]
         m = mode_of(t)
         km, dur = diary.num(t.get("km")), minutes(t.get("min"))
@@ -389,16 +395,44 @@ def stage_trips(d, zones, outside):
             reason(y[0]) if y else -1,
             # comfort, time or cost only
             int(bool(y) and all(v in (None, "", *WHY[:3]) for v in y)),
-            round(float(p["w"])),
+            round(float(p["w"])), *end,
         ))
     cols = columns(rows, ["f", "t", "m", "a0", "a1", "h", "d", "km", "o", "pk", "x", "ag", "jb",
-                          "hc", "ps", "lc", "wr", "y", "sf", "w"])
+                          "hc", "ps", "lc", "wr", "y", "sf", "w", "pf", "pt"])
     write("trips.json", {
         "n": len(rows), "modes": MODES, "acts": ACTS, "park": PARK, "why": WHY, "ages": AGES,
         "jobs": JOBS, "cols": cols,
         "meta": {"people": len(P), "wro": sum(p["area"] == "Wrocław" for p in P),
                  "expanded": round(sum(float(P[t["person"]]["w"]) for t in d["trips"]))},
     })
+
+
+# ------------------------------------------------------------------------ days
+# dom, praca, nauka, zakupy, odwożenie, inne
+ACT6 = [0, 1, 2, 2, 3, 3, 4, 5, 5, 5, 5, 5]
+MODE4 = [3, 2, 2, 0, 0, 4, 4, 1, 1, 1, 1, 4]      # car, public transport, bike, on foot, other
+
+
+def stage_days(d, zones):
+    """One row a person who went out: weight, the district of each stop in turn,
+    what it was for, and how and when they got to the next."""
+    dist = {z["id"]: z["d"] for z in zones}
+    by = collections.defaultdict(list)
+    for t in d["trips"]:
+        by[t["person"]].append(t)
+    rows = []
+    for person, ts in by.items():
+        ts.sort(key=lambda t: t["n"] or 0)
+        stops = [ts[0]["from"], *(t["to"] for t in ts)]
+        acts = [act_of(ts[0].get("act0")), *(act_of(t.get("act1")) for t in ts)]
+        rows.append((round(float(d["people"][person]["w"])),
+                     [dist.get(str(s), -1) for s in stops], [ACT6[a] for a in acts],
+                     [MODE4[mode_of(t)] for t in ts],
+                     [int(t["start"]) % 24 if t.get("start") is not None else -1 for t in ts]))
+    rows.sort(key=lambda r: (r[1], r[2], r[3], r[4]))
+    write("days.json", {"acts": ["dom", "praca", "nauka", "zakupy", "odwożenie", "inne"],
+                        "modes": ["samochód", "transport zbiorowy", "rower", "pieszo", "inne"],
+                        "rows": rows})
 
 
 # --------------------------------------------------------------------- freight
@@ -452,7 +486,10 @@ def questions(d):
 
     def add(key, group, label, options, f, good=(), multi=0, full=None):
         Q.append({"key": key, "group": group, "label": label, "options": list(options),
-                  "good": list(good), "multi": multi, "full": full, "f": f})
+                  "good": list(good), "multi": multi, "full": full, "f": f,
+                  # facts do not depend on who asks; what looks like it is the
+                  # interviewer's territory
+                  "opinion": int(G.startswith(("Opinie", "Co utrudnia", "Dlaczego", "Oceny")) and key != "home")})
 
     def one(key, group, label, src, options, short=None, good=(), get=None):
         at = {o: i for i, o in enumerate(options)}
@@ -607,7 +644,7 @@ def stage_answers(d, zones):
         for s in sets:
             y = Y[idx][:, s].sum(axis=1)
             a = without_asker(y, ai, di[idx])
-            if len(s) == 1:
+            if len(s) == 1 and q["opinion"]:
                 A[idx, s[0]] = a
             # between interviewers; then between rounds, the interviewer taken off
             rho.append([round(icc(y, ai), 3), round(icc(a, wi), 3)])
@@ -626,13 +663,20 @@ def stage_answers(d, zones):
                     if len(i) < MIN_N:
                         continue
                     ww = w[i]
+                    if lv == "z" and g != "all":
+                        continue
+                    raw = ww @ Y[i] / ww.sum()
                     # how bunched: people per interviewer, and per round, as a
                     # random one of them sees it
                     bunch = lambda key: (np.bincount(np.unique(key[i], return_inverse=True)[1]) ** 2).sum() / len(i)
-                    rows[name] = [len(i), round(ww.sum()), round(bunch(asker), 1), round(bunch(walk), 1),
-                                  [round(1000 * x) for x in ww @ Y[i] / ww.sum()]]
-                    if lv != "a":
-                        rows[name].append([round(1000 * x) for x in ww @ A[i] / ww.sum()])
+                    rows[name] = [len(i), round(bunch(asker), 1), round(bunch(walk), 1),
+                                  [round(1000 * x) for x in raw]]
+                    if lv != "a" and q["opinion"]:
+                        # shares again: none below nothing, adding up as they did
+                        fixed = np.maximum(0, ww @ A[i] / ww.sum())
+                        if not q["multi"] and fixed.sum() > 0:
+                            fixed *= raw.sum() / fixed.sum()
+                        rows[name].append([round(1000 * x) for x in np.minimum(1, fixed)])
                 tabs[g][lv] = rows
         out.append({**{x: v for x, v in q.items() if x != "f"}, "rho": rho[:k],
                     "rhoGood": rho[k] if len(rho) > k else None, "tab": tabs})
@@ -642,8 +686,11 @@ def stage_answers(d, zones):
 
 def main():
     d = diary.load()
-    zones, outside = stage_zones(d)
-    stage_trips(d, zones, outside)
+    zones, outside, shapes = stage_zones(d)
+    spots, ends = places.build(d, zones, shapes, inside)
+    write("places.json", {"spots": spots, "minWho": places.MIN_WHO})
+    stage_trips(d, zones, outside, spots, ends)
+    stage_days(d, zones)
     stage_freight(zones)
     stage_answers(d, zones)
 

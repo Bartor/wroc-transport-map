@@ -341,13 +341,17 @@ pierwszeństwo; można to wyłączyć.
 
 Miasto opublikowało całą bazę ankiety: 10 566 osób, 16 781 podróży, wagi
 i odpowiedzi. `etl/diary.py` czyta z niej wyłącznie wskazane kolumny — nigdy ulic,
-numerów, szkół, miejsc pracy ani pytań otwartych — a `etl/trips.py` publikuje
-podróże między rejonami bez identyfikatora osoby i odpowiedzi zsumowane po rejonach
-(co najmniej 5 osób). Wagi odtwarzają opublikowane 1 397 390 podróży na dobę.
+numerów, szkół, miejsc pracy ani pytań otwartych. `etl/trips.py` publikuje podróże
+między rejonami bez identyfikatora osoby i odpowiedzi zsumowane po rejonach (co
+najmniej 10 osób; grupy osób tylko po osiedlach). Cechy i waga często pozwalają mimo
+to powiązać podróże jednej osoby (46% jest niepowtarzalnych) — baza miasta podaje
+znacznie więcej. `etl/places.py` czyta adresy wyłącznie celów innych niż dom i zostawia
+te, które podało co najmniej 5 osób. Wagi odtwarzają opublikowane 1 397 390 podróży na dobę.
 
 **Na mieszkańca.** Liczby bezwzględne mówią głównie o wielkości obszaru, więc
-domyślnie mapa pokazuje podróże z domu i do domu na mieszkańca (zał. 3.1; w gminach
-wokół — z wag). Podróże między dwoma miejscami poza domem (7%) nie mają domu.
+domyślnie mapa pokazuje podróże z domu i do domu na mieszkańca od 6 lat (suma wag; przy
+liczbie mieszkańców z zał. 3.1 niektóre osiedla byłyby o jedną trzecią za wysoko lub za
+nisko). Podróże między dwoma miejscami poza domem (7%) nie mają domu.
 
 **Ankieter.** Korelacja odpowiedzi w obrębie ankietera jest kilka razy większa niż
 w obrębie osiedla:
@@ -359,18 +363,20 @@ w obrębie osiedla:
 | które auta do centrum | 0,09 | 0,38 | 1,1% |
 | najczęstszy środek: samochód | 0,06 | 0,07 | 1,9% |
 
-Mapa odpowiedzi odejmuje więc efekt ankietera (dwa zestawy efektów, ankieterów
+Mapa odpowiedzi odejmuje więc od opinii — nie od faktów — efekt ankietera (dwa zestawy efektów, ankieterów
 i osiedli, ściągane do zera o tyle, ile może być przypadkiem), a przedziały liczą
-jeszcze zgrupowanie w rundach. Poziomy dla miasta nie są korygowane; losowanie
+jeszcze zgrupowanie w rundach. W symulacjach zostaje 41–70% prawdziwych różnic, a błąd
+jest mniejszy niż bez korekty (0,08–0,10 wobec 0,11–0,14); przedziały mają pokrycie 91–98%. Poziomy dla miasta nie są korygowane; losowanie
 ankieterów daje: priorytet tramwajów 60% (54–66), kierowcy za 48% (40–56) i przeciw
 30% (22–40), „wszystkie auta do centrum” 53% (42–64), udział samochodu 39,8% (35–45).
-Różnica między niekierowcami a kierowcami jest pewniejsza (25 p.p., 18–31).
+„Kierowcy” to osoby na co dzień jeżdżące samochodem. Przedziały nie obejmują 31% odpowiedzi
+na zaproszenie do badania. Różnica między niekierowcami a kierowcami jest pewniejsza (25 p.p., 18–31).
 
-**Zmiana środka.** Nikogo o nią nie pytano. 47% (42–53) podróży kierowców to jazda
+**Zmiana środka.** Nikogo o nią nie pytano. 47% (42–53) podróży kierowców z Wrocławia (41% wszystkich) to jazda
 w pojedynkę, z wygody, dla czasu lub kosztu, do 5 km albo do/z centrum — cechy, nie
 deklaracja. `etl/choice.py` szacuje zagnieżdżony logit (pieszo, rower, samochód,
 transport zbiorowy) na 15 438 podróżach: ρ² 0,475, poza próbą 0,464. Współczynnik
-czasu −0,016/min (bł. 0,005) daje +5 min samochodem do centrum ≈ −0,8 p.p. udziału
+czasu −0,016/min (bł. 0,005) daje +5 min samochodem do centrum ≈ −0,9 p.p. udziału
 (−1,7…−0,8 między wariantami). Sama jazda samochodem nie jest identyfikowalna;
 cen w danych nie ma.
 

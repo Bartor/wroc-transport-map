@@ -1,5 +1,5 @@
 import {
-  Block, Breakdown, Callout, Chips, DetailsPanel, DirectionSplit, Donut, Fact, Facts, Footnote,
+  Block, Callout, Chips, DetailsPanel, DirectionSplit, Donut, Fact, Facts, Footnote,
   GroupedTable, Hint, LinkButton, Notes, Partial, PieceTree, Setting, ShareBars, ShareButtons,
   SplitBody, SplitTable, StatBlock, Warn, dirLabel, downloadCsv, fixed, fmt, fmtEst, hourRuns,
   pct, pieceKey, slug, usePick,
@@ -17,6 +17,7 @@ import {
   hasWays, onlyDir, perVehicle as peoplePer, roadFlows, stopFlows, walkFlows, waysTold, whole,
 } from './flows'
 import { cardFilename, drawCard } from './shareCard'
+import Stack, { partsOf } from './Stack'
 
 const GROUP_LABEL = {
   road: 'Przekroje drogowe',
@@ -148,7 +149,15 @@ function TransitLoads({ title, refs, all, hours, scale = (v) => v }) {
 }
 
 // the ETL's lists close with the remainder, "inne"
-const Parts = (props) => <Breakdown rest="inne" {...props} />
+function Parts({ title, parts }) {
+  const list = partsOf(parts)
+  return list.length > 0 && (
+    <Block>
+      <h4>{title}</h4>
+      <Stack parts={list} />
+    </Block>
+  )
+}
 
 const GEO_NOTE = {
   intersections: 'położenie wyliczone ze skrzyżowań opisanych w kolumnie „Odcinek”',

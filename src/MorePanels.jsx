@@ -1,10 +1,13 @@
 // The panels of the smaller surveys, see MoreViews.
 import {
-  Block, Breakdown, DetailsPanel, Fact, Facts, Hint, LinkButton, Notes, ShareButtons, TextTable, fmt, hourRuns,
+  Block, DetailsPanel, Fact, Facts, Hint, LinkButton, Notes, ShareButtons, TextTable, fmt, hourRuns,
 } from '@bartor-net/ui-kit'
 import { HourBars } from '@bartor-net/ui-kit/charts'
 import { KIND, airportYear, changeColor, changeLegend, signed, speedOf, sum } from './MoreViews'
 import { ringChanges } from './compare'
+import Stack, { Bar, partsOf } from './Stack'
+
+const MODAL_COLORS = ['#b5179e', '#0ca30c', '#e4572e', '#3987e5', '#6b7385']
 import { changeCard, draw } from './surveyCards'
 
 export function ChangePanel({ C, rows, zones, sel, onRoad, onClose }) {
@@ -32,7 +35,13 @@ export function ChangePanel({ C, rows, zones, sel, onRoad, onClose }) {
         <>
           <Block>
             <h4>Jak podróżują mieszkańcy</h4>
-            {table(['', ...C.modal.modes.map((m) => `${m} %`)], C.modal.rows.map(([l, v]) => [l, ...v.map((x) => x.toFixed(1).replace('.', ','))]))}
+            {C.modal.rows.map(([l, v]) => (
+              <div key={l}><small>{l}</small>
+                <Bar height={18} parts={v.map((x, i) => ({ key: String(i), label: C.modal.modes[i], share: x / v.reduce((a, b) => a + b, 0), color: MODAL_COLORS[i] }))} /></div>
+            ))}
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', fontSize: 12 }}>
+              {C.modal.modes.map((l, i) => <span key={l}><span style={{ display: 'inline-block', width: 9, height: 9, borderRadius: 2, background: MODAL_COLORS[i] }} /> {l}</span>)}
+            </div>
             <Hint>{C.modal.where}. W 2024 inny dobór próby (random route zamiast próby adresowej), więc część zmian — zwłaszcza pieszych — może wynikać z metody. Pomijając pieszych, udział samochodu wzrósł z ok. 55% do 60%.</Hint>
           </Block>
           <Block>
@@ -68,7 +77,7 @@ export function StationsPanel({ S, C, hours, period, sel, onClose }) {
     return (
       <DetailsPanel pill="lotnisko" title="Port lotniczy Wrocław" color="#6b7385" subtitle="ruch pasażerski i dojazd (zał. 9.1)" onClose={onClose}>
         <Facts><Fact label="Pasażerowie w roku" tone="now">{fmt(airportYear(S))}</Fact></Facts>
-        <Breakdown title={`Czym dojeżdżają na lotnisko — ${fmt(S.airport.n)} pytanych`} parts={S.airport.access} />
+        <Block><h4>Czym dojeżdżają na lotnisko — {fmt(S.airport.n)} pytanych</h4><Stack parts={partsOf(S.airport.access, 8, 'Inne')} /></Block>
         <Block><h4>Miesiące</h4><TextTable head={['', 'przyloty', 'odloty']} rows={S.airport.months.map((m) => [m[0], fmt(m[1]), fmt(m[2])])} /></Block>
       </DetailsPanel>
     )
@@ -91,7 +100,7 @@ export function StationsPanel({ S, C, hours, period, sel, onClose }) {
         <Block><h4>Wobec 2018 (wsiadający i wysiadający)</h4>
           <TextTable head={['', '2018', '2024']} rows={[['rano 6–9', fmt(was[1]), fmt(was[3])], ['po południu 14–18', fmt(was[2]), fmt(was[4])]]} /></Block>
       )}
-      <Breakdown title="Relacje — pasażerowie" parts={Object.fromEntries(s.lines)} />
+      <Block><h4>Relacje — pasażerowie</h4><Stack parts={partsOf(Object.fromEntries(s.lines))} /></Block>
       <Hint>Liczono 6–9 i 14–18 (zał. 8.1).</Hint>
     </DetailsPanel>
   )
