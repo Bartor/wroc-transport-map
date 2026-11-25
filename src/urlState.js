@@ -126,6 +126,7 @@ export function readHash(hash = window.location.hash) {
       : undefined,
     basemap: q.get('bm') || undefined,
     survey: flag('srv'),
+    works: q.get('rm') === '0' ? false : undefined,
     net: q.get('net') || undefined,
     sig: q.get('sig') || undefined,
     sel: sel ? selOf(sel[1], unpack(sel[2])) : undefined,
@@ -162,6 +163,7 @@ export function hashOf(s, d) {
   if (!s.labels.declutter) q.set('dc', '0')
   put('bm', s.basemap, d.basemap)
   if (s.survey) q.set('srv', '1')
+  if (s.works === false) q.set('rm', '0')
   if (s.net.on) q.set('net', s.net.mode)
   if (s.sig.on) q.set('sig', s.sig.filter)
   if (s.selected) {

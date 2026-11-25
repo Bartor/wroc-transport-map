@@ -1,0 +1,19 @@
+[
+ {
+  "id": "pomorska",
+  "name": "ul. Pomorska",
+  "where": "",
+  "what": "przebudowa: bez samochodów do 1 czerwca, bez tramwajów do ok. 22 czerwca. Na początku przebudowy objazdy m.in. Kurkową i Dubois.",
+  "when": "sierpień 2022 – czerwiec 2024",
+  "from": "2022-08-01",
+  "to": "2024-06-22",
+  "approx": 1,
+  "districts": ["Nadodrze", "Kleczków"],
+  "ways": [["Pomorska", [51.1134, 17.03, 51.1224, 17.0323]]],
+  "sources": [
+   ["wroclaw.pl", "https://www.wroclaw.pl/komunikacja/przebudowa-ulicy-pomorskiej-wroclaw-objazdy"],
+   ["Gazeta Wrocławska", "https://gazetawroclawska.pl/po-dwoch-latach-remontu-ulica-pomorska-we-wroclawiu-otwarta-na-tramwaje-jeszcze-poczekamy-zdjecia/ar/c1-18574685"],
+   ["Rynek Kolejowy", "https://www.rynek-kolejowy.pl/wiadomosci/wroclaw-niebawem-otwarcie-torowiska-na-pomorskiej-144099.html"]
+  ]
+ }
+]

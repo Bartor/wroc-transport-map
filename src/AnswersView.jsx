@@ -7,6 +7,8 @@ import {
 import { MapTooltip, TipNote } from '@bartor-net/ui-kit/map'
 import { HeatImage, ZoneLayer } from './ZoneLayer'
 import Bars from './Bars'
+import { WorksBlock } from './WorksLayer'
+import { districtOf, useWorks, worksIn } from './works'
 import { FEW_ANSWERS, Small } from './Small'
 import Stack, { Bar, KINDS, ORDERED, SCALE } from './Stack'
 import { answersCard, answersName, draw, everythingTable, viewTable } from './surveyCards'
@@ -207,6 +209,7 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
   const colors = optColors(q)
   const toggle = (o) => set({ opts: togglePick(q, opts, o) })
   const warning = pickWarning(q, opts)
+  const works = worksIn(useWorks(), p ? [districtOf(p)] : [])
   const around = !p && rowAt(q, group, 'a', 'out')
   const name = answersName(x, p)
   const spec = () => answersCard({ x, p, row, by, gname, ranked, colors, optLabel: optText(q, opts), text: (y) => valText(q, opts, y), mtext: (r) => mg(r), legend: answersLegend({ x, dark: false }).filter((l) => l.color) })
@@ -225,6 +228,7 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
       {warning && <Warn>{warning}</Warn>}
       {optText(q, opts).length > 34 && <Hint>„{optText(q, opts)}”</Hint>}
       {row && row[0] < 30 && <Warn>Tylko {row[0]} odpowiedzi — to za mało, by oceniać ten obszar osobno.</Warn>}
+      <WorksBlock works={works} hint="Odpowiedzi o codziennych podróżach mogą być pod wpływem remontu." />
       <Block>
         <h4>Wszystkie odpowiedzi{q.multi ? ' (można było wskazać kilka)' : ''}</h4>
         {!row ? <Hint>Za mało odpowiedzi.</Hint> : q.multi ? (

@@ -18,6 +18,7 @@ import {
   speedsLegend, stationsLegend,
 } from './MoreViews'
 import { showing } from './displayed'
+import { useWorks } from './works'
 import { CLOSE0, ClosureBar, ClosureControls, ClosureMap, closureLegend, pickIn, useClosure } from './ClosureView'
 import { ASK0 } from './answers'
 import { readDays } from './days'
@@ -50,6 +51,8 @@ export default function App() {
   // one survey at a time, see VIEWS
   const [view, setView] = useState(pick(URL0.view, (v) => VIEWS[v], DEFAULTS.view))
   const [survey, setSurvey] = useState(!!URL0.survey)   // survey addresses overlay
+  const works = useWorks()
+  const [showWorks, setShowWorks] = useState(URL0.works ?? true)
   // [from, to) hours, may wrap
   const [range, setRange] = useState(URL0.range || DEFAULTS.range)
   const [metric, setMetric] = useState(pick(URL0.metric, (m) => ROAD_METRICS[m], DEFAULTS.metric))
@@ -204,13 +207,13 @@ export default function App() {
     if (!data) return
     const h = hashOf({
       view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-      basemap, survey, net, sig, selected, off, flow, trip, ask, closure, own: ownId,
+      basemap, survey, net, sig, selected, off, flow, trip, ask, closure, own: ownId, works: showWorks,
     }, { ...DEFAULTS, occupancy: data.meta.carOccupancy.default })
     if (h !== window.location.hash && !(h === '' && !window.location.hash)) {
       window.history.replaceState(null, '', h || window.location.pathname + window.location.search)
     }
   }, [data, view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-    basemap, survey, net, sig, selected, off, flow, trip, ask, closure, ownId])
+    basemap, survey, net, sig, selected, off, flow, trip, ask, closure, ownId, showWorks])
 
   // The point the selection belongs to, shared by the map and the panel.
   const family = useMemo(
@@ -348,7 +351,7 @@ export default function App() {
     <AppShell>
       <Sidebar
         data={data} view={view} setView={changeView} visible={visible} off={off}
-        survey={survey} setSurvey={setSurvey}
+        survey={survey} setSurvey={setSurvey} works={works} showWorks={showWorks} setShowWorks={setShowWorks}
         range={range} setRange={setRange}
         metric={metric} setMetric={setMetric} areas={areas} setAreas={setAreas}
         hours={hours} period={period} aggregate={aggregate} setAggregate={setAggregate}
@@ -374,9 +377,9 @@ export default function App() {
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
         selected={sel} onSelect={select} family={family} off={off}
-        hot={hot} setHot={setHot} own={own.map} ownLegend={own.legend} ownOverlay={own.overlay}
+        hot={hot} setHot={setHot} own={own.map} ownLegend={own.legend} ownOverlay={own.overlay} works={showWorks ? works : null}
         info={showing({ data, view, period, hours, wholeDay, setWholeDay, people, metric, setMetric, areas, setAreas, aggregate, markers, off, setOff,
-          tripsX, trip, setTrip, spots: files.places?.spots, askX, setAsk, closureX, setClosure, selected: sel, close, net, setNet, sig, setSig,
+          tripsX, trip, setTrip, spots: files.places?.spots, askX, setAsk, closureX, setClosure, selected: sel, close, works, net, setNet, sig, setSig,
           ownName: ownId && (view === 'change' ? changed?.find((r) => r.key === ownId)?.name : view === 'stations' ? ownId : files.speeds?.sections.find((q) => q.id === ownId)?.name), clearOwn: () => setOwnId(null) })}
       />
       {selected && (

@@ -6,6 +6,7 @@ import { ORDERED } from './Stack'
 import { diffColor } from './closureColors'
 import { arc, layout } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
+import { districtOf, worksIn, worksNow, worksText } from './works'
 import { THIN, meanNote, meanText, placeName } from './trips'
 
 const SITE = 'bartor.github.io/wroc-transport-map'
@@ -438,6 +439,7 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend, optL
     ],
     notes: [
       ...(q.note ? [q.note] : []),
+      ...worksNote(p ? [p] : []),
       `(!) — mniej niż ${FEW_ANSWERS} odpowiedzi.`,
       'Udziały ważone. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera.',
       !q.opinion ? 'Blade pola: różnica od średniej w granicach błędu.' : a.raw ? 'Mapa bez korekty o ankietera: odpowiedzi różnią się między ankieterami bardziej niż między osiedlami.'
@@ -451,6 +453,12 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend, optL
 }
 
 export const answersName = (x, p) => slug(`kbr2024-ankieta-${fullName(x.q)}-${p ? p.name : 'wroclaw'}-${x.group}`)
+
+/** What was dug up there at the time. */
+const worksNote = (places) => {
+  const list = worksIn(worksNow(), places.map(districtOf))
+  return list.length ? [`Remonty w czasie badań: ${worksText(list)}.`] : []
+}
 
 // ---------------------------------------------------------------------- trips
 /** The filters in words: "środek transportu: pieszo, autobus; długość: do 1 km". */
@@ -514,6 +522,7 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
       'Dzienniczki podróży z jednego dnia roboczego (wtorek–czwartek), przeliczone na mieszkańców Wrocławia i 9 gmin wagami KBR. Bez przyjezdnych z dalszych okolic.',
       // filtered by mode, the shares of modes are the filter's
       ...(t.filters.mode ? [] : [`${stats.main.map((m) => `${m.label} ${pctText(m.share)}${m.margin ? ` ±${Math.round(100 * m.margin)} p.p.` : ''}`).join(', ')} (95%).`]),
+      ...worksNote(places),
       ...(means ? ['Średnie ważone; ± to przybliżony przedział 95%. Prędkość: droga w linii prostej przez cały czas od drzwi do drzwi, bez podróży w obrębie rejonu. Wiek: średnia przedziału.'] : []),
       ...(stats.n < 100 ? [`Tylko ${fmt(stats.n)} podróży w próbie — udziały orientacyjne.`] : []),
     ],

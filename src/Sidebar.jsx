@@ -5,6 +5,8 @@ import {
   TaggedList, Toggle, Totals, TotalsTable, Warn, downloadCsv, fmt, fmtEst, sameRange, slug,
 } from '@bartor-net/ui-kit'
 import { basemapOptions } from '@bartor-net/ui-kit/map'
+import { WorksBlock } from './WorksLayer'
+import { WORKS_COLOR } from './works'
 import {
   LAYERS, ROAD_METRICS, PRESETS, coverageGap, BASIS_LABEL, NET_MODES,
   resolveTarget, headline, VIEWS, viewOf, hourBands,
@@ -89,7 +91,7 @@ function Search({ data, markers, onSelect, view, setView, extra }) {
 
 /** Memoised: a hover on the map must not redraw the whole panel. */
 export default memo(function Sidebar({
-  data, view, setView, visible, survey, setSurvey, range, setRange,
+  data, view, setView, visible, survey, setSurvey, works, showWorks, setShowWorks, range, setRange,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, roadPeople, setPeople, occupancy, setOccupancy,
   net, setNet, nets, loadNet, basemap, setBasemap, sig, setSig, labels, setLabels,
@@ -358,6 +360,17 @@ export default memo(function Sidebar({
       )}
 
       {/* ------------------------------------------------------ further down */}
+      {works.length > 0 && (
+        <Panel title="Remonty w czasie badań" collapsible defaultOpen={false} badge={showWorks ? `${works.length}` : null} help={(
+          <p>
+            Remonty i zamknięcia, które trwały między 21 marca a 20 czerwca 2024, gdy liczono ruch i pytano mieszkańców. Zmieniały
+            trasy i środki podróży w okolicy. Lista z komunikatów i prasy, może nie być pełna.
+          </p>
+        )}>
+          <Toggle checked={showWorks} onChange={setShowWorks} label="Pokaż na mapie" swatch={WORKS_COLOR} count={works.length} />
+          <WorksBlock works={works} title="" />
+        </Panel>
+      )}
       <Panel title="Sygnalizacja świetlna" collapsible defaultOpen={false}
         badge={sig.on ? 'wł.' : null}
         help={data.signals && (

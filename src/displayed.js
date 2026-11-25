@@ -6,11 +6,17 @@ import { fullName, isNone, onMean, pickWarning } from './answers'
 import { SHOW, WAYS, painted } from './TripsView'
 import { namesOf } from './ClosureView'
 import { placeName } from './trips'
+import { districtOf, worksIn } from './works'
 
 const plural = (n, one, some, many) => (n === 1 ? one : n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14) ? some : many)
 const few = (list, k = 3) => (list.length > k ? `${list.slice(0, k).join(', ')} i ${list.length - k} więcej` : list.join(', '))
 
-function ofTrips({ x, t, setT, period, spots }) {
+const dug = (works, places) => {
+  const list = worksIn(works, places.map(districtOf))
+  return list.length ? [{ label: 'Remonty', value: few(list.map((w) => `${w.name}, ${w.when}`)), warn: true }] : []
+}
+
+function ofTrips({ x, t, setT, period, spots, works }) {
   const { S, stats, places, show } = x
   const rows = [
     { label: 'Dane', value: S.freight ? 'przewozy towarów' : 'podróże mieszkańców' },
@@ -41,10 +47,10 @@ function ofTrips({ x, t, setT, period, spots }) {
   }
   rows.push({ label: 'Próba', value: S.freight ? `${fmt(stats.n)} przejazdów`
     : `${fmt(stats.n)} podróży, ${fmtEst(stats.w)} na dobę`, warn: stats.n < 100 })
-  return rows
+  return [...rows, ...dug(works, places)]
 }
 
-function ofAnswers({ x, setA }) {
+function ofAnswers({ x, setA, works }) {
   const { A, Z, a, q, group, opts, city } = x
   const level = a.level === 'd' ? 'd' : 'z'
   const p = a.place && (level === 'd' ? Z.districts : Z.zones).find((y) => y.key === a.place)
@@ -57,6 +63,7 @@ function ofAnswers({ x, setA }) {
     ...(q.opinion ? [{ label: 'Ankieter', value: a.raw ? 'bez korekty' : 'skorygowane', clear: a.raw ? () => setA((s) => ({ ...s, raw: false })) : null }] : []),
     ...(p ? [{ label: 'Obszar', value: p.name, clear: () => setA((s) => ({ ...s, place: null })) }] : []),
     { label: 'Próba', value: `${fmt(city?.[0])} ${q.home ? 'gospodarstw' : 'osób'} we Wrocławiu` },
+    ...dug(works, p ? [p] : []),
   ]
 }
 
@@ -91,8 +98,8 @@ function ofCounts({ data, view, period, hours, wholeDay, setWholeDay, people, me
 /** Title and rows for whatever is open. */
 export function showing(s) {
   const V = VIEWS[s.view]
-  const rows = s.view === 'trips' ? s.tripsX && ofTrips({ x: s.tripsX, t: s.trip, setT: s.setTrip, period: s.period, spots: s.spots })
-    : s.view === 'answers' ? s.askX && ofAnswers({ x: s.askX, setA: s.setAsk })
+  const rows = s.view === 'trips' ? s.tripsX && ofTrips({ x: s.tripsX, t: s.trip, setT: s.setTrip, period: s.period, spots: s.spots, works: s.works })
+    : s.view === 'answers' ? s.askX && ofAnswers({ x: s.askX, setA: s.setAsk, works: s.works })
       : s.view === 'closure' ? s.closureX && ofClosure({ x: s.closureX, setC: s.setClosure })
                 : V.own ? [{ label: 'Okres', value: V.period ? s.period : 'te same godziny w obu badaniach' },
           ...(s.ownName ? [{ label: 'Zaznaczone', value: s.ownName, clear: s.clearOwn }] : [])]

@@ -15,6 +15,8 @@ import {
 } from './data'
 import { labelLines } from './labels'
 import { MapKeys } from './MapKeys'
+import { WorksLayer } from './WorksLayer'
+import { WORKS_COLOR } from './works'
 
 const CENTRE = [51.1097, 17.0324]
 
@@ -144,7 +146,7 @@ const dotsOf = (data, family, selected, off) => family.groups.flatMap((g) => g.m
 
 export default function MapView({
   data, visible, hours, period, wholeDay, people, net, nets, basemap, sig,
-  markers, labels, selected, onSelect, family, off, hot, setHot, own, ownLegend, ownOverlay, info,
+  markers, labels, selected, onSelect, family, off, hot, setHot, own, ownLegend, ownOverlay, info, works,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
   // The model was fitted on the 8-hour common window; scale it to whatever
@@ -214,13 +216,15 @@ export default function MapView({
     <BaseMap basemap={basemap} center={CENTRE} overlay={(
       <>
         <MapKeys info={info}>
-          <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people })]} />
+          <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people }),
+            ...(works?.length ? [{ label: 'remont w czasie badań', color: WORKS_COLOR, line: true }] : [])]} />
         </MapKeys>
         {ownOverlay}
       </>
     )}>
       <FlyTo target={target} />
       {own}
+      {works?.length > 0 && <WorksLayer works={works} />}
 
       {network && (
         <NetworkLayer key={net.mode} network={network}

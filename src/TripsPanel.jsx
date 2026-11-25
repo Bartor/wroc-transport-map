@@ -15,6 +15,8 @@ import {
   FEW, THIN, averages, averagesTable, countMargin, meanFor, meanNote, meanText, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
 } from './trips'
 import { draw, tripsCard, tripsName } from './surveyCards'
+import { WorksBlock } from './WorksLayer'
+import { districtOf, useWorks, worksIn } from './works'
 import { KM_NOTE, StatChips, WAYS, WAY_TEXT, flowLines, painted, pctText, statIn, unitOf } from './TripsView'
 
 const MANY = 200      // rows of single trips to show
@@ -120,6 +122,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
   const day = useMemo(() => (x.dayRows ? { ...patterns(x.dayRows), modes: dayModes(x.dayRows) } : null), [x.dayRows])
 
   const means = useMemo(() => averages(S, idx), [S, idx])
+  const works = worksIn(useWorks(), places.map(districtOf))
   const fname = tripsName(title, period, x.way, t.filters)
   const spec = () => {
     const paint = painted(x)
@@ -179,6 +182,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
       {thin && stats.n > 0 && (
         <Warn>Tylko {fmt(stats.n)} {many} w próbie — udziały są orientacyjne. Poszerz okres, filtry albo obszar.</Warn>
       )}
+      <WorksBlock works={works} hint="Podróże z tego czasu mogą odbiegać od zwykłych, zwłaszcza tramwajem i samochodem." />
       {!stats.n ? <Hint>Brak podróży, które spełniają filtry.</Hint> : (
         <>
           <Block>

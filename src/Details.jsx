@@ -12,6 +12,8 @@ import {
   splitVehicles, bikeNote, pedNote, thinText, splitShares, SHARE_ROW, PCU_SOURCE,
   coverageGap, windowKind, transitByMode, MODES, nodeSplit,
 } from './data'
+import { WorksBlock } from './WorksLayer'
+import { useWorks, worksNear } from './works'
 import {
   BY, BY_OF, MODE_SHORT, UNITS, dirName, dirPieceKey, flowPieces, flowTable, inUnit, leftDirs, modesText,
   hasWays, onlyDir, perVehicle as peoplePer, roadFlows, stopFlows, walkFlows, waysTold, whole,
@@ -347,6 +349,10 @@ export default function Details({
   const one = onlyDir(data, kind, sel.ref, sel.dir)
   const dir = one ? sel.dir : null
   const p = one?.ref ?? sel.ref
+  // dug up near by on a day it was counted
+  const allWorks = useWorks()
+  const days = [p?.date, ...(p?.dates || []), ...(p?.members || []).flatMap((m) => [m.date, ...(m.dates || [])])].filter(Boolean)
+  const near = p?.lat == null ? [] : worksNear(allWorks, [p.lat, p.lon], days)
   const src = one?.data ?? (fam?.current ? all : data)
   // The drawn node carries the modal split and its transit partner, if any.
   const node = markers && !dir ? markerIndex(markers)[`${kind}:${sel.id}`] : null
@@ -1011,6 +1017,7 @@ export default function Details({
         </Callout>
       )}
       {p.correction && <Warn>{p.correction}</Warn>}
+      {near.length > 0 && <WorksBlock works={near} title="Remont w pobliżu w czasie pomiaru" />}
       {body}
       {scaled && (
         <Warn>
