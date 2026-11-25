@@ -1,14 +1,13 @@
 // Shut streets and see where their traffic goes: the closure model, run in a
 // worker, drawn on its own street graph.
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMap } from 'react-leaflet'
 import L from 'leaflet'
-import { Chips, Field, Hint, LinkButton, Panel, Slider, Warn, fmt, fmtEst } from '@bartor-net/ui-kit'
+import { Chips, Field, Hint, LinkButton, Panel, Slider, Warn, fmt, fmtEst, isPhone } from '@bartor-net/ui-kit'
 import { DOWN, NOISE, UP, diffColor } from './closureColors'
 import { setHot, useHot } from './hot'
 
-export const CLOSE0 = { closed: [], narrow: [], reduce: 0, whole: true, tool: 'close' }
-const WAIT = 500       // ms after the last change before it is worked out
+export const CLOSE0 = { closed: [], narrow: [], reduce: 0, whole: false, tool: 'close' }
 
 const both = (flow, k) => flow[2 * k] + flow[2 * k + 1]
 
@@ -20,37 +19,45 @@ export function useClosure(json, c, active) {
   const [part, setPart] = useState(null)
   const [error, setError] = useState(null)
   const id = useRef(0)
+  const asked = useRef(null)
   useEffect(() => {
     if (!json || !active || worker.current) return
     const w = new Worker(new URL('./assign.worker.js', import.meta.url), { type: 'module' })
     w.onmessage = ({ data }) => {
       if (data.type === 'ready') setBase({ segments: data.segments, meta: data.meta, before: data.before })
       else if (data.type === 'step' && data.id === id.current) setPart(data.part)
-      else if (data.type === 'done' && data.id === id.current) { setResult(data); setPart(null) }
+      else if (data.type === 'done' && data.id === id.current) { setResult({ ...data, of: asked.current }); setPart(null) }
       else if (data.type === 'error') { setError(data.message); setPart(null) }
     }
     w.postMessage({ type: 'load', json })
     worker.current = w
   }, [json, active])
   useEffect(() => () => worker.current?.terminate(), [])
-  const key = `${c.closed.join('.')}|${c.narrow.join('.')}|${c.reduce}`
-  useEffect(() => {
-    if (!base || !active) return undefined
+  // what is worked out is what was asked for, until it is asked for again
+  const calculate = useCallback((change) => {
+    if (!worker.current) return
     id.current += 1
-    if (!c.closed.length && !c.narrow.length) { setResult(null); setPart(null); return undefined }
-    const n = id.current
-    const t = setTimeout(() => {
-      setPart(0)
-      setError(null)
-      worker.current.postMessage({ type: 'run', id: n, change: {
-        closed: c.closed, capacity: c.narrow.map((k) => [k, 0.5]), reduce: c.reduce,
-      } })
-    }, WAIT)
-    return () => clearTimeout(t)
-  }, [base, active, key])    // eslint-disable-line
-  return useMemo(() => base && { ...base, c, result: result && (c.closed.length || c.narrow.length) ? result : null, part, error,
-    streets: streets(base.segments) }, [base, c, result, part, error])
+    if (!change.closed.length && !change.narrow.length) { setResult(null); setPart(null); return }
+    setPart(0)
+    setError(null)
+    asked.current = change
+    worker.current.postMessage({ type: 'run', id: id.current, change: {
+      closed: change.closed, capacity: change.narrow.map((k) => [k, 0.5]), reduce: change.reduce,
+    } })
+  }, [])
+  // a link that came with streets shut shows what they do
+  const first = useRef(true)
+  useEffect(() => {
+    if (!base || !first.current) return
+    first.current = false
+    if (c.closed.length || c.narrow.length) calculate(c)
+  }, [base, c, calculate])
+  const empty = !c.closed.length && !c.narrow.length
+  const stale = !!result && keyOf(result.of) !== keyOf(c)
+  return useMemo(() => base && { ...base, c, result: empty ? null : result, stale: stale && !empty, empty, part, error, calculate,
+    streets: streets(base.segments) }, [base, c, result, stale, empty, part, error, calculate])
 }
+const keyOf = (c) => `${[...c.closed].sort().join('.')}|${[...c.narrow].sort().join('.')}|${c.reduce}`
 
 // segments by street name, and by the junctions they share
 const memo = new WeakMap()
@@ -102,7 +109,7 @@ export const namesOf = (x, ids) => {
 /** What changed, a row a street, at the place where it changes most. */
 export function changesOf(x) {
   if (!x.result) return []
-  const shut = new Set(x.c.closed)
+  const shut = new Set(x.result.of.closed)
   const by = new Map()
   for (const s of x.segments) {
     if (shut.has(s.id) || !s.name) continue
@@ -235,7 +242,7 @@ export function ClosureControls({ x, setC }) {
       <Panel title="Zamknij ulicę" help={(
         <>
           <p>
-            Naciśnij ulicę na mapie albo wyszukaj ją na górze. Model rozkłada 556 tys. przejazdów samochodów na sieć
+            Naciśnij odcinki na mapie albo wyszukaj ulicę na górze, potem „Oblicz objazdy”. Model rozkłada 556 tys. przejazdów samochodów na sieć
             ulic tak, by każdy jechał najszybszą trasą przy ruchu, jaki tworzą wszyscy, i pokazuje, gdzie go ubędzie
             i przybędzie.
           </p>
@@ -250,7 +257,8 @@ export function ClosureControls({ x, setC }) {
           <Chips tight label="Co robi naciśnięcie" onPick={(tool) => setC({ ...c, tool })} items={[
             { key: 'close', label: 'zamyka', on: c.tool === 'close' }, { key: 'narrow', label: 'zwęża o połowę', on: c.tool === 'narrow' }]} />
           <Chips tight label="Ile" onPick={(k) => setC({ ...c, whole: k === 'whole' })} items={[
-            { key: 'whole', label: 'całą ulicę', on: c.whole }, { key: 'one', label: 'jeden odcinek', on: !c.whole }]} />
+            { key: 'one', label: 'jeden odcinek', on: !c.whole }, { key: 'whole', label: 'całą ulicę', on: c.whole }]} />
+          <Hint>Shift + naciśnięcie: {c.whole ? 'jeden odcinek' : 'cała ulica'}.</Hint>
         </Field>
         {!c.closed.length && !c.narrow.length && (
           <Field label="Na początek">
@@ -281,9 +289,51 @@ export function ClosureControls({ x, setC }) {
         )}>
           <Slider min="0" max="40" step="5" value={Math.round(100 * c.reduce)} label="Przejazdów, które znikną" onChange={(v) => setC({ ...c, reduce: v / 100 })} />
         </Field>
-        {x.part != null && <Hint>Liczenie objazdów… {Math.round(100 * x.part)}%</Hint>}
         {x.error && <Warn>Nie udało się policzyć: {x.error}</Warn>}
       </Panel>
     </>
+  )
+}
+
+// ---------------------------------------------------------- the button on the map
+const bar = {
+  position: 'absolute', top: 14, left: '50%', zIndex: 1000, whiteSpace: 'nowrap', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 12,
+  padding: '8px 10px 8px 14px', borderRadius: 10, background: 'rgba(22,24,30,.94)', color: '#e8ebf0', fontSize: 13,
+  boxShadow: '0 4px 18px rgba(0,0,0,.45)', border: '1px solid rgba(255,255,255,.12)', maxWidth: 'calc(100% - 24px)', flexWrap: 'wrap', justifyContent: 'center',
+}
+const button = { border: 0, borderRadius: 7, padding: '8px 14px', font: '600 13px system-ui', cursor: 'pointer', background: '#ff3b5c', color: '#fff' }
+
+/** What is picked, and working it out: over the map. */
+export function ClosureBar({ x, setC }) {
+  if (x.empty) return null
+  const { c } = x
+  const n = c.closed.length + c.narrow.length
+  const m = [...c.closed, ...c.narrow].reduce((a, k) => a + x.segments[k].len, 0)
+  const busy = x.part != null
+  const done = x.result && !x.stale
+  return (
+    <div style={isPhone() ? { ...bar, top: 'auto', bottom: 96 } : bar} role="region" aria-label="Zamknięte ulice">
+      {busy ? (
+        <div style={{ width: 240 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+            <span>Liczenie objazdów…</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{Math.round(100 * x.part)}%</span>
+          </div>
+          <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * x.part)}
+            style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,.15)', overflow: 'hidden' }}>
+            <div style={{ height: '100%', width: `${100 * x.part}%`, background: '#ff3b5c' }} />
+          </div>
+        </div>
+      ) : (
+        <>
+          <span>
+            <b>{n} {n === 1 ? 'odcinek' : n % 10 >= 2 && n % 10 <= 4 && !(n % 100 >= 12 && n % 100 <= 14) ? 'odcinki' : 'odcinków'}</b>
+            <span style={{ opacity: 0.7 }}> · {fmt(m)} m{x.stale ? ' · wynik nieaktualny' : done ? ' · policzone' : ''}</span>
+          </span>
+          {!done && <button type="button" style={button} onClick={() => x.calculate(c)}>Oblicz objazdy</button>}
+          <button type="button" style={{ ...button, background: 'transparent', border: '1px solid rgba(255,255,255,.25)', padding: '7px 10px' }}
+            onClick={() => setC({ ...c, closed: [], narrow: [] })}>Wyczyść</button>
+        </>
+      )}
+    </div>
   )
 }

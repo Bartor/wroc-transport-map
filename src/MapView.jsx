@@ -143,7 +143,7 @@ const dotsOf = (data, family, selected, off) => family.groups.flatMap((g) => g.m
 
 export default function MapView({
   data, visible, hours, period, wholeDay, people, net, nets, basemap, sig,
-  markers, labels, selected, onSelect, family, off, hot, setHot, own, ownLegend,
+  markers, labels, selected, onSelect, family, off, hot, setHot, own, ownLegend, ownOverlay,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
   // The model was fitted on the 8-hour common window; scale it to whatever
@@ -211,7 +211,10 @@ export default function MapView({
 
   return (
     <BaseMap basemap={basemap} center={CENTRE} overlay={(
-      <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people })]} />
+      <>
+        <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people })]} />
+        {ownOverlay}
+      </>
     )}>
       <FlyTo target={target} />
       {own}

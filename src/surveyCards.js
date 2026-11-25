@@ -496,8 +496,8 @@ export function changeCard({ rows, rings, legend, color, zones }) {
 // -------------------------------------------------------------------- closure
 /** A closure: the streets around it, coloured by how their traffic changes. */
 export function closureCard({ x, title, up, down }) {
-  const shut = new Set(x.c.closed)
-  const thin = new Set(x.c.narrow)
+  const shut = new Set(x.result.of.closed)
+  const thin = new Set(x.result.of.narrow)
   const both = (f, k) => f[2 * k] + f[2 * k + 1]
   const d = (s) => both(x.result.after, s.id) - both(x.result.before, s.id)
   const moved = x.segments.filter((s) => Math.abs(d(s)) >= 300 || shut.has(s.id))

@@ -26,8 +26,10 @@ function List({ rows, hot }) {
 export default function ClosurePanel({ x, onClose }) {
   const hot = useHot()
   const { c, result } = x
-  const shut = namesOf(x, c.closed)
-  const thin = namesOf(x, c.narrow)
+  // the panel is of what was worked out, as long as there is something
+  const of = result?.of || c
+  const shut = namesOf(x, of.closed)
+  const thin = namesOf(x, of.narrow)
   const rows = useMemo(() => changesOf(x), [x])
   const up = rows.filter((r) => r.d > 0)
   const down = rows.filter((r) => r.d < 0)
@@ -39,10 +41,12 @@ export default function ClosurePanel({ x, onClose }) {
       subtitle="Zamknięcie ulicy — gdzie pojadą samochody"
       actions={result && <ShareButtons render={() => draw(closureCard({ x, title, up, down }))} filename={`${name}.png`} title={title} text={`KBR Wrocław 2024 — zamknięcie: ${title}`} />}>
       {!c.closed.length && !c.narrow.length ? (
-        <Hint>Naciśnij ulicę na mapie, wyszukaj ją na górze albo wybierz jeden z przykładów po lewej.</Hint>
-      ) : !result ? <Hint>Liczenie objazdów{x.part != null ? `… ${Math.round(100 * x.part)}%` : '…'}</Hint> : (
+        <Hint>Naciśnij odcinki na mapie, wyszukaj ulicę na górze albo wybierz jeden z przykładów po lewej.</Hint>
+      ) : !result ? (
+        <Hint>{x.part != null ? 'Liczenie objazdów…' : 'Wybierz wszystkie odcinki i naciśnij „Oblicz objazdy” na mapie.'}</Hint>
+      ) : (
         <>
-          {x.part != null && <Hint>Liczenie kolejnej zmiany… {Math.round(100 * x.part)}%</Hint>}
+          {x.stale && <Warn>Wynik nie obejmuje ostatnich zmian — naciśnij „Oblicz objazdy”.</Warn>}
           <Facts>
             <Fact label="Przejazdy przez zamknięte odcinki" tone="now">{fmtEst(s.affected)}</Fact>
             {s.gone > 0 && <Fact label="Z tego znika (założenie)">{fmtEst(s.gone)}</Fact>}

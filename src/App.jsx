@@ -17,7 +17,7 @@ import {
   ChangeControls, ChangeMap, SpeedsControls, SpeedsMap, StationsControls, StationsMap, changeLegend,
   speedsLegend, stationsLegend,
 } from './MoreViews'
-import { CLOSE0, ClosureControls, ClosureMap, closureLegend, pickIn, useClosure } from './ClosureView'
+import { CLOSE0, ClosureBar, ClosureControls, ClosureMap, closureLegend, pickIn, useClosure } from './ClosureView'
 import { ASK0 } from './answers'
 import { readDays } from './days'
 import { changes } from './compare'
@@ -230,7 +230,7 @@ export default function App() {
     .then((questions) => ({ ...files.answers, questions })), [files.answers])
   const closureX = useClosure(files.closure, closure, view === 'closure')
   const pickSegment = useCallback((k, one) => {
-    setClosure((c) => pickIn({ ...closureX, c }, k, c.tool, c.whole && !one))
+    setClosure((c) => pickIn({ ...closureX, c }, k, c.tool, c.whole !== !!one))
     setOwnPanel(true)
   }, [closureX])
   const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])
@@ -307,6 +307,7 @@ export default function App() {
       return {
         controls: <ClosureControls x={closureX} setC={setClosure} />,
         map: <ClosureMap x={closureX} onPick={pickSegment} />, legend: closureLegend({ x: closureX }),
+        overlay: <ClosureBar x={closureX} setC={setClosure} />,
         panel: <ClosurePanel x={closureX} onClose={shut} />,
       }
     }
@@ -369,7 +370,7 @@ export default function App() {
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
         selected={sel} onSelect={select} family={family} off={off}
-        hot={hot} setHot={setHot} own={own.map} ownLegend={own.legend}
+        hot={hot} setHot={setHot} own={own.map} ownLegend={own.legend} ownOverlay={own.overlay}
       />
       {selected && (
         <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`} onClose={close}>
