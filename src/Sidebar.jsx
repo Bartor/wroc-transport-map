@@ -92,7 +92,7 @@ export default memo(function Sidebar({
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, roadPeople, setPeople, occupancy, setOccupancy,
   net, setNet, nets, loadNet, basemap, setBasemap, sig, setSig, labels, setLabels,
-  markers, onSelect, selected, sheetOpen, setSheetOpen,
+  markers, onSelect, selected, sheetOpen, setSheetOpen, off,
 }) {
   const [about, setAbout] = useState(false)   // the "O mapie" dialog
   const V = VIEWS[view]
@@ -325,7 +325,7 @@ export default memo(function Sidebar({
           </Hint>
         )}
         <LinkButton block onClick={() => downloadCsv(
-          markersTable({ markers, layers: V.layers, period, people }),
+          markersTable({ markers, layers: V.layers, period, people, data, off }),
           `kbr-${view}-${slug(period)}.csv`,
         )}>
           Pobierz tabelę wszystkich punktów (CSV)

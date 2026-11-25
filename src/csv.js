@@ -1,11 +1,12 @@
 // What the map shows, as a table for a spreadsheet: one row per drawn point.
 import { csvNumber as num } from '@bartor-net/ui-kit'
+import { leftDirs } from './flows'
 import { LAYERS, MODES, splitTotal, splitVehicles, splitShares } from './data'
 
 const sections = (m) => (m.ref.aggregate ? m.ref.members.map((r) => r.id).join(' ') : m.id)
 
 /** Rows of the drawn markers; node pies get a column per mode. */
-export function markersTable({ markers, layers, period, people }) {
+export function markersTable({ markers, layers, period, people, data, off }) {
   const list = layers.flatMap((k) => (markers[k] || []).map((m) => [k, m]))
   const pies = list.some(([, m]) => m.split)
   const head = ['id', 'nazwa', 'warstwa', 'szer', 'dł', 'okres']
@@ -24,6 +25,12 @@ export function markersTable({ markers, layers, period, people }) {
     const left = m.ref.aggregate
       ? m.ref.all.filter((r) => !m.ref.members.includes(r)).map((r) => r.id)
       : []
+    // directions of the sections that are in
+    if (k === 'road' && off) {
+      for (const r of m.ref.members || [m.ref]) {
+        for (const d of leftDirs(data, off, r.id)) left.push(`${r.id}:${d}`)
+      }
+    }
     if (!pies) {
       const unit = k === 'road' && people ? 'osób w samochodach osobowych' : LAYERS[k].unit
       return [...base, num(m.value), unit, sections(m), left.join(' ')]

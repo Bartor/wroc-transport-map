@@ -5,11 +5,12 @@ import { AppMessage, AppShell, ErrorBoundary, hoursOf } from '@bartor-net/ui-kit
 import { BASEMAPS, DEFAULT_BASEMAP } from '@bartor-net/ui-kit/map'
 import {
   loadAll, loadFile, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, periodShare,
-  buildMarkers, familyOf, VIEWS, markerIndex, NET_MODES,
+  buildMarkers, familyOf, VIEWS, markerIndex, NET_MODES, MODE,
 } from './data'
 import MapView from './MapView'
 import Sidebar from './Sidebar'
 import { readHash, hashOf, findSelection } from './urlState'
+import { BY, FLOW0, UNITS, withoutDirs } from './flows'
 
 // The panel brings the charts library with it; nobody needs it before the
 // first click, so it loads apart from the map, and early, while idle.
@@ -21,12 +22,12 @@ const Details = lazy(loadDetails)
 const URL0 = readHash()
 const DEFAULTS = {
   view: 'nodes', range: PRESETS.am.range, metric: 'all', aggregate: true,
-  roadPeople: true, basemap: DEFAULT_BASEMAP,
+  roadPeople: true, basemap: DEFAULT_BASEMAP, flow: FLOW0,
 }
 const pick = (v, ok, def) => (v !== undefined && ok(v) ? v : def)
 
 export default function App() {
-  const [data, setData] = useState(null)
+  const [loaded, setData] = useState(null)
   const [error, setError] = useState(null)
   // one survey at a time, see VIEWS
   const [view, setView] = useState(pick(URL0.view, (v) => VIEWS[v], DEFAULTS.view))
@@ -50,14 +51,29 @@ export default function App() {
   // the details come on hover
   const [labels, setLabels] = useState(URL0.labels || { num: false, pct: false, declutter: true })
   const [selected, setSelected] = useState(null)
-  // Sections left out of their node's numbers, as pieceKey()s.
+  // Sections, and single directions of them, left out of their node's numbers:
+  // pieceKey()s and dirPieceKey()s.
   const [off, setOff] = useState(() => new Set(URL0.off || []))
+  // everything below counts without the directions left out
+  const data = useMemo(() => loaded && withoutDirs(loaded, off), [loaded, off])
+  // How the panel's charts are split and what they count, for any point.
+  const [flow, setFlow] = useState({
+    by: pick(URL0.by, (b) => BY[b], FLOW0.by),
+    unit: pick(URL0.unit, (u) => UNITS[u], FLOW0.unit),
+    modes: pick(URL0.modes, (m) => m.length && m.every((k) => MODE[k]), FLOW0.modes),
+  })
   // The piece of a node under the mouse, in the panel or on the map; both
   // light it up.
   const [hot, setHot] = useState(null)
   const toggleOff = useCallback((keys, out) => setOff((prev) => {
     const next = new Set(prev)
-    for (const k of [].concat(keys)) (out ? next.add(k) : next.delete(k))
+    for (const k of [].concat(keys)) {
+      if (out) next.add(k)
+      else {
+        // a section comes back whole
+        for (const x of prev) if (x === k || x.startsWith(`${k}@`)) next.delete(x)
+      }
+    }
     return next
   }), [])
   // On phones the sidebar is a bottom sheet; this is whether it is pulled up.
@@ -145,13 +161,13 @@ export default function App() {
     if (!data) return
     const h = hashOf({
       view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-      basemap, survey, net, sig, selected, off,
+      basemap, survey, net, sig, selected, off, flow,
     }, { ...DEFAULTS, occupancy: data.meta.carOccupancy.default })
     if (h !== window.location.hash && !(h === '' && !window.location.hash)) {
       window.history.replaceState(null, '', h || window.location.pathname + window.location.search)
     }
   }, [data, view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-    basemap, survey, net, sig, selected, off])
+    basemap, survey, net, sig, selected, off, flow])
 
   // The point the selection belongs to, shared by the map and the panel.
   const family = useMemo(
@@ -165,7 +181,7 @@ export default function App() {
   return (
     <AppShell>
       <Sidebar
-        data={data} view={view} setView={changeView} visible={visible}
+        data={data} view={view} setView={changeView} visible={visible} off={off}
         survey={survey} setSurvey={setSurvey}
         range={range} setRange={setRange}
         metric={metric} setMetric={setMetric} areas={areas} setAreas={setAreas}
@@ -193,6 +209,7 @@ export default function App() {
               period={period} wholeDay={wholeDay} people={people} occupancy={occupancy}
               share={periodShare(data.meta, hours)} markers={markers} family={family}
               off={off} toggleOff={toggleOff} hot={hot} setHot={setHot}
+              flow={flow} setFlow={setFlow}
               onSelect={select} onClose={close} />
           </Suspense>
         </ErrorBoundary>

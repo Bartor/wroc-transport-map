@@ -134,6 +134,7 @@ const dotsOf = (data, family, selected, off) => family.groups.flatMap((g) => g.m
       kind: g.kind, id: m.id, target: m, lat: m.lat, lon: m.lon,
       color: LAYERS[g.kind].color, letter: sectionLetter(m.id) || '·', square: g.kind === 'pt',
       on: selected?.kind === g.kind && selected.id === m.id, out,
+      way: selected?.kind === g.kind && selected.id === m.id ? selected.dir : undefined,
       dirs: dirKeys(data, g.kind, m),
       tip: `${g.kind === 'pt' ? 'przystanek' : 'przekrój drogowy'} · ${m.id} · `
         + `${sectionOf(g.kind, m) || m.name}${out ? ' · wyłączony z węzła' : ''}`,
@@ -248,11 +249,11 @@ export default function MapView({
         </Layer>
       ))}
 
-      {family?.node ? (
+      {family?.node && !family.lone ? (
         <PieceDots whole={family.node}
           wholeR={radii[`${family.node.kind}:${family.node.id}`] || undefined}
           pieces={dotsOf(data, family, selected, off)} hot={hot} setHot={setHot} onPick={onSelect} />
-      ) : <HotArrows hot={hot} find={arrowsAt} />}
+      ) : <HotArrows hot={hot || (selected?.dir ? selected : null)} find={arrowsAt} />}
 
       {(labels.num || labels.pct) && (
         <MapLabels entries={labelEntries} declutter={labels.declutter} />

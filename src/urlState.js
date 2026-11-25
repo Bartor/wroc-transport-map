@@ -1,8 +1,20 @@
+import { dirKeys } from './data'
+
 // The view lives in the address, so a link opens on the same node, period
 // and settings - and on the same pieces left out of it. Only what differs
 // from the defaults is written, which keeps a plain link plain.
 
 const LIST = '|'
+
+// A direction rides on its section's id, "R1_03B@W-E": the ">" of its key is
+// not allowed in an address as it stands.
+const pack = (id) => id.replace('>', '-')
+const unpack = (id) => id.replace(/@([A-Z]+)-([A-Z]+)$/, '@$1>$2')
+
+function selOf(kind, id) {
+  const [at, dir] = id.split('@')
+  return dir ? { kind, id: at, dir } : { kind, id }
+}
 
 /** What the address asks for; absent keys stay undefined. */
 export function readHash(hash = window.location.hash) {
@@ -29,8 +41,11 @@ export function readHash(hash = window.location.hash) {
     survey: flag('srv'),
     net: q.get('net') || undefined,
     sig: q.get('sig') || undefined,
-    sel: sel ? { kind: sel[1], id: sel[2] } : undefined,
-    off: q.has('off') ? q.get('off').split(LIST).filter(Boolean) : undefined,
+    sel: sel ? selOf(sel[1], unpack(sel[2])) : undefined,
+    off: q.has('off') ? q.get('off').split(LIST).filter(Boolean).map(unpack) : undefined,
+    by: q.get('by') || undefined,
+    unit: q.get('u') || undefined,
+    modes: q.has('md') ? q.get('md').split(LIST).filter(Boolean) : undefined,
   }
 }
 
@@ -55,10 +70,17 @@ export function hashOf(s, d) {
   if (s.survey) q.set('srv', '1')
   if (s.net.on) q.set('net', s.net.mode)
   if (s.sig.on) q.set('sig', s.sig.filter)
-  if (s.selected) q.set('sel', `${s.selected.kind}:${s.selected.id}`)
-  if (s.off.size) q.set('off', [...s.off].sort().join(LIST))
+  if (s.selected) {
+    const { kind, id, dir } = s.selected
+    q.set('sel', `${kind}:${id}${dir ? `@${pack(dir)}` : ''}`)
+  }
+  if (s.off.size) q.set('off', [...s.off].sort().map(pack).join(LIST))
+  put('by', s.flow.by, d.flow.by)
+  put('u', s.flow.unit, d.flow.unit)
+  if (s.flow.modes) q.set('md', s.flow.modes.join(LIST))
   // ':' '|' and ',' are fine in a fragment; left unescaped the link stays readable
   const out = q.toString().replace(/%3A/gi, ':').replace(/%7C/gi, '|').replace(/%2C/gi, ',')
+    .replace(/%40/gi, '@')
   return out ? `#${out}` : ''
 }
 
@@ -66,13 +88,15 @@ const SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped', rail: 'rail
 
 /** The record a linked selection names: a drawn marker, a raw section, or a
  *  signal by its position. Null when the data has no such thing. */
-export function findSelection(data, index, { kind, id }) {
+export function findSelection(data, index, { kind, id, dir }) {
   const m = index[`${kind}:${id}`]
-  if (m) return { kind, id, ref: m.ref }
+  const at = (ref) => (dir && !ref.aggregate && dirKeys(data, kind, ref).includes(dir)
+    ? { kind, id, ref, dir } : { kind, id, ref })
+  if (m) return at(m.ref)
   if (kind === 'signal') {
     const s = data.signals?.junctions.find((j) => `${j.lat},${j.lon}` === id)
     return s ? { kind, id, ref: s } : null
   }
   const ref = SOURCE[kind] && data[SOURCE[kind]].find((x) => x.id === id)
-  return ref ? { kind, id, ref } : null
+  return ref ? at(ref) : null
 }

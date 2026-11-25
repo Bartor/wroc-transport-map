@@ -465,7 +465,8 @@ export function resolveTarget(markers, kind, ref) {
  * the side people came from, so "E" is someone heading west.
  */
 export function dirKeys(data, kind, ref) {
-  if (kind === 'road') return Object.keys(data.roadById[ref.id]?.dirs || {})
+  // all of them, the ones left out of a node included
+  if (kind === 'road') return Object.keys(data.road.sections[ref.id]?.dirs || {})
   if (kind === 'bike' || kind === 'ped') return Object.keys(ref.byHourDir || {}).map(cameFrom)
   return []
 }
@@ -489,7 +490,8 @@ const FAMILY_SOURCE = { road: 'points', pt: 'pt', bike: 'bike', ped: 'ped' }
  * transit partner, that partner's stop sections - one group each, since their
  * units differ. A transit section whose node was folded into a road pie
  * belongs to that pie. Otherwise it is the lettered sections of one point.
- * Null when there is only one piece.
+ * Null when there is only one piece and only one way along it; a lone piece
+ * with two directions is a family of those.
  */
 export function familyOf(data, markers, sel) {
   const { kind, ref } = sel || {}
@@ -506,9 +508,10 @@ export function familyOf(data, markers, sel) {
     ? [{ kind: node.kind, members: allOf(node) },
       ...(node.pair ? [{ kind: 'pt', members: node.pair.all }] : [])]
     : [{ kind, members: data[FAMILY_SOURCE[kind]].filter((x) => parentOf(kind, x) === parent) }]
-  if (groups.reduce((a, g) => a + g.members.length, 0) < 2) return null
-  const atNode = ref.aggregate || ref === node?.ref
-  return { parent, node, groups, current: atNode ? null : { kind, id: ref.id } }
+  const lone = groups.reduce((a, g) => a + g.members.length, 0) < 2
+  if (lone && dirKeys(data, kind, groups[0].members[0]).length < 2) return null
+  const atNode = !sel.dir && (ref.aggregate || ref === node?.ref)
+  return { parent, node, groups, lone, current: atNode ? null : { kind, id: ref.id, dir: sel.dir } }
 }
 
 // ------------------------------------------------------------- modal split
@@ -529,7 +532,7 @@ export const MODES = [
     cats: ['a1', 'a2', 'b1', 'b2'], off: ['a3', 'a4', 'b3', 'b4'] },
   { key: 'other', label: 'Inne (motocykle, mikrobusy)', color: '#6b7385', cats: ['c', 'i', 'l'] },
 ]
-const MODE = Object.fromEntries(MODES.map((m) => [m.key, m]))
+export const MODE = Object.fromEntries(MODES.map((m) => [m.key, m]))
 
 /**
  * Passenger car units: how much of a road's capacity one vehicle uses, from

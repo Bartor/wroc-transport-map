@@ -1,16 +1,21 @@
 import {
-  Block, Breakdown, Callout, DetailsPanel, DirectionSplit, Donut, Fact, Facts, Footnote,
-  GroupedTable, Hint, Notes, Partial, PieceTree, ShareBars, ShareButtons, SplitBody, SplitTable,
-  StatBlock, Warn, cameFrom, fixed, fmt, fmtEst, hourRuns, pct, pieceKey, shade, usePick,
+  Block, Breakdown, Callout, Chips, DetailsPanel, DirectionSplit, Donut, Fact, Facts, Footnote,
+  GroupedTable, Hint, LinkButton, Notes, Partial, PieceTree, Setting, ShareBars, ShareButtons,
+  SplitBody, SplitTable, StatBlock, Warn, dirLabel, downloadCsv, fixed, fmt, fmtEst, hourRuns,
+  pct, pieceKey, slug, usePick,
 } from '@bartor-net/ui-kit'
 import { HourBars, StackedHourBars } from '@bartor-net/ui-kit/charts'
 import {
   LAYERS, ROAD_METRICS, roadProfile, profileFor, addProfiles,
-  sumHours, sectionLetter, sectionOf,
+  sumHours, sectionLetter, sectionOf, dirKeys,
   activeCats, expand, toPeople, expansionOf, BASIS_LABEL, markerIndex, splitTotal,
   splitVehicles, bikeNote, pedNote, thinText, splitShares, SHARE_ROW, PCU_SOURCE,
   coverageGap, windowKind, transitByMode, MODES, nodeSplit,
 } from './data'
+import {
+  BY, BY_OF, MODE_SHORT, UNITS, dirName, dirPieceKey, flowPieces, flowTable, inUnit, leftDirs, modesText,
+  onlyDir, perVehicle as peoplePer, roadFlows, stopFlows, walkFlows, whole,
+} from './flows'
 import { cardFilename, drawCard } from './shareCard'
 
 const GROUP_LABEL = {
@@ -29,6 +34,15 @@ const TREE_LABELS = {
     + 'wielkości koła na mapie ani rankingu.',
 }
 
+/** A piece's directions, where it has more than one to choose from. */
+function waysOf(data, kind, m, off) {
+  const dirs = dirKeys(data, kind, m)
+  return dirs.length < 2 ? undefined : dirs.map((dir) => ({
+    key: dir, title: `${m.id}: tylko ${dirName(dir)}`,
+    out: kind === 'road' && off.has(dirPieceKey(m.id, dir)),
+  }))
+}
+
 /**
  * A node is made of pieces: lettered road sections (KW_08A, KW_08B...), and
  * the stops of the transit point paired with it.
@@ -39,8 +53,11 @@ const TREE_LABELS = {
  * interchange, say, to look at one junction of it. The node's own group keeps
  * at least one piece, or it would have nothing to stand on; the paired stops
  * only lend their load per vehicle, and can all go.
+ *
+ * A piece counted in two directions has a button for each, which opens that
+ * direction alone.
  */
-function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
+function NodeTree({ data, family, shares, onSelect, off, toggleOff, hot, setHot }) {
   const { node, groups, current } = family
   return (
     <PieceTree label="Części węzła" labels={TREE_LABELS}
@@ -60,11 +77,17 @@ function NodeTree({ family, shares, onSelect, off, toggleOff, hot, setHot }) {
             label: (g.kind === 'road' ? m.name : sectionOf(g.kind, m)) || m.name,
             title: `${m.id} · ${sectionOf(g.kind, m) || m.name}`,
             share: share == null ? null : `${share}%`,
+            ways: waysOf(data, g.kind, m, off),
           }
         }),
       }))}
       current={current} off={off} onToggle={toggleOff} hot={hot} setHot={setHot}
-      onPick={(g, m) => onSelect({ kind: g.kind, id: m.id, ref: m.ref })} />
+      onPick={(g, m) => onSelect({ kind: g.kind, id: m.id, ref: m.ref })}
+      // picked again, a direction gives way to its section
+      onPickWay={(g, m, dir) => onSelect({
+        kind: g.kind, id: m.id, ref: m.ref,
+        ...(current?.id === m.id && current.dir === dir ? {} : { dir }),
+      })} />
   )
 }
 
@@ -192,6 +215,7 @@ function ModalSplit({ node, data, occupancy }) {
         Podział modalny — osoby
         {node.piece && ` · ${node.piece.kind === 'pt' ? 'przystanek' : 'przekrój'} `
           + `${sectionLetter(node.piece.id) || node.piece.id}`}
+        {node.piece?.dir && `, ${dirName(node.piece.dir)}`}
       </h4>
       {!total ? (
         <Hint>
@@ -244,6 +268,7 @@ function ModalSplit({ node, data, occupancy }) {
             os./poj., zmierzone w godzinach {hourRuns(split.loadHours)}
             {beyond ? ' i przyjęte także dla pozostałych godzin okresu — poza nimi to założenie' : ''}.
             {thinText(split) && ` Średnia miejska tam, gdzie próba była za mała (${thinText(split)}).`}
+            {node.piece?.dir && ' Napełnienie to średnia ze słupków w obu kierunkach.'}
             {' '}Surowej liczby pasażerów z punktu KZ nie dodajemy, bo jego słupki
             stoją też przy innych ulicach i kierunkach niż przekroje drogowe —
             tabela poniżej pokazuje każdy słupek; te, które nie pasują do
@@ -303,11 +328,19 @@ function unitOf(kind) {
 }
 export default function Details({
   data, sel, hours, metric, period, share, wholeDay, people, occupancy,
-  markers, family, onSelect, onClose, off, toggleOff, hot, setHot,
+  markers, family, onSelect, onClose, off, toggleOff, hot, setHot, flow, setFlow,
 }) {
-  const { kind, ref: p } = sel
+  const { kind } = sel
+  const all = whole(data)
+  const fam = family && onSelect ? family : null
+  // One direction of a section, as if it were all of it. Otherwise an open
+  // piece is shown whole, also where one way of it is left out of the node.
+  const one = onlyDir(data, kind, sel.ref, sel.dir)
+  const dir = one ? sel.dir : null
+  const p = one?.ref ?? sel.ref
+  const src = one?.data ?? (fam?.current ? all : data)
   // The drawn node carries the modal split and its transit partner, if any.
-  const node = markers ? markerIndex(markers)[`${kind}:${sel.id}`] : null
+  const node = markers && !dir ? markerIndex(markers)[`${kind}:${sel.id}`] : null
   const color = LAYERS[kind]?.color || '#f4a261'
   const catOrder = data.meta.vehCatOrder
 
@@ -324,32 +357,6 @@ export default function Details({
     ? (people ? 'osób w samochodach osobowych' : `pojazdów — ${ROAD_METRICS[metric].label.toLowerCase()}`)
     : unitOf(k))
 
-  // A section's directions in the period, in the panel's unit. Road sections
-  // record each direction separately; cyclists and pedestrians by direction
-  // of travel. Transit directions are destinations, not ways along a street,
-  // so they are listed rather than split.
-  const dirsOf = (k, ref) => {
-    if (k === 'road') {
-      const sec = data.roadById[ref.id]
-      if (!sec) return []
-      const cats = activeCats(metric, people)
-      const keep = cats
-        ? cats.map((c) => catOrder.indexOf(c)).filter((i) => i >= 0)
-        : catOrder.map((_, i) => i)
-      return Object.entries(sec.dirs).map(([d, dd]) => ({
-        key: d,
-        v: shown(hours.reduce((a, h) => a + keep.reduce((x, i) => x + (dd.h[h]?.[i] || 0), 0), 0), k),
-      }))
-    }
-    if (k === 'bike' || k === 'ped') {
-      // 3.4 and 3.5 record the side people came from ("wlot początkowy"), so
-      // "E" is someone heading west; spelled as from > to like the road keys
-      return Object.entries(ref.byHourDir || {}).map(([d, arr]) => ({
-        key: cameFrom(d), v: shown(sumHours(arr, hours), k),
-      }))
-    }
-    return []
-  }
   // Hours of the period this piece was actually counted in. A count of 0 in
   // an hour nobody measured is "no data", not "no traffic".
   const coveredOf = (k, ref) => {
@@ -357,7 +364,7 @@ export default function Details({
       return hours.filter((h) => ref.members.some((m) => coveredOf(k, m).includes(h)))
     }
     if (k === 'road') {
-      const sec = data.roadById[ref.id]
+      const sec = src.roadById[ref.id]
       return hours.filter((h) => Object.values(sec?.dirs || {})
         .some((dd) => (dd.h[h] || []).some((x) => x > 0)))
     }
@@ -374,12 +381,6 @@ export default function Details({
       )}
     </Fact>
   ) : <Fact label={`W okresie ${period}`} tone="gap">brak pomiaru w tym okresie</Fact>)
-  const dirRow = (k, m) => ({
-    kind: k, id: m.id,
-    letter: sectionLetter(m.id) || '—',
-    name: k === 'road' ? m.name : sectionOf(k, m) || m.name,
-    dirs: dirsOf(k, m),
-  })
   // transit passengers by destination or line, summed over hours and sections
   const perPeriod = (refs, field) => {
     const out = {}
@@ -393,7 +394,6 @@ export default function Details({
 
   // Each piece's share of its own group in the period, for the tabs and the
   // piece view. Same metric and units as everything else in the panel.
-  const fam = family && onSelect ? family : null
   const shares = {}
   let part = null
   // Under a modal-split pie the road sections' shares are of all vehicles,
@@ -413,8 +413,15 @@ export default function Details({
     const i = fam.current?.kind === g.kind
       ? g.members.findIndex((m) => m.id === fam.current.id) : -1
     if (i >= 0) {
+      const oneOf = (d) => (g.kind === 'road' && allVehicles
+        ? profileFor(d, 'road', g.members[i], 'all', false)
+        : shape(profileFor(d, g.kind, kind === g.kind && dir ? p : g.members[i], metric, people), g.kind))
       part = {
-        g, i, val: vals[i], sum, share: shares[pieceKey(g.kind, g.members[i].id)],
+        g, i, val: vals[i], sum,
+        // of a direction, beside the whole of its section
+        dirVal: dir ? sumHours(oneOf(src), hours) : null,
+        secVal: dir ? sumHours(g.kind === 'road' ? oneOf(all)
+          : shape(sel.ref.byHour, g.kind), hours) : null, share: shares[pieceKey(g.kind, g.members[i].id)],
         out: !isIn[i],
         unit: g.kind === 'road' && allVehicles ? 'pojazdów, wszystkie kategorie' : unit(g.kind),
       }
@@ -428,34 +435,179 @@ export default function Details({
   let splitNode = node?.split ? node : null
   if (!splitNode && fam?.node?.split && fam.current && (kind === 'road' || kind === 'pt')) {
     const split = kind === 'road'
-      ? nodeSplit(data, { roadIds: [p.id], ptRefs: fam.node.pair?.refs ?? null, hours, occupancy: occ })
+      ? nodeSplit(src, { roadIds: [p.id], ptRefs: fam.node.pair?.refs ?? null, hours, occupancy: occ })
       : nodeSplit(data, { roadIds: [], ptRefs: [p], hours, occupancy: occ })
-    splitNode = { ...fam.node, id: p.id, ref: p, split, piece: { kind, id: p.id } }
+    splitNode = { ...fam.node, id: p.id, ref: p, split, piece: { kind, id: p.id, dir } }
   }
 
-  // The hourly profile, stacked by the node's pieces of this kind where it
-  // has several - the same chart for the node and for each piece, the open
-  // piece lit. Left-out pieces drop out of the stack unless one is open.
-  const stackGroup = fam?.groups.find((g) => g.kind === kind && g.members.length > 1)
-  const stack = stackGroup && stackGroup.members
-    .filter((m) => !fam.node || !off?.has(pieceKey(kind, m.id)) || m.id === fam.current?.id)
-    .map((m, i) => ({
-      id: m.id, ref: m, letter: sectionLetter(m.id) || m.id,
-      name: (kind === 'road' ? m.name : sectionOf(kind, m)) || m.name,
-      values: shape(profileFor(data, kind, m, metric, people)),
-      fill: shade(color, i),
-      out: !!fam.node && !!off?.has(pieceKey(kind, m.id)),
-    }))
-  const chart = (values) => (stack ? (
-    <StackedHourBars kind={kind} pieces={stack} hours={hours} unit={unit(kind)}
-      current={fam.current?.kind === kind ? fam.current.id : null}
-      hot={hot} setHot={setHot} onPick={(s) => onSelect({ kind, id: s.id, ref: s.ref })} />
-  ) : <HourBars values={values} hours={hours} color={color} unit={unit(kind)} />)
-  // a piece's chart is its whole point, so the heading says which is lit
-  const chartFor = (what) => (stack && fam.current
-    ? `Profil dobowy — ${what}: punkt ${fam.node?.id || fam.parent}, `
-      + `${sectionLetter(fam.current.id) || fam.current.id} wyróżniony`
-    : `Profil dobowy — ${what}`)
+  const flows = BY_OF[kind] && flowsOf()
+
+  // The traffic split the way the reader asks, for the charts and lists below.
+  // A node counts every mode, in the unit of choice; a road point on its own
+  // follows the sidebar's categories, as its marker does.
+  function flowsOf() {
+    const cur = fam?.current?.kind === kind ? fam.current : null
+    const mixed = kind === 'road' && !!splitNode
+    let by = BY_OF[kind].includes(flow.by) ? flow.by : 'section'
+    // one direction among sections would be a part among wholes
+    if (dir && by === 'section') by = 'dir'
+    const byParts = by === 'section' || (by === 'dir' && kind !== 'pt')
+    const counted = kind === 'pt' && (by === 'section' || by === 'mode')
+    const unitKey = mixed ? flow.unit
+      : kind === 'road' ? (people ? 'persons' : 'vehicles')
+        : counted && flow.unit === 'vehicles' ? 'vehicles' : 'persons'
+    const modes = mixed ? flow.modes : null
+    const members = fam?.groups.find((g) => g.kind === kind)?.members
+      || (p.aggregate ? p.all : [sel.ref])
+    const isOut = (ref, d) => !!fam?.node && (off.has(pieceKey(kind, ref.id))
+      || (!!d && kind === 'road' && off.has(dirPieceKey(ref.id, d))))
+    const isOpen = (ref, d) => cur?.id === ref.id && (!cur.dir || !d || cur.dir === d)
+    const opts = mixed ? {} : { cats: activeCats(metric, people), roadway: true }
+    const rowsOf = (refs, from) => (kind === 'road'
+      ? roadFlows(from, refs, opts).filter((r) => !modes || modes.includes(r.mode))
+      : kind === 'pt' ? stopFlows(refs, by) : walkFlows(refs, by))
+
+    let rows
+    if (!byParts) rows = cur ? rowsOf([p], src) : rowsOf(members.filter((m) => !isOut(m)), data)
+    else if (by === 'dir') {
+      rows = rowsOf(members, all).filter((r) => !isOut(r.ref, r.dir) || isOpen(r.ref, r.dir))
+    } else {
+      rows = members.filter((m) => !isOut(m) || isOpen(m))
+        .flatMap((m) => rowsOf([m], isOpen(m) ? all : data))
+    }
+    const persons = peoplePer({ occupancy: occ, load: splitNode?.split.load })
+    const pieces = flowPieces(rows, { kind, by, unit: unitKey, persons, hours, isOut })
+      .map((x) => ({ ...x, values: x.values.map((v) => expand(data.meta, wk, v, wholeDay)) }))
+
+    // the two ways of each street, in the same modes and unit
+    const ways = kind === 'pt' ? [] : (p.aggregate ? p.members : [sel.ref]).map((m) => {
+      const from = p.aggregate ? data : all
+      const list = kind === 'road' ? rowsOf([m], from) : walkFlows([m], 'dir')
+      return {
+        kind, id: m.id, ref: m, letter: sectionLetter(m.id) || '—',
+        name: kind === 'road' ? m.name : sectionOf(kind, m) || m.name,
+        dirs: dirKeys(all, kind, m)
+          .filter((d) => !p.aggregate || !isOut(m, d))
+          .map((key) => ({
+            key,
+            v: expand(data.meta, wk, list.filter((r) => r.dir === key)
+              .reduce((a, r) => a + sumHours(inUnit(r, unitKey, persons), hours), 0), wholeDay),
+          })),
+      }
+    })
+
+    // what the charts count, in their titles, and as a unit
+    const what = mixed ? `${UNITS[unitKey].label}${modesText(modes) || ', wszystkie środki transportu'}`
+      : kind === 'pt' ? (unitKey === 'vehicles' ? 'pojazdy' : 'pasażerowie')
+        : kind === 'road' ? (people ? 'osoby w samochodach osobowych'
+          : ROAD_METRICS[metric].label.toLowerCase()) : unit(kind)
+    const many = mixed ? UNITS[unitKey].many
+      : kind === 'pt' && unitKey === 'vehicles' ? 'pojazdów' : unit(kind)
+    const short = mixed ? `${UNITS[unitKey].label}${modesText(modes)}` : what
+    return { by, byParts, cur, mixed, counted, unitKey, modes, pieces, ways, what, many, short,
+      estimated: mixed && unitKey === 'persons' && (!modes || modes.some((m) => m === 'bus' || m === 'tram')) }
+  }
+
+  const poles = kind === 'pt' ? { label: 'Słupki', of: 'słupków', after: 'po słupkach' } : BY.section
+  const byName = (by) => (by === 'section' ? poles : BY[by])
+  const openWay = (row, way) => dirKeys(all, kind, row.ref).includes(way)
+    && onSelect({ kind, id: row.id, ref: row.ref, dir: way })
+
+  /** The controls, the chart, the shares and the directions they govern. */
+  function flowBlocks() {
+    const { by, byParts, cur, mixed, pieces, ways, what, many, short } = flows
+    const set = (x) => setFlow({ ...flow, ...x })
+    const several = pieces.length > 1
+    const single = p.aggregate ? null : cur
+    const letterOf = (c) => `${sectionLetter(c.id) || c.id}${c.dir ? ` ${dirLabel(c.dir)}` : ''}`
+    const who = !cur || (fam.lone && !cur.dir) ? ''
+      : fam.lone ? ` · ${byParts ? `${dirLabel(cur.dir)} wyróżniony` : dirLabel(cur.dir)}`
+      : byParts && several ? `: punkt ${fam.node?.id || fam.parent}, ${letterOf(cur)} wyróżniony`
+      : ` · ${letterOf(cur)}`
+    const scope = [pill, by === 'section' ? null : byName(by).label, UNITS[flows.unitKey].label,
+      mixed && flows.modes ? flows.modes.join(' ') : null, 'godzinowo'].filter(Boolean).join(' ')
+    const usable = BY_OF[kind].filter((b) => b !== 'dir' || kind === 'pt' || ways.some((w) => w.dirs.length > 1)
+      || dirKeys(all, kind, sel.ref).length > 1)
+    const toggleMode = (key) => {
+      const now = flow.modes || MODES.map((m) => m.key)
+      const next = MODES.map((m) => m.key)
+        .filter((k) => (k === key ? !now.includes(k) : now.includes(k)))
+      // none is no choice; all is the same as no choice
+      set({ modes: !next.length || next.length === MODES.length ? null : next })
+    }
+    return (
+      <>
+        <h4>Wykresy — co pokazać</h4>
+        <Setting label="Podział">
+          <Chips small label="Podział" onPick={(b) => set({ by: b })}
+            items={usable.map((b) => ({ key: b, label: byName(b).label, on: by === b }))} />
+        </Setting>
+        {(mixed || flows.counted) && (
+          <Setting label="Liczby">
+            <Chips small label="Liczby" onPick={(u) => set({ unit: u })}
+              items={(mixed ? ['persons', 'vehicles', 'pcu'] : ['persons', 'vehicles']).map((u) => ({
+                key: u, on: flows.unitKey === u, title: UNITS[u].title,
+                label: !mixed && u === 'persons' ? 'pasażerowie' : UNITS[u].label,
+              }))} />
+          </Setting>
+        )}
+        {mixed && (
+          <Setting label="Środki">
+            <Chips small label="Środki transportu" onPick={toggleMode}
+              items={MODES.map((m) => ({
+                key: m.key, label: MODE_SHORT[m.key], title: m.label, color: m.color,
+                on: !flow.modes || flow.modes.includes(m.key),
+              }))} />
+            {flow.modes && <LinkButton onClick={() => set({ modes: null })}>wszystkie</LinkButton>}
+          </Setting>
+        )}
+        <h4>Profil dobowy{several ? ` ${byName(by).after}` : ''} — {what}{who}</h4>
+        {!pieces.length ? <Hint>Nic nie policzono — wybierz inne środki transportu.</Hint>
+          : several ? (
+            <StackedHourBars kind={kind} pieces={pieces} hours={hours} unit={many}
+              current={byParts && single ? pieces.filter((x) => x.ref?.id === single.id
+                && (!single.dir || !x.dir || x.dir === single.dir)).map((x) => x.id) : null}
+              hot={hot} setHot={setHot}
+              onPick={(x) => {
+                if (by === 'section') onSelect({ kind, id: x.ref.id, ref: x.ref })
+                else if (x.dir) openWay({ id: x.ref.id, ref: x.ref }, x.dir)
+                // a mode alone, and back
+                else if (x.mode) set({ modes: flow.modes?.length === 1 ? null : [x.mode] })
+              }} />
+          ) : <HourBars values={pieces[0].values} hours={hours} color={pieces[0].fill} unit={many} />}
+        {several && (
+          <Parts title={`Udział ${byName(by).of} — ${period}, ${short}`}
+            parts={Object.fromEntries(pieces.filter((x) => !x.out).map((x) => [x.label, sumHours(x.values, hours)]))} />
+        )}
+        {flows.estimated && (
+          <Hint>
+            Autobusy i tramwaje w osobach: pojazdy × napełnienie takie jak
+            w podziale modalnym, przyjęte dla całej doby.
+          </Hint>
+        )}
+        {pieces.length > 0 && (
+          <LinkButton block onClick={() => downloadCsv(
+            flowTable(pieces, short), `kbr2024-${slug(scope)}.csv`,
+          )}>
+            Pobierz dane wykresu (CSV)
+          </LinkButton>
+        )}
+      </>
+    )
+  }
+  const waysBlock = () => (
+    <DirectionSplit rows={flows.ways} hot={hot} setHot={setHot} onPick={openWay}
+      current={dir ? { kind, id: sel.id, dir } : null}
+      title={`${p.aggregate ? 'Kierunki przekrojów' : 'Kierunki'} — ${period}, ${flows.short}`} />
+  )
+
+  const pill = kind === 'signal' ? (p.kind === 'crossing' ? 'przejście' : 'skrzyżowanie')
+    : dir ? `${p.id} ${dir.replace('>', '→')}` : p.id
+  // directions left out of the sections that are in
+  const partly = kind === 'road' && !dir
+    ? (p.aggregate ? p.members : node ? [p] : []).flatMap((m) => leftDirs(all, off, m.id)
+      .map((d) => `${sectionLetter(m.id) || m.id} ${dirName(d)}`)) : []
+  const gone = p.aggregate ? p.all.filter((m) => !p.members.includes(m)).map((m) => m.id) : []
 
   let body = null
   // what the shareable picture shows when there is no modal split
@@ -520,12 +672,6 @@ export default function Details({
       cardNotes.push('Przekroje leżą po obu stronach jednego skrzyżowania, więc jadący '
         + 'na wprost są liczeni dwa razy — suma zawyża ruch przez węzeł.')
     }
-    const bySection = Object.fromEntries(
-      p.members.map((m, i) => [
-        `${sectionLetter(m.id) || m.id} — ${sectionOf(kind, m) || m.name}`,
-        sumHours(profs[i], hours),
-      ]),
-    )
     body = (
       <>
         <Facts>
@@ -537,6 +683,7 @@ export default function Details({
                   .map((m) => m.id).join(', ')}
               </Partial>
             )}
+            {partly.length > 0 && <Partial> — bez kierunków: {partly.join(', ')}</Partial>}
           </Fact>
           {now(node?.split && splitTotal(node.split) > 0
             ? `${fmtEst(splitTotal(node.split))} osób — wszystkie środki`
@@ -567,9 +714,7 @@ export default function Details({
             przecinające linię pomiaru, więc ich suma to cały ruch przez tę linię.
           </Hint>
         )}
-        <h4>Profil dobowy — cały punkt{stack ? ' po częściach' : ''}</h4>
-        {chart(total)}
-        <Parts title={`Udział przekrojów — ${period}`} parts={bySection} />
+        {flowBlocks()}
         {kind === 'pt' ? (
           <>
             <TransitLoads refs={p.members} hours={hours} scale={(v) => shown(v, 'pt')}
@@ -579,14 +724,11 @@ export default function Details({
             <Parts title={`Linie (pasażerowie) — ${period}`}
               parts={perPeriod(p.members, 'byHourLine')} />
           </>
-        ) : (
-          <DirectionSplit title={`Kierunki przekrojów — ${period} (${unit(kind)})`}
-            rows={p.members.map((m) => dirRow(kind, m))} hot={hot} setHot={setHot} />
-        )}
+        ) : waysBlock()}
       </>
     )
   } else if (kind === 'road') {
-    const sec = data.roadById[p.id]
+    const sec = src.roadById[p.id]
     const cats = activeCats(metric, people)
     const prof = shape(roadProfile(sec, { cats }, catOrder))
     cardBig = { value: fmt(sumHours(prof, hours)), unit: unit('road') }
@@ -631,13 +773,8 @@ export default function Details({
             {p.window ? ' — tylko 6–10 i 15–19, nie cała doba' : ''}
           </Fact>
         </Facts>
-        <h4>
-          {chartFor(people ? 'osoby w samochodach osobowych'
-            : ROAD_METRICS[metric].label.toLowerCase())}
-        </h4>
-        {chart(prof)}
-        <DirectionSplit title={`Kierunki — ${period} (${unit('road')})`} rows={[dirRow('road', p)]}
-          hot={hot} setHot={setHot} />
+        {flowBlocks()}
+        {waysBlock()}
         <Parts title={`Kategorie pojazdów — ${period}`} parts={byCat} />
         <Parts title="Poza jezdnią — rowery i UTO" parts={off} />
       </>
@@ -655,12 +792,10 @@ export default function Details({
           {now(`${fmt(shown(sumHours(p.byHour, hours)))} ${unit(kind)}`)}
           <Fact label="Cały pomiar" tone="whole">{fmt(p.total)}{p.hours ? ` (${p.hours})` : ''}</Fact>
         </Facts>
-        <h4>{chartFor(unit(kind))}</h4>
-        {chart(shape(p.byHour))}
-        {p.byHourDir
-          ? <DirectionSplit title={`Kierunki — ${period}`} rows={[dirRow(kind, p)]}
-            hot={hot} setHot={setHot} />
+        {flowBlocks()}
+        {sel.ref.byHourDir ? waysBlock()
           : <Parts title="Kierunki — cały pomiar" parts={p.byDir} />}
+        {dir && <Hint>Poniżej oba kierunki razem — tych cech nie zapisano osobno.</Hint>}
         <Parts title="Płeć — cały pomiar" parts={p.bySex} />
         {kind === 'bike' && <Parts title="Gdzie jadą — cały pomiar" parts={p.byPlace} />}
         {kind === 'bike' && <Parts title="Pojazd — cały pomiar" parts={p.byMode} />}
@@ -696,8 +831,7 @@ export default function Details({
             </Fact>
           ) : null}
         </Facts>
-        <h4>{chartFor('pasażerowie')}</h4>
-        {chart(shape(prof))}
+        {flowBlocks()}
         <TransitLoads refs={[p]} hours={hours} scale={(v) => shown(v, 'pt')}
           title={`Pojazdy i napełnienie — ${period}`} />
         <Parts title={`Kierunki (pasażerowie) — ${period}`} parts={perPeriod([p], 'byHourDir')} />
@@ -731,9 +865,17 @@ export default function Details({
     )
   }
 
-  const pill = kind === 'signal' ? (p.kind === 'crossing' ? 'przejście' : 'skrzyżowanie') : p.id
   const title = p.name || p.stop || p.stations?.join(' / ')
     || p.streets?.join(' × ') || 'sygnalizacja'
+  if (dir) {
+    cardNotes.push(`Tylko jeden kierunek ruchu: ${dirName(dir)}.`
+      + (splitNode?.split.basis === 'measured'
+        ? ' Napełnienie autobusów i tramwajów to średnia ze słupków w obu kierunkach.' : ''))
+  }
+  if (gone.length || partly.length) {
+    cardNotes.push(`Pominięte w liczbach: ${[gone.length && `przekroje ${gone.join(', ')}`,
+      partly.length && `kierunki ${partly.join(', ')}`].filter(Boolean).join('; ')}.`)
+  }
   // where the survey's own description is wrong
   if (p.correction) cardNotes.push(p.correction)
   if (scaled) {
@@ -745,13 +887,14 @@ export default function Details({
   const split = splitNode && splitTotal(splitNode.split) > 0 ? splitNode.split : null
   const spec = {
     id: pill,
-    kicker: `${split && !splitNode.piece ? 'Węzeł pomiarowy' : KICKER[kind] || 'Punkt'} · ${pill}`,
-    title,
+    kicker: `${split && !splitNode.piece ? 'Węzeł pomiarowy' : KICKER[kind] || 'Punkt'} · ${dir
+      ? `${p.id} · kierunek ${dir.replace('>', ' → ')}` : pill}`,
+    title: dir ? `${title} — ${dirName(dir)}` : title,
     subtitle: node?.sub || p.segment || p.loc || '',
     period,
     accent: split ? '#e4572e' : color,
     split, pair: splitNode?.pair, repeats: !!p.repeatsStreet,
-    bikeNote: split && split.basis !== 'transit' ? bikeNote(data, splitNode, split) : null,
+    bikeNote: split && split.basis !== 'transit' ? bikeNote(src, splitNode, split) : null,
     pedNote: split && split.basis !== 'transit' ? pedNote(data, splitNode, split) : null,
     occupancy, occupancyDefault: data.meta.carOccupancy.default,
     occupancyQuote: data.meta.carOccupancy.value, occ: data.transitOcc,
@@ -765,23 +908,73 @@ export default function Details({
       : SOURCE_TEXT[kind] || KBR,
   }
 
+  // always one line, so that picking a direction moves nothing below it
+  const oneWay = dirKeys(all, kind, sel.ref).length < 2
+  const subtitle = dir ? `Tylko kierunek ${dirName(dir)}`
+    : p.aggregate ? node?.sub
+      : kind === 'road' || kind === 'bike' || kind === 'ped'
+        ? `${oneWay ? 'Jeden kierunek' : 'Oba kierunki'}${p.segment ? ` · ${p.segment}` : ''}`
+        : kind === 'pt' ? p.loc : null
+
+  // the open section's directions left out of the node
+  const partOut = part && kind === 'road' ? leftDirs(all, off, sel.id) : []
+
+  /** What an open direction is of its section, and leaving it out. */
+  function dirPart() {
+    const of = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '—')
+    const key = dirPieceKey(sel.id, dir)
+    const isOut = off.has(key)
+    const others = dirKeys(all, kind, sel.ref).filter((d) => d !== dir)
+    // without its last direction a section is out; a node keeps one section
+    const last = others.every((d) => off.has(dirPieceKey(sel.id, d)))
+    const inGroup = part.g.members.filter((m) => !off.has(pieceKey(kind, m.id)))
+    const stuck = last && inGroup.length < 2
+    const leave = () => {
+      if (!last) { toggleOff(key, true); return }
+      toggleOff(others.map((d) => dirPieceKey(sel.id, d)), false)
+      toggleOff(pieceKey(kind, sel.id), true)
+    }
+    return (
+      <p>
+        Ruch {dirName(dir)} to <b>{of(part.dirVal, part.secVal)}</b> przekroju{' '}
+        {sectionLetter(sel.id) || sel.id} w okresie {period}: {fmt(part.dirVal)} z{' '}
+        {fmt(part.secVal)} ({part.unit}).
+        {part.out && ' Cały przekrój jest pominięty w liczbach węzła.'}
+        {fam.node && kind === 'road' && toggleOff && !part.out && (
+          <>
+            {' '}
+            {isOut ? (
+              <>
+                W liczbach węzła jest <b>pominięty</b>.{' '}
+                <LinkButton onClick={() => toggleOff(key, false)}>Wlicz go do węzła</LinkButton>
+              </>
+            ) : stuck ? null : (
+              <LinkButton onClick={leave}>Pomiń go w liczbach węzła</LinkButton>
+            )}
+          </>
+        )}
+      </p>
+    )
+  }
+
   return (
     <DetailsPanel pill={pill} title={title} color={color} onClose={onClose}
+      subtitle={subtitle}
       actions={(
         <ShareButtons render={() => drawCard(spec)} filename={cardFilename(spec)}
           title={spec.title} text={`KBR Wrocław 2024 — ${spec.title}`} />
       )}>
       {fam && (
-        <NodeTree family={fam} shares={shares} onSelect={onSelect}
+        <NodeTree data={all} family={fam} shares={shares} onSelect={onSelect}
           off={off} toggleOff={toggleOff} hot={hot} setHot={setHot} />
       )}
       {splitNode && (
-        <ModalSplit key={splitNode.id} node={splitNode} data={data} occupancy={occ} />
+        <ModalSplit key={`${splitNode.id}${dir || ''}`} node={splitNode} data={src} occupancy={occ} />
       )}
-      {part && (
-        <Callout title={`Część węzła ${fam.node?.id || fam.parent}`
+      {part && (dir || !fam.lone) && (
+        <Callout title={fam.lone ? 'Jeden kierunek' : `Część węzła ${fam.node?.id || fam.parent}`
           + ` — ${GROUP_LABEL[part.g.kind].toLowerCase()}`}>
-          {part.out ? (
+          {dir ? dirPart() : part.out ? (
             <p>
               {part.g.kind === 'pt' ? 'Przystanek' : 'Przekrój'}{' '}
               {sectionLetter(fam.current.id) || fam.current.id} jest{' '}
@@ -794,6 +987,7 @@ export default function Details({
               {sectionLetter(fam.current.id) || fam.current.id} to{' '}
               <b>{part.sum ? `${part.share}%` : '—'}</b> tej grupy w okresie {period}:
               {' '}{fmt(part.val)} z {fmt(part.sum)} ({part.unit}).
+              {partOut.length > 0 && ` W liczbach węzła bez kierunku ${partOut.map(dirName).join(', ')}.`}
             </p>
           )}
         </Callout>

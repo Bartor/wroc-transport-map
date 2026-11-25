@@ -63,6 +63,19 @@ komunikacja zbiorowa albo rowery i UTO na jezdni.
 Kliknięcie znacznika otwiera panel z profilem dobowym, podziałem na kierunki
 i strukturą rodzajową.
 
+Strzałki przy przekroju w drzewie węzła otwierają **jeden kierunek ruchu** tak,
+jakby był osobnym pomiarem: podział modalny, liczby, obraz do udostępnienia, nazwa
+pliku i link dotyczą tylko jego. Kierunek można też pominąć w liczbach węzła — na
+przykład zostawić same wloty. Napełnienie autobusów i tramwajów pozostaje wtedy
+średnią ze słupków w obu kierunkach, bo punkty KZ nie mają tych samych kierunków co
+przekroje drogowe.
+
+Nad wykresami wybiera się, co pokazują: podział (przekroje, kierunki, środki
+transportu, a na przystankach też linie), jednostkę (osoby, pojazdy, pojazdy umowne)
+i które środki transportu liczyć. Wykres, udziały i słupki kierunków idą za tym
+wyborem, a dane wykresu można pobrać jako CSV. W osobach autobusy i tramwaje to
+pojazdy × napełnienie z podziału modalnego, przyjęte dla całej doby.
+
 ## Okna pomiarowe — dane NIE są porównywalne wprost
 
 To najważniejsze zastrzeżenie do całego zestawu:
