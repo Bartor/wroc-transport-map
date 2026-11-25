@@ -387,8 +387,8 @@ export function StatChips({ S, t, setT }) {
 }
 
 const FIRST = ['mode', 'goal', 'km', 'in', 'to']
-const TRIP_KEYS = ['why', 'min', 'from', 'park', 'reason', 'change']
-const WHO_KEYS = ['live', 'age', 'sex', 'job', 'edu', 'size', 'kids', 'house', 'cars', 'pass', 'lic']
+const TRIP_KEYS = ['why', 'min', 'from', 'park', 'reason', 'line', 'change', 'wa', 'wb', 'wc', 'free', 'typ']
+const WHO_KEYS = ['live', 'age', 'sex', 'job', 'edu', 'size', 'kids', 'house', 'cars', 'pass', 'lic', 'nat', 'limit', 'care']
 
 export const TripsControls = memo(function TripsControls({ x, setT, hasFreight, choice, onChoice }) {
   const { S, t, stats } = x

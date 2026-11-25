@@ -47,6 +47,10 @@ PERSON = {
     "L_podrozy": "nTrips", "waga_gosp_pop": "wh",
     "O4rec": "school", "O8a": "remote", "O9": "nation", "O11_3": "careOld", "O11_4": "careOther",
     "O11_5": "noLimits", "O13": "fares", "O7tryb": "studyMode", "G3typ": "carKind", "G3el": "electric",
+    "G2": "n6", "G3a": "nOwn", "G3b": "nCompany", "G3c": "nPlug", "G4": "nPlain", "G7": "nMoto", "G8": "nUto",
+    "O4": "schoolFull", "O5": "jobFull", "O6": "job2", "O8gmina": "workAt", "O7gmina": "studyAt", "O8c": "remoteFixed",
+    **{"O8b_%d" % i: "remote%d" % i for i in range(1, 8)}, **{"O10_%d" % i: "lic%d" % i for i in range(1, 6)},
+    **{"O12A_%d" % i: "ticket%d" % i for i in range(1, 4)}, "O14a": "fareCut", "O14b": "fareFree", "RX": "diaryDay",
 }
 TRIP = {
     "nr_podrozy": "n", "STARTrejon": "from", "STOPrejon": "to", "odleglosc": "km",
@@ -56,7 +60,7 @@ TRIP = {
     "ST3": "leg3", "ST3linia": "line3", "C3": "walkTo", "C4_1": "change1", "C5": "walkFrom",
     "P1": "inCar", "P2": "parked", "l_przesiadek": "changes",
     "Z2_2x1": "whyCar1", "Z2_2x2": "whyCar2",
-    "STARTmot": "act0", "STOPmot": "act1", "STARTgmina": "gmina0", "STOPgmina": "gmina1",
+    "bezplatny": "free", "STARTmot": "act0", "STOPmot": "act1", "STARTgmina": "gmina0", "STOPgmina": "gmina1",
 }
 # The closed questions on opinions and habits; the open ones stay unread.
 ASKED = re.compile(r"(F[1-3]|K1|K2_\d|K[345][a-e]|K6|K7|O1[56]_\d|U[123]_\d+|Z\d(_\d+)?x[12]|X2)$")

@@ -14,7 +14,7 @@ export const ORDERED = ['#173f6e', '#235c9c', '#3579c4', '#5598de', '#83b7ec', '
 export const KINDS = ['#3987e5', '#0ca30c', '#c98500', '#b5179e', '#6cc5d9', '#9085e9', '#e4572e', '#f2c14e', '#1baf7a', '#d55181', '#8a93a3', '#5b6270']
 
 /** Dimensions whose options have an order. */
-export const isOrdered = (key) => ['km', 'min', 'in', 'cars', 'size', 'age', 'edu', 'change'].includes(key)
+export const isOrdered = (key) => ['km', 'min', 'in', 'cars', 'size', 'age', 'edu', 'change', 'wa', 'wb', 'wc'].includes(key)
 
 /** Colours for a dimension's options: its own, else by whether they have an order. */
 export const colorsOf = (d, ordered, dark = true) => d.options.map((o, i) => o.color

@@ -344,6 +344,7 @@ i odpowiedzi. `etl/trips.py` robi z niej podróże między rejonami — z numere
 żeby dało się złożyć całe dni — i odpowiedzi zsumowane po rejonach i osiedlach (co
 najmniej 3 osoby), każde pytanie w osobnym pliku `answers/`. Pytania o gospodarstwo
 liczone są wagami gospodarstw; liczby mają średnią, a auta i rowery także na 1000 osób.
+Pominięte z kwestionariusza: nauka zdalna (24 osoby), wolny tekst, nazwy szkół, ulice pracy i dane o wywiadzie.
 Wiek jest tylko w przedziałach; średnią daje `etl/ages.py` z wieku i płci wszystkich
 mieszkańców (GUS). `etl/places.py` umieszcza końce podróży pod adresem albo na ulicy
 w rejonie, jeśli podało je co najmniej 5 osób (dom — na ulicy); `python etl/places.py`

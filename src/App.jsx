@@ -277,11 +277,14 @@ export default function App() {
     const level = view === 'trips' ? trip.level : ask.level === 'd' ? 'd' : 'z'
     const list = level === 'd' ? zones.districts : zones.zones
     return {
-      find: (needle) => list.filter((q) => q.name.toLowerCase().includes(needle) || q.id === needle).slice(0, 8)
-        .map((q) => ({ key: q.key, label: placeName(q), sub: q.level === 'd' ? (q.city ? 'osiedle' : 'gmina') : `rejon ${q.id} · ${q.district}`, color: VIEWS[view].color, place: q })),
-      pick: (q) => (view === 'trips' ? setTrip((t) => ({ ...t, picked: [q.key] })) : setAsk((a) => ({ ...a, place: q.key }))),
+      // questions by their name or an answer to them, then places
+      find: (needle) => [...(view === 'answers' && askX ? askX.A.questions : []).filter((q) => [q.group, q.label, ...q.options].some((s) => s.toLowerCase().includes(needle)))
+        .slice(0, 8).map((q) => ({ key: `q${q.key}`, label: q.label, sub: q.group, color: VIEWS.answers.color, place: { question: q.key } })),
+      ...list.filter((q) => q.name.toLowerCase().includes(needle) || q.id === needle).slice(0, 8)
+        .map((q) => ({ key: q.key, label: placeName(q), sub: q.level === 'd' ? (q.city ? 'osiedle' : 'gmina') : `rejon ${q.id} · ${q.district}`, color: VIEWS[view].color, place: q }))],
+      pick: (q) => (q.question ? setAsk((s) => ({ ...s, q: q.question, opts: null })) : view === 'trips' ? setTrip((t) => ({ ...t, picked: [q.key] })) : setAsk((a) => ({ ...a, place: q.key }))),
     }
-  }, [zones, view, trip.level, ask.level, closureX])
+  }, [zones, view, trip.level, ask.level, askX, closureX])
 
   const wantChoice = useCallback(() => fetchFile('choice'), [fetchFile])
   const sel0 = ownId ? { id: ownId } : null

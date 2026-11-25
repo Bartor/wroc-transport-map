@@ -362,7 +362,17 @@ def columns(rows, keys):
     return {k: [r[i] for r in rows] for i, k in enumerate(keys)}
 
 
+def minutes_of(v):
+    n = diary.num(v)
+    return None if n is None else int(n)
+
+
 def stage_trips(d, zones, outside, spots, ends):
+    # lines ridden first, those with enough trips by name
+    seen = collections.Counter(t["line1"] for t in d["trips"] if t.get("line1"))
+    known = [k for k, n in seen.items() if n >= 10 and k != "nie wiem"]
+    known.sort(key=lambda k: (not str(k).isdigit(), int(k) if str(k).isdigit() else 0, str(k)))
+    lines = {k: i for i, k in enumerate([*known, "inna", "nie wiem"])}
     at = {z["id"]: i for i, z in enumerate([*zones, *outside])}
     P = d["people"]
     # the reason for driving was asked once a person, not once a trip
@@ -400,12 +410,17 @@ def stage_trips(d, zones, outside, spots, ends):
             SCHOOLS.index(p["school"]) if p["school"] in SCHOOLS else -1,
             int(p["smallKids"] == "są"), int(not str(p["building"]).startswith("wielo")),
             round(age_of(p)[0], 1),
+            minutes_of(t.get("walkTo")), minutes_of(t.get("walkFrom")), minutes_of(t.get("change1")),
+            lines.get(t.get("line1"), lines["inna"]) if t.get("line1") else -1, int(str(t.get("free", "")).endswith("bezpłatny")),
+            {"nie": 0, "tak": 1}.get(p["typical"], -1), ["polskiej", "ukraińskiej"].index(p["nation"]) if p["nation"] in ("polskiej", "ukraińskiej") else 2,
+            int(p["mobility"] == "tak"), int(p["careChild"] == "tak"),
         ))
     cols = columns(rows, ["f", "t", "m", "a0", "a1", "h", "d", "km", "o", "pk", "x", "ag", "jb",
-                          "hc", "ps", "lc", "wr", "y", "sf", "w", "pf", "pt", "p", "q", "hs", "sx", "ed", "kd", "bd", "ay"])
+                          "hc", "ps", "lc", "wr", "y", "sf", "w", "pf", "pt", "p", "q", "hs", "sx", "ed", "kd", "bd", "ay",
+                          "wa", "wb", "wc", "ln", "fr", "ty", "na", "li", "cc"])
     write("trips.json", {
         "n": len(rows), "modes": MODES, "acts": ACTS, "park": PARK, "why": WHY, "ages": AGES,
-        "jobs": JOBS, "cols": cols,
+        "jobs": JOBS, "lines": list(lines), "cols": cols,
         "meta": {"people": len(P), "wro": sum(p["area"] == "Wrocław" for p in P),
                  "expanded": round(sum(float(P[t["person"]]["w"]) for t in d["trips"]))},
     })
@@ -452,7 +467,14 @@ SCALE_SHORT = ["bardzo dobry", "raczej dobry", "ani dobry, ani zły", "raczej z�
                "nie wiem"]
 GRADE = ["bardzo dobrze", "raczej dobrze", "ani dobrze, ani źle", "raczej źle", "bardzo źle",
          "nie mam zadania"]
+YES = ["zdecydowanie tak", "raczej tak", "ani tak, ani nie", "raczej nie", "zdecydowanie nie", "nie wiem|nie mam zdania"]
+YES_SHORT = [*YES[:5], "nie mam zdania"]
 GRADE_SHORT = [*GRADE[:5], "nie mam zdania"]
+
+
+def name_of(gmina):
+    """KĄTY WROCŁAWSKIE -> Kąty Wrocławskie."""
+    return "-".join(" ".join(w.capitalize() for w in x.split(" ")) for x in gmina.split("-"))
 
 
 def age_of(p):
@@ -487,13 +509,13 @@ def questions(d):
         num = lambda p: diary.num(p[src]) if p[src] not in (None, "") else None
         add(key, group, label, opts,
             lambda p: None if num(p) is None else [min(top, int(num(p))) - low],
-            num=num, home=home, unit=unit, per=per)
+            num=num, home=home, unit=unit, per=per, digits=3 if top <= 2 and zero else 2)
 
-    def several(key, group, label, pre):
+    def several(key, group, label, pre, short=None):
         ks = sorted((k for k in d["questions"] if re.match(pre + r"\d+$", k)),
                     key=lambda k: int(k.split("_")[1]))
         text = [d["questions"][k] for k in ks]
-        add(key, group, label, [re.split(r"\? *", t)[-1].strip() for t in text],
+        add(key, group, label, short or [re.split(r"\? *", t)[-1].strip() for t in text],
             lambda p: [i for i, k in enumerate(ks) if p["ans"].get(k) == "tak"]
             if any(k in p["ans"] for k in ks) else None,
             multi=1, full=text[0].split("?")[0] + "?")
@@ -522,7 +544,10 @@ def questions(d):
     several("u3", G, "Rowerem, hulajnogą", "U3_")
     G = "Dlaczego tak, a nie inaczej"
     reasons("zcar", G, "Dlaczego samochodem (kierowcy)", r"Z2_2x")
+    reasons("zpas", G, "Dlaczego samochodem (pasażerowie)", r"Z2_3x")
     reasons("zpt", G, "Dlaczego komunikacją zbiorową", r"Z3_\d+x")
+    reasons("ztram", G, "Dlaczego tramwajem", r"Z3_8x")
+    reasons("zbus", G, "Dlaczego autobusem miejskim", r"Z3_9x")
     reasons("zwalk", G, "Dlaczego pieszo", r"Z1x")
     reasons("zbike", G, "Dlaczego rowerem lub hulajnogą", r"Z4_\d+x")
     reasons("home", G, "Dlaczego bez wychodzenia z domu", r"X2$")
@@ -530,26 +555,43 @@ def questions(d):
     one("usual", G, "Najczęstszy środek transportu", "K1",
         ["samochodem osobowym", "transportem zbiorowym", "pieszo", "rowerem|hulajnogą|UTO"],
         ["samochód", "transport zbiorowy", "pieszo", "rower, hulajnoga, UTO"])
-    one("chg", G, "W ostatnich 3 latach zmienił(a) środek transportu", "O16_1", ["tak", "nie"])
-    one("hol", G, "W wakacje podróżuje inaczej lub rzadziej", None, ["tak", "nie"],
-        get=lambda p: {"tak": "nie", "nie": "tak"}.get(p["ans"].get("O15_3")))
+    several("pt0", G, "Czym w komunikacji zbiorowej (pasażerowie)", "K2_", ["autobus", "tramwaj", "pociąg", "trudno powiedzieć"])
+    several("chg", G, "Zmiana podróżowania w ostatnich 3 latach", "O16_",
+            ["inny środek lub sposób", "inna częstotliwość", "bez zmian"])
+    several("hol", G, "Zmiana podróżowania w wakacje", "O15_",
+            ["inny środek lub sposób", "inna częstotliwość", "bez zmian"])
     count("trips0", G, "Liczba podróży w ciągu dnia", "nTrips", 5, "podróży na osobę", home=0)
     one("pass", G, "Bilet okresowy", None, ["tak", "nie"], get=lambda p: p["pass"])
+    add("ticket0", G, "Rodzaj biletu okresowego (posiadacze)", ["komunikacja miejska", "podmiejska", "kolej"],
+        lambda p: [i for i in range(3) if p["ticket%d" % (i + 1)] == "tak"] if p["ticket1"] else None, multi=1)
     one("lic", G, "Prawo jazdy (20 lat i więcej)", None, ["posiada", "nie posiada"], ["tak", "nie"],
         get=lambda p: None if p["age"] in ("6-15 lat", "16-19 lat") else p["licence"])
+    add("lic2", G, "Kategorie prawa jazdy (20 lat i więcej)", ["A", "B", "C", "D", "E", "brak"],
+        lambda p: None if p["age"] in ("6-15 lat", "16-19 lat") else
+        [i for i, v in enumerate(("lic1", "lic2", "lic3", "lic4", "lic5")) if p[v] in ("tak", "posiada")] or [5], multi=1)
     one("out", G, "Wychodził(a) z domu poprzedniego dnia", None, ["tak", "nie"],
         get=lambda p: p["out"])
+    one("typ0", G, "Opisany dzień był typowy", None, ["tak", "nie", "trudno powiedzieć"], get=lambda p: p["typical"])
     G = "Gospodarstwo domowe"
     count("size0", G, "Liczba osób", "nPeople", 6, "osób w gospodarstwie", zero=False)
-    one("kids0", G, "Dzieci poniżej 6 lat", None, ["są", "nie ma"], ["są", "nie ma"], get=lambda p: p["smallKids"])
+    for p in d["people"]:
+        p["nKids"] = max(0, (diary.num(p["nPeople"]) or 0) - (diary.num(p["n6"]) or 0))
+    count("kids0", G, "Dzieci poniżej 6 lat", "nKids", 2, "dzieci poniżej 6 lat w gospodarstwie", per="dzieci poniżej 6 lat na 1000 osób")
     count("cars0", G, "Samochody", "nCars", 3, "samochodów na gospodarstwo", per="samochodów na 1000 osób")
+    count("own0", G, "Samochody prywatne", "nOwn", 3, "samochodów prywatnych na gospodarstwo", per="samochodów prywatnych na 1000 osób")
+    count("comp0", G, "Samochody służbowe", "nCompany", 1, "samochodów służbowych na gospodarstwo", per="samochodów służbowych na 1000 osób")
+    count("plug0", G, "Samochody elektryczne i plug-in", "nPlug", 1, "samochodów elektrycznych i plug-in na gospodarstwo",
+          per="samochodów elektrycznych i plug-in na 1000 osób")
+    count("moto0", G, "Motocykle i motorowery", "nMoto", 1, "motocykli i motorowerów na gospodarstwo", per="motocykli i motorowerów na 1000 osób")
     count("bikes0", G, "Rowery", "nBikes", 4, "rowerów na gospodarstwo", per="rowerów na 1000 osób")
     count("ebikes0", G, "Rowery elektryczne", "nEbikes", 2, "rowerów el. na gospodarstwo", per="rowerów el. na 1000 osób")
     count("scoot0", G, "Hulajnogi elektryczne", "nScooters", 2, "hulajnóg na gospodarstwo", per="hulajnóg na 1000 osób")
+    count("trad0", G, "Rowery zwykłe", "nPlain", 4, "zwykłych rowerów na gospodarstwo", per="zwykłych rowerów na 1000 osób")
+    count("uto0", G, "Inne urządzenia elektryczne (UTO)", "nUto", 1, "UTO na gospodarstwo", per="UTO na 1000 osób")
     one("build0", G, "Rodzaj budynku", None, ["wielorodzinny", "jednorodzinny|bliźniak|szeregowiec"],
         ["wielorodzinny", "jednorodzinny, bliźniak, szeregowiec"], get=lambda p: p["building"])
     for q in Q:
-        if q["key"] in ("kids0", "build0"):
+        if q["key"] == "build0":
             q["home"] = 1
     G = "Kim są badani"
     bands = list(ages.BANDS)
@@ -566,7 +608,22 @@ def questions(d):
     one("school0", G, "Wykształcenie", None,
         ["uczeń w szkole podstawowej", "podstawowe", "zawodowe", "średnie", "wyższe"],
         ["w szkole podstawowej", "podstawowe", "zawodowe", "średnie", "wyższe"], get=lambda p: p["school"])
+    one("school1", G, "Wykształcenie — dokładniej", None,
+        ["uczeń w szkole podstawowej", "niepełne podstawowe", "podstawowe", "gimnazjalne", "zasadnicze zawodowe", "średnie",
+         "pomaturalne/policealne", "wyższe"],
+        ["w szkole podstawowej", "niepełne podstawowe", "podstawowe", "gimnazjalne", "zasadnicze zawodowe", "średnie",
+         "pomaturalne, policealne", "wyższe"], get=lambda p: p["schoolFull"])
     one("job0", G, "Zajęcie", None, JOBS, get=lambda p: p["job"])
+    jobs = [k for k, n in collections.Counter(p["jobFull"] for p in d["people"]).most_common()]
+    one("job1", G, "Zajęcie — dokładniej", None, jobs, get=lambda p: p["jobFull"])
+    extra = [k for k, n in collections.Counter(p["job2"] for p in d["people"]).most_common()]
+    one("job2", G, "Dodatkowe zajęcie", None, extra,
+        [{"brak zajęcia dodatkowego": "brak"}.get(k, k) for k in extra], get=lambda p: p["job2"])
+    for key, label, src in (("workat0", "Gdzie pracuje (pracujący)", "workAt"), ("studyat0", "Gdzie się uczy (uczący się)", "studyAt")):
+        seen = [k for k, n in collections.Counter(p[src] for p in d["people"] if p[src]).most_common() if n >= 20 and k != "NIE DOTYCZY"]
+        one(key, G, label, None, [*seen, "inna"], [*(name_of(k) for k in seen), "inna gmina"],
+            get=lambda p, src=src, seen=seen: None if p[src] in (None, "", "NIE DOTYCZY") else p[src] if p[src] in seen else "inna")
+    one("study0", G, "Tryb nauki (uczący się)", None, ["dzienny", "zaoczny", "wieczorowy"], get=lambda p: p["studyMode"])
     one("shift0", G, "Godziny pracy (pracujący)", None,
         ["praca w stałych godzinach", "praca zmianowa", "praca w nieregularnych godzinach"],
         ["stałe", "zmiany", "nieregularne"], get=lambda p: next((o for o in (
@@ -574,6 +631,11 @@ def questions(d):
             if str(p["workMode"] or "").startswith(o[:20])), None))
     one("remote0", G, "Praca zdalna w poprzednim tygodniu (pracujący)", None, ["tak", "nie"],
         get=lambda p: p["remote"])
+    days = lambda p: sum(p["remote%d" % i] == "tak" for i in range(1, 8))
+    add("rdays0", G, "Dni pracy zdalnej w tygodniu (pracujący)", ["brak", "1", "2", "3", "4", "5 lub więcej"],
+        lambda p: None if p["remote"] not in ("tak", "nie") else [min(5, days(p))], num=days, unit="dni", digits=2,
+        meanLabel="średnio dni pracy zdalnej w tygodniu")
+    one("rfix0", G, "Dni pracy zdalnej: stałe czy zmienne", None, ["stałe", "zmienne"], get=lambda p: p["remoteFixed"])
     add("limits0", G, "Trudności i opieka", ["kłopoty z poruszaniem się", "opieka nad dzieckiem do 10 lat",
                                              "opieka nad osobą starszą", "opieka nad inną osobą", "żadne z tych"],
         lambda p: [i for i, k in enumerate(("mobility", "careChild", "careOld", "careOther", "noLimits"))
@@ -581,6 +643,13 @@ def questions(d):
     one("fares0", G, "Ulgi w komunikacji zbiorowej", None,
         ["tak, do przejazdów bezpłatnych", "ulgowe", "nie"], ["przejazdy bezpłatne", "ulgowe", "brak"],
         get=lambda p: p["fares"] if not str(p["fares"]).startswith("tak, do przejazdów ulgowych") else "ulgowe")
+    one("cut0", G, "Podstawa ulgi (uprawnieni)", None,
+        ["Jestem studentem|doktorantem", "Jestem emerytem|rencistą", "Inna podstawa", "nie wiem"],
+        ["student, doktorant", "emeryt, rencista", "inna", "nie wiem"], get=lambda p: p["fareCut"])
+    one("free0", G, "Podstawa przejazdów bezpłatnych (uprawnieni)", None,
+        ["Jestem osobą powyżej 65 lat", "Jestem uczniem szkoły podstawowej|ponadpodstawowej",
+         "Jestem osobą z niepełnosprawnością", "Posiadam Kartę Rodzina Plus", "Inna podstawa", "nie wiem"],
+        ["powyżej 65 lat", "uczeń", "osoba z niepełnosprawnością", "Karta Rodzina Plus", "inna", "nie wiem"], get=lambda p: p["fareFree"])
     one("nation0", G, "Narodowość", None, ["polskiej", "ukraińskiej", "inna"], ["polska", "ukraińska", "inna lub odmowa"],
         get=lambda p: p["nation"] if p["nation"] in ("polskiej", "ukraińskiej") else "inna")
     G = "Oceny komunikacji zbiorowej (pasażerowie)"
@@ -590,6 +659,9 @@ def questions(d):
                    ("K4b", "Informacja na zewnątrz pojazdów"),
                    ("K4c", "Informacja na przystankach")):
         one(k.lower(), G, lab, k, GRADE, GRADE_SHORT, (0, 1))
+    for k, lab in (("K5a", "Tabor przystosowany dla osób z ograniczeniami ruchu"),
+                   ("K5b", "Tabor przystosowany dla wózków")):
+        one(k.lower(), G, lab, k, YES, YES_SHORT, (0, 1))
     for k, lab in (("K6", "Punktualność autobusów"), ("K7", "Punktualność tramwajów")):
         one(k.lower(), G, lab, k,
             ["zawsze", "prawie zawsze", "prawie nigdy", "nigdy", "trudno powiedzie"],

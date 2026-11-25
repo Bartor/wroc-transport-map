@@ -20,7 +20,7 @@ import { KM_NOTE, StatChips, WAYS, WAY_TEXT, flowLines, painted, pctText, statIn
 const MANY = 200      // rows of single trips to show
 const STACKS = [['goal', 'Cel podróży'], ['km', 'Długość (w linii prostej)'], ['min', 'Czas podróży'],
   ['in', 'Osób w samochodzie — kierowcy'], ['park', 'Gdzie zaparkowano — kierowcy'],
-  ['reason', 'Dlaczego samochodem — kierowcy'], ['cars', 'Samochody w gospodarstwie'], ['size', 'Osób w gospodarstwie'], ['age', 'Wiek'], ['job', 'Zajęcie'], ['edu', 'Wykształcenie'], ['sex', 'Płeć']]
+  ['reason', 'Dlaczego samochodem — kierowcy'], ['cars', 'Samochody w gospodarstwie'], ['size', 'Osób w gospodarstwie'], ['wa', 'Dojście na początku — bez pieszych'], ['wb', 'Dojście na końcu — bez pieszych'], ['age', 'Wiek'], ['job', 'Zajęcie'], ['edu', 'Wykształcenie'], ['sex', 'Płeć']]
 const FREIGHT_STACKS = [['goal', 'Cel'], ['from', 'Skąd'], ['to', 'Dokąd']]
 
 /** A chart's heading with its way onto the map. */

@@ -100,6 +100,8 @@ const bandOf = (edges) => (v) => {
 }
 const kmBand = bandOf(KM)
 const minBand = bandOf(MIN)
+const walkBand = bandOf([0, 1, 3, 5, 10])
+const WALK = ['bez dojścia', '1–2 min', '3–4 min', '5–9 min', '10 min i więcej']
 export const KM_BANDS = bands(KM, 'km')
 export const MIN_BANDS = ['do 10 min', '11–20', '21–30', '31–45', '46–60', 'ponad godzinę']
   .map((label) => ({ label }))
@@ -141,6 +143,17 @@ export function dims(T, area) {
     { key: 'pass', label: 'Bilet okresowy', options: o(['nie ma', 'ma']), of: (c, i) => c.ps[i] },
     { key: 'lic', label: 'Prawo jazdy', options: o(['nie ma', 'ma']), of: (c, i) => c.lc[i] },
     { key: 'live', label: 'Mieszka', options: o(['poza Wrocławiem', 'we Wrocławiu']), of: (c, i) => c.wr[i] },
+    { key: 'wa', label: 'Dojście na początku', options: o(WALK), of: (c, i) => walkBand(c.wa?.[i]), note: 'bez podróży pieszych',
+      help: 'Ile trwało dojście do pojazdu albo na przystanek.' },
+    { key: 'wb', label: 'Dojście na końcu', options: o(WALK), of: (c, i) => walkBand(c.wb?.[i]), note: 'bez podróży pieszych',
+      help: 'Ile trwało dojście z przystanku albo z miejsca zaparkowania do celu.' },
+    { key: 'wc', label: 'Czas przesiadki', options: o(WALK), of: (c, i) => walkBand(c.wc?.[i]), note: 'tylko z przesiadką' },
+    ...(T.lines?.length ? [{ key: 'line', label: 'Linia', options: o(T.lines), of: (c, i) => c.ln[i], note: 'pierwsza w podróży' }] : []),
+    { key: 'free', label: 'Przejazd bezpłatny', options: o(['nie', 'tak']), of: (c, i) => (c.ln?.[i] >= 0 ? c.fr[i] : -1), note: 'tylko komunikacja zbiorowa' },
+    { key: 'typ', label: 'Dzień typowy', options: o(['nie', 'tak']), of: (c, i) => c.ty?.[i] ?? -1 },
+    { key: 'nat', label: 'Narodowość', options: o(['polska', 'ukraińska', 'inna lub odmowa']), of: (c, i) => c.na?.[i] ?? -1 },
+    { key: 'limit', label: 'Kłopoty z poruszaniem się', options: o(['nie', 'tak']), of: (c, i) => c.li?.[i] ?? -1 },
+    { key: 'care', label: 'Opieka nad dzieckiem do 10 lat', options: o(['nie', 'tak']), of: (c, i) => c.cc?.[i] ?? -1 },
     { key: 'change', label: 'Przesiadki', options: o(['bez przesiadek', '1', '2']), of: (c, i) => c.x[i] },
   ]
 }
@@ -646,6 +659,7 @@ const NUMBERS = {
   cars: ['auta', 2, (c, i) => c.hc[i]], size: ['os.', 1, (c, i) => c.hs[i]],
   // by the average of the band of age (etl/ages.py)
   age: ['lat', 1, (c, i) => c.ay?.[i] ?? null],
+  wa: ['min', 1, (c, i) => c.wa?.[i] ?? null], wb: ['min', 1, (c, i) => c.wb?.[i] ?? null], wc: ['min', 1, (c, i) => c.wc?.[i] ?? null],
 }
 /** A dimension's average: its unit and decimals, where it is a number. */
 export const numberOf = (S, key) => (NUMBERS[key] && !S.freight ? { unit: NUMBERS[key][0], digits: NUMBERS[key][1] } : null)
