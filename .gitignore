@@ -5,3 +5,6 @@ etl/cache/
 __pycache__/
 *.pyc
 reports/audit/cache/
+
+# the KBR attachments as published in BIP: 280 MB, and person-level records
+data/kbr/
