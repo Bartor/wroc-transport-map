@@ -78,6 +78,14 @@ def addresses():
     return out
 
 
+LARGE = 90      # metres
+
+
+def whole(name):
+    """Whether a name is of all that is there, not of a part of it."""
+    return bool(re.match(r"(Uniwersytecki |Wojewódzki |Dolnośląski )?(Szpital|Zespół|Centrum Handlowe|Galeria)", name))
+
+
 def names():
     """Named places people go to, for telling an address by what is there."""
     out = []
@@ -88,8 +96,11 @@ def names():
     for el in _overpass("overpass_poi.json", q):
         t, c = el.get("tags", {}), el.get("center") or el
         kind = t.get("shop") or t.get("amenity") or t.get("leisure")
-        if "lat" in c:
-            out.append((KINDS.get(kind, 0), t["name"], c["lat"], c["lon"],
+        # a ward is not the hospital
+        if "lat" in c and not re.match(r"(Klinika|Oddział|Katedra)", t["name"]):
+            # a building of a university goes by the university's name
+            name = t["operator"] if kind in ("university", "college") and t.get("operator") else t["name"]
+            out.append((KINDS.get(kind, 0), name, c["lat"], c["lon"],
                         words(t.get("addr:street")), number(t.get("addr:housenumber"))))
     return out
 
@@ -146,7 +157,8 @@ def build(d, zones, shapes, inside):
         return (s + " " + key[1]).strip() if key[1] else s
 
     spots, index, lost = [], {}, 0
-    for key in sorted(keep, key=lambda k: (k[1] is None, -len(who[k]))):
+    # ties in a fixed order, or links to a place would change with every run
+    for key in sorted(keep, key=lambda k: (k[1] is None, -len(who[k]), str(k))):
         w, nr, zid = key
         z = at.get(zid)
         if z is None:
@@ -170,10 +182,16 @@ def build(d, zones, shapes, inside):
         name = pretty(key)
         if nr:
             # what stands there, when the map names it
-            here = [(k, n) for k, n, la, lo, pw, pn in poi
-                    if metres((la, lo), found) < 90 or (pn == nr and pw and w[-1] in pw and metres((la, lo), found) < 400)]
-            if here and max(here)[0] >= 2:
-                name = "%s (%s)" % (max(here)[1], name)
+            # at the same address, or else close by: a large site's middle can be
+            # further off than a shop's next door
+            here = []
+            for k, n, la, lo, pw, pn in poi:
+                off = metres((la, lo), found)
+                same = pn == nr and bool(pw) and w[-1] in pw and off < 400
+                if same or off < (LARGE if k >= 3 else 35):
+                    here.append((k >= 2, same, k, whole(n), -off, n))
+            if here and max(here)[0]:
+                name = "%s (%s)" % (max(here)[5], name)
         index[key] = len(spots)
         spots.append({"name": name, "lat": round(found[0], 5), "lon": round(found[1], 5), "z": z,
                       "who": len(who[key]), "street": int(not nr)})
@@ -208,22 +226,36 @@ def fetch_addresses():
     tiles = json.load(open(path, encoding="utf8")) if os.path.exists(path) else {}
     la, lo = TILES
     want = [(i, j) for i in range(len(la) - 1) for j in range(len(lo) - 1)]
-    for turn in range(4):
+
+    def get(s, w, n, e, k, parts=1):
+        """What is in a box; in quarters where one answer is too much."""
+        if parts > 1:
+            ms, mw = (s + n) / 2, (w + e) / 2
+            return sum((get(*b, k + x, parts - 1) for x, b in enumerate(
+                ((s, w, ms, mw), (s, mw, ms, e), (ms, w, n, mw), (ms, mw, n, e)))), [])
+        box = "%f,%f,%f,%f" % (s, w, n, e)
+        if box not in quarters:
+            q = '[out:json][timeout:120];nwr["addr:housenumber"](%s);out tags center qt;' % box
+            raw = geocode._get(SERVERS[k % len(SERVERS)], data=urllib.parse.urlencode({"data": q}).encode(), tries=2)
+            quarters[box] = json.loads(raw)["elements"]
+            time.sleep(1)
+        return quarters[box]
+
+    quarters = {}
+    for turn in range(6):
         for i, j in want:
             if "%d,%d" % (i, j) in tiles:
                 continue
-            q = '[out:json][timeout:120];nwr["addr:housenumber"](%f,%f,%f,%f);out tags center qt;' % (
-                la[i], lo[j], la[i + 1], lo[j + 1])
             try:
-                raw = geocode._get(SERVERS[(i + j + turn) % len(SERVERS)],
-                                   data=urllib.parse.urlencode({"data": q}).encode(), tries=1)
-                tiles["%d,%d" % (i, j)] = json.loads(raw)["elements"]
+                # whole first, then in four, then in sixteen
+                tiles["%d,%d" % (i, j)] = get(la[i], lo[j], la[i + 1], lo[j + 1], i + j + turn, min(3, 1 + turn // 2))
                 with open(path, "w", encoding="utf8") as f:
                     json.dump(tiles, f)
-            except Exception:
-                pass
-            time.sleep(1)
+            except Exception as ex:
+                log("  %d,%d: %s" % (i, j, ex))
         log("  %d of %d tiles" % (len(tiles), len(want)))
+        if len(tiles) == len(want):
+            break
     if len(tiles) == len(want):
         seen = {(e["type"], e["id"]): e for t in tiles.values() for e in t}
         with open(os.path.join(geocode.CACHE, "overpass_addr.json"), "w", encoding="utf8") as f:
