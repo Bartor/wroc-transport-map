@@ -93,7 +93,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
   const spotTop = useMemo(() => {
     if (!spots || S.freight) return []
     const s = perSpot(S, idx, spots.length)
-    return spots.map((q, i) => ({ i, name: q.name, w: s.w[i], n: s.n[i], street: q.street })).filter((r) => r.n > 0 && !r.street).sort((a, b) => b.w - a.w)
+    return spots.map((q, i) => ({ i, name: q.name, w: s.w[i], n: s.n[i], street: q.street })).filter((r) => r.n > 0).sort((a, b) => b.w - a.w)
   }, [spots, S, idx])
   const tab = useMemo(() => {
     const has = (k) => S.D.some((d) => d.key === k)
@@ -248,7 +248,7 @@ export default function TripsPanel({ x, setT, period, onClose }) {
                 key: r.i, title: r.name, sub: `${fmt(r.n)} w próbie`, value: fmtEst(r.w), on: t.filters.spot?.[0] === r.i,
                 hot: { spot: r.i }, hotKey: r.i, onPick: () => toggle('spot')(r.i),
               }))} />
-              <Hint>Adresy poza domem, które podało co najmniej 5 badanych — ok. jednej czwartej końców podróży.</Hint>
+              <Hint>Adresy albo ulice w rejonie, poza domem, które podało co najmniej 5 badanych.</Hint>
             </StatBlock>
           )}
           <StatBlock title={`Pojedyncze ${S.freight ? 'przejazdy' : 'podróże'}`}>
