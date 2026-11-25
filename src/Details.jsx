@@ -14,7 +14,7 @@ import {
 } from './data'
 import {
   BY, BY_OF, MODE_SHORT, UNITS, dirName, dirPieceKey, flowPieces, flowTable, inUnit, leftDirs, modesText,
-  onlyDir, perVehicle as peoplePer, roadFlows, stopFlows, walkFlows, whole,
+  hasWays, onlyDir, perVehicle as peoplePer, roadFlows, stopFlows, walkFlows, waysTold, whole,
 } from './flows'
 import { cardFilename, drawCard } from './shareCard'
 
@@ -451,7 +451,6 @@ export default function Details({
     let by = BY_OF[kind].includes(flow.by) ? flow.by : 'section'
     // one direction among sections would be a part among wholes
     if (dir && by === 'section') by = 'dir'
-    const byParts = by === 'section' || (by === 'dir' && kind !== 'pt')
     const counted = kind === 'pt' && (by === 'section' || by === 'mode')
     const unitKey = mixed ? flow.unit
       : kind === 'road' ? (people ? 'persons' : 'vehicles')
@@ -459,6 +458,10 @@ export default function Details({
     const modes = mixed ? flow.modes : null
     const members = fam?.groups.find((g) => g.kind === kind)?.members
       || (p.aggregate ? p.all : [sel.ref])
+    // a point with no way in or out has nothing to split that way
+    const ringed = kind === 'road' && hasWays(data, members)
+    if (by === 'way' && !ringed) by = 'section'
+    const byParts = by === 'section' || (by === 'dir' && kind !== 'pt')
     const isOut = (ref, d) => !!fam?.node && (off.has(pieceKey(kind, ref.id))
       || (!!d && kind === 'road' && off.has(dirPieceKey(ref.id, d))))
     const isOpen = (ref, d) => cur?.id === ref.id && (!cur.dir || !d || cur.dir === d)
@@ -504,7 +507,7 @@ export default function Details({
     const many = mixed ? UNITS[unitKey].many
       : kind === 'pt' && unitKey === 'vehicles' ? 'pojazdów' : unit(kind)
     const short = mixed ? `${UNITS[unitKey].label}${modesText(modes)}` : what
-    return { by, byParts, cur, mixed, counted, unitKey, modes, pieces, ways, what, many, short,
+    return { ringed, told: kind === 'road' && waysTold(data, members), by, byParts, cur, mixed, counted, unitKey, modes, pieces, ways, what, many, short,
       estimated: mixed && unitKey === 'persons' && (!modes || modes.some((m) => m === 'bus' || m === 'tram')) }
   }
 
@@ -526,7 +529,7 @@ export default function Details({
       : ` · ${letterOf(cur)}`
     const scope = [pill, by === 'section' ? null : byName(by).label, UNITS[flows.unitKey].label,
       mixed && flows.modes ? flows.modes.join(' ') : null, 'godzinowo'].filter(Boolean).join(' ')
-    const usable = BY_OF[kind].filter((b) => b !== 'dir' || kind === 'pt' || ways.some((w) => w.dirs.length > 1)
+    const usable = BY_OF[kind].filter((b) => b !== 'way' || flows.ringed).filter((b) => b !== 'dir' || kind === 'pt' || ways.some((w) => w.dirs.length > 1)
       || dirKeys(all, kind, sel.ref).length > 1)
     const toggleMode = (key) => {
       const now = flow.modes || MODES.map((m) => m.key)
@@ -578,6 +581,12 @@ export default function Details({
         {several && (
           <Parts title={`Udział ${byName(by).of} — ${period}, ${short}`}
             parts={Object.fromEntries(pieces.filter((x) => !x.out).map((x) => [x.label, sumHours(x.values, hours)]))} />
+        )}
+        {by === 'way' && (
+          <Hint>
+            {flows.told ? 'Kierunek wobec centrum podaje badanie.'
+              : 'Kierunek wobec centrum wyliczony ze stron świata: na kordonach, gdzie badanie go podaje, zgadza się w 84 przypadkach na 90.'}
+          </Hint>
         )}
         {flows.estimated && (
           <Hint>

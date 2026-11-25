@@ -1,7 +1,7 @@
 import {
   Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState,
 } from 'react'
-import { AppMessage, AppShell, ErrorBoundary, hoursOf } from '@bartor-net/ui-kit'
+import { AppMessage, AppShell, ErrorBoundary, Hint, LinkButton, Panel, hoursOf, isPhone } from '@bartor-net/ui-kit'
 import { BASEMAPS, DEFAULT_BASEMAP } from '@bartor-net/ui-kit/map'
 import {
   loadAll, loadFile, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, periodShare,
@@ -11,11 +11,25 @@ import MapView from './MapView'
 import Sidebar from './Sidebar'
 import { readHash, hashOf, findSelection } from './urlState'
 import { BY, FLOW0, UNITS, withoutDirs } from './flows'
+import { TripsControls, TripsMap, tripsLegend, useTrips } from './TripsView'
+import { AnswersControls, AnswersMap, AnswersPanel, answersLegend, useAnswers } from './AnswersView'
+import {
+  ChangeControls, ChangeMap, SpeedsControls, SpeedsMap, StationsControls, StationsMap, changeLegend,
+  speedsLegend, stationsLegend,
+} from './MoreViews'
+import { ASK0 } from './answers'
+import { changes } from './compare'
+import { TRIPS0, placeName, prepare, prepareFreight, readZones } from './trips'
 
 // The panel brings the charts library with it; nobody needs it before the
 // first click, so it loads apart from the map, and early, while idle.
 const loadDetails = () => import('./Details')
 const Details = lazy(loadDetails)
+const TripsPanel = lazy(() => import('./TripsPanel'))
+const morePanel = (name) => lazy(() => import('./MorePanels').then((m) => ({ default: m[name] })))
+const ChangePanel = morePanel('ChangePanel')
+const StationsPanel = morePanel('StationsPanel')
+const SpeedsPanel = morePanel('SpeedsPanel')
 
 // What the address asked for when the page opened, checked against what
 // exists; anything unknown falls back to the default.
@@ -87,6 +101,13 @@ export default function App() {
   }, [])
   const close = useCallback(() => setSelected(null), [])
 
+  // The survey views keep settings of their own, and an open thing each:
+  // a station, a road counted twice. Their panel is open unless closed.
+  const [trip, setTrip] = useState({ ...TRIPS0, ...URL0.trip })
+  const [ask, setAsk] = useState({ ...ASK0, ...URL0.ask })
+  const [ownId, setOwnId] = useState(URL0.own || null)
+  const [ownPanel, setOwnPanel] = useState(!isPhone() || !!URL0.own)
+
   // Street-network model layers, fetched the first time they are wanted.
   const [nets, setNets] = useState({})
   const asked = useRef(new Set())
@@ -97,6 +118,19 @@ export default function App() {
     loadFile(f).then((j) => setNets((n) => ({ ...n, [f]: j })))
   }, [])
   useEffect(() => { if (net.on) loadNet(net.mode) }, [net.on, net.mode, loadNet])
+
+  // The files of the survey views, likewise.
+  const [files, setFiles] = useState({})
+  const wanted = useRef(new Set())
+  const need = VIEWS[view].own
+  const fetchFile = useCallback((f) => {
+    if (wanted.current.has(f)) return
+    wanted.current.add(f)
+    loadFile(f).then((j) => setFiles((x) => ({ ...x, [f]: j })))
+  }, [])
+  useEffect(() => {
+    for (const f of [...(need || []), ...(view === 'trips' ? ['freight'] : [])]) fetchFile(f)
+  }, [need, view, fetchFile])
 
   useEffect(() => {
     loadAll().then((d) => {
@@ -128,6 +162,8 @@ export default function App() {
   // Switching views drops a selection the new view does not draw.
   const changeView = useCallback((next) => {
     setView(next)
+    setOwnId(null)
+    setOwnPanel(!isPhone())
     setSelected((s) => (s && !VIEWS[next].layers.includes(s.kind) ? null : s))
   }, [])
 
@@ -161,13 +197,13 @@ export default function App() {
     if (!data) return
     const h = hashOf({
       view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-      basemap, survey, net, sig, selected, off, flow,
+      basemap, survey, net, sig, selected, off, flow, trip, ask, own: ownId,
     }, { ...DEFAULTS, occupancy: data.meta.carOccupancy.default })
     if (h !== window.location.hash && !(h === '' && !window.location.hash)) {
       window.history.replaceState(null, '', h || window.location.pathname + window.location.search)
     }
   }, [data, view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-    basemap, survey, net, sig, selected, off, flow])
+    basemap, survey, net, sig, selected, off, flow, trip, ask, ownId])
 
   // The point the selection belongs to, shared by the map and the panel.
   const family = useMemo(
@@ -175,8 +211,94 @@ export default function App() {
     [data, markers, sel],
   )
 
+  // ---------------------------------------------------------- the survey views
+  const people0 = useMemo(() => (files.zones && files.trips ? prepare(files.zones, files.trips) : null), [files.zones, files.trips])
+  const freight = useMemo(() => (files.zones && files.freight ? prepareFreight(files.zones, files.freight) : null), [files.zones, files.freight])
+  const zones = useMemo(() => (files.zones ? readZones(files.zones) : null), [files.zones])
+  const tripsX = useTrips(view === 'trips' ? (trip.set === 'freight' ? freight : people0) : null, trip, hours)
+  const askX = useAnswers(view === 'answers' ? files.answers : null, zones, ask)
+  const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])
+  const dark = BASEMAPS[basemap].dark
+  const pickTrip = useCallback((p, add) => {
+    setTrip((t) => ({
+      ...t,
+      picked: t.picked.includes(p.key) ? t.picked.filter((k) => k !== p.key)
+        : add || t.many ? [...t.picked, p.key] : [p.key],
+    }))
+    setOwnPanel(true)
+  }, [])
+  const pickAsk = useCallback((p) => {
+    setAsk((a) => ({ ...a, place: a.place === p.key ? null : p.key }))
+    setOwnPanel(true)
+  }, [])
+  const openOwn = useCallback((id) => {
+    setOwnId(id)
+    setOwnPanel(true)
+    setSheetOpen(false)
+  }, [])
+  const openRoad = useCallback((id) => {
+    changeView('road')
+    const ref = loaded.points.find((q) => q.id === id)
+    if (ref) select({ kind: 'road', id, ref })
+  }, [changeView, loaded, select])
+  const extra = useMemo(() => {
+    if (!zones || !VIEWS[view].ask) return null
+    const level = view === 'trips' ? trip.level : ask.level === 'd' ? 'd' : 'z'
+    const list = level === 'd' ? zones.districts : zones.zones
+    return {
+      find: (needle) => list.filter((q) => q.name.toLowerCase().includes(needle) || q.id === needle).slice(0, 8)
+        .map((q) => ({ key: q.key, label: placeName(q), sub: q.level === 'd' ? (q.city ? 'osiedle' : 'gmina') : `rejon ${q.id} · ${q.district}`, color: VIEWS[view].color, place: q })),
+      pick: (q) => (view === 'trips' ? setTrip((t) => ({ ...t, picked: [q.key] })) : setAsk((a) => ({ ...a, place: q.key }))),
+    }
+  }, [zones, view, trip.level, ask.level])
+
+  const sel0 = ownId ? { id: ownId } : null
+  const shut = () => { setOwnPanel(false); setOwnId(null) }
+  /** A survey view's parts: in the sidebar, on the map, in the panel. */
+  function ownParts() {
+    if (view === 'trips' && tripsX) {
+      return {
+        controls: <TripsControls x={tripsX} setT={setTrip} hasFreight={!!freight}
+          choice={files.choice} onChoice={() => fetchFile('choice')} />,
+        map: <TripsMap x={tripsX} dark={dark} onPick={pickTrip} />, legend: tripsLegend({ x: tripsX, dark }),
+        panel: <TripsPanel x={tripsX} setT={setTrip} period={period} onClose={shut} />,
+      }
+    }
+    if (view === 'answers' && askX) {
+      return {
+        controls: <AnswersControls x={askX} setA={setAsk} />,
+        map: <AnswersMap x={askX} onPick={pickAsk} />, legend: answersLegend({ x: askX }),
+        panel: <AnswersPanel x={askX} setA={setAsk} onClose={shut} />,
+      }
+    }
+    if (view === 'change' && changed) {
+      return {
+        controls: <ChangeControls rows={changed} sel={sel0} onPick={(r) => openOwn(r.key)} />,
+        map: <ChangeMap rows={changed} sel={sel0} onPick={(r) => openOwn(r.key)} />, legend: changeLegend(),
+        panel: <ChangePanel C={files.compare} rows={changed} sel={sel0} onRoad={openRoad} onClose={ownId ? () => setOwnId(null) : shut} />,
+      }
+    }
+    if (view === 'stations' && files.stations) {
+      return {
+        controls: <StationsControls S={files.stations} hours={hours} period={period} sel={sel0} onPick={openOwn} />,
+        map: <StationsMap S={files.stations} hours={hours} sel={sel0} onPick={openOwn} />, legend: stationsLegend(),
+        panel: sel0 && <StationsPanel S={files.stations} C={files.compare} hours={hours} period={period} sel={sel0} onClose={shut} />,
+      }
+    }
+    if (view === 'speeds' && files.speeds) {
+      return {
+        controls: <SpeedsControls S={files.speeds} hours={hours} period={period} sel={sel0} onPick={openOwn} />,
+        map: <SpeedsMap S={files.speeds} hours={hours} onPick={openOwn} />, legend: speedsLegend(),
+        panel: sel0 && <SpeedsPanel S={files.speeds} hours={hours} sel={sel0} onClose={shut} />,
+      }
+    }
+    return need ? { controls: <Panel title={VIEWS[view].label}><Hint>Wczytywanie danych…</Hint></Panel> } : {}
+  }
+
   if (error) return <AppMessage>{error}</AppMessage>
   if (!data) return <AppMessage>Wczytywanie danych…</AppMessage>
+
+  const own = ownParts()
 
   return (
     <AppShell>
@@ -192,7 +314,15 @@ export default function App() {
         net={net} setNet={setNet} nets={nets} loadNet={loadNet} basemap={basemap} setBasemap={setBasemap}
         sig={sig} setSig={setSig} labels={labels} setLabels={setLabels}
         markers={markers} onSelect={select} selected={selected}
-        sheetOpen={sheetOpen} setSheetOpen={setSheetOpen}
+        sheetOpen={sheetOpen} setSheetOpen={setSheetOpen} extra={extra}
+        own={own.controls && (
+          <>
+            {own.panel && !ownPanel && (
+              <LinkButton block onClick={() => { setOwnPanel(true); setSheetOpen(false) }}>Pokaż statystyki</LinkButton>
+            )}
+            {own.controls}
+          </>
+        )}
       />
       <MapView
         data={data} visible={visible} hours={hours} metric={metric}
@@ -200,7 +330,7 @@ export default function App() {
         wholeDay={wholeDay} people={people} occupancy={occupancy} net={net}
         basemap={basemap} sig={sig} markers={markers} labels={labels}
         selected={sel} onSelect={select} family={family} off={off}
-        hot={hot} setHot={setHot}
+        hot={hot} setHot={setHot} own={own.map} ownLegend={own.legend}
       />
       {selected && (
         <ErrorBoundary resetKey={`${selected.kind}:${selected.id}`} onClose={close}>
@@ -212,6 +342,11 @@ export default function App() {
               flow={flow} setFlow={setFlow}
               onSelect={select} onClose={close} />
           </Suspense>
+        </ErrorBoundary>
+      )}
+      {own.panel && ownPanel && !selected && (
+        <ErrorBoundary resetKey={`${view}:${ownId}`} onClose={shut}>
+          <Suspense fallback={null}>{own.panel}</Suspense>
         </ErrorBoundary>
       )}
     </AppShell>

@@ -32,11 +32,11 @@ function legendItems({ visible, net, sig, pies, people }) {
     ] : layers.map(([, v]) => ({ label: v.label, color: v.color }))),
     ...(sig?.on ? [{ label: 'sygnalizacja', color: '#2fbf71' }] : []),
     ...(net.on ? NETWORK_LEGEND.map((l) => ({ ...l, line: true })) : []),
-    {
+    ...(!layers.length ? [] : [{
       note: pies ? 'wielkość koła = liczba osób w węźle'
         : people ? 'wielkość znacznika = liczba osób, wspólna skala'
           : 'wielkość znacznika = natężenie, osobno dla każdej warstwy',
-    },
+    }]),
   ]
 }
 
@@ -143,7 +143,7 @@ const dotsOf = (data, family, selected, off) => family.groups.flatMap((g) => g.m
 
 export default function MapView({
   data, visible, hours, period, wholeDay, people, net, nets, basemap, sig,
-  markers, labels, selected, onSelect, family, off, hot, setHot,
+  markers, labels, selected, onSelect, family, off, hot, setHot, own, ownLegend,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
   // The model was fitted on the 8-hour common window; scale it to whatever
@@ -211,9 +211,10 @@ export default function MapView({
 
   return (
     <BaseMap basemap={basemap} center={CENTRE} overlay={(
-      <MapLegend items={legendItems({ visible, net, sig, pies, people })} />
+      <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people })]} />
     )}>
       <FlyTo target={target} />
+      {own}
 
       {network && (
         <NetworkLayer key={net.mode} network={network}
@@ -233,7 +234,7 @@ export default function MapView({
             key: i, lat: s.lat, lon: s.lon, r: 2.5, s,
             style: { color: LAYERS.survey.color, weight: 0, fillOpacity: 0.55 },
           }))}
-          tip={({ s }) => <MapTooltip>{s.addr || 'adres z próby'}<br />rejon {s.zone}</MapTooltip>} />
+          tip={({ s }) => <MapTooltip>punkt startowy ankietera<br />rejon {s.zone}</MapTooltip>} />
       )}
 
       {Object.entries(markers).map(([kind, list]) => (

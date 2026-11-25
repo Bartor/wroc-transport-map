@@ -1,0 +1,175 @@
+import { describe as suite, expect, it } from 'vitest'
+import {
+  PAINTS, PER, TRIPS0, areas, breaks, describe, pairs, passing, perOf, perPartner, perPlace, prepare, rings,
+  scale, shares, touching, tripsTable,
+} from './trips'
+import { ASK0, diverging, marginOf, shareOf, spanOf, startOpts, surface } from './answers'
+import { changes, ringChanges } from './compare'
+import { hashOf, readHash } from './urlState'
+
+// two city zones in one district, one commune around, one place further out
+const sq = (la, lo) => [[la * 1e5, lo * 1e5, 1000, 0, 0, 1000, -1000, 0]]
+const ZONES = {
+  zones: [
+    { id: '1', name: 'Rynek', c: [51.11, 17.03], pop: 1000, jobs: 5000, n: 10, km2: 1, core: 1, city: 1, d: 0, g: sq(51.11, 17.03) },
+    { id: '2', name: 'Obok', c: [51.11, 17.05], pop: 3000, jobs: 100, n: 30, km2: 2, core: 0, city: 1, d: 0, g: sq(51.11, 17.05) },
+    { id: '3001', name: 'Gmina - wieś', c: [51.2, 17.2], pop: 400, jobs: 10, n: 4, km2: 9, core: 0, city: 0, d: 1, g: sq(51.2, 17.2) },
+  ],
+  districts: [{ name: 'Stare Miasto', city: 1, g: sq(51.11, 17.03) }, { name: 'Gmina', city: 0, g: sq(51.2, 17.2) }],
+  outside: [{ id: '022003', name: 'Dalej' }], core: 1500,
+}
+// f, t, m, a0, a1, h, d, km, o, w
+const ROWS = [
+  [1, 0, 3, 0, 1, 7, 20, 1.5, 1, 100],   // home -> work, alone in a car
+  [0, 1, 3, 1, 0, 16, 25, 1.5, 1, 100],  // and back
+  [1, 1, 0, 0, 4, 10, 5, 0, 0, 50],      // on foot to the shop
+  [2, 0, 8, 0, 2, 7, 40, 12, 0, 200],    // a bus to school
+  [0, 3, 9, 1, 11, 12, 90, null, 0, 10], // a train out, not from home
+]
+const keys = ['f', 't', 'm', 'a0', 'a1', 'h', 'd', 'km', 'o', 'w']
+const blank = (v) => ROWS.map(() => v)
+const T = {
+  n: ROWS.length, acts: ['dom', 'praca', 'szkoła', 'uczelnia', 'zakupy', 'ch', 'odwożenie', 'odwiedziny', 'rozrywka', 'zdrowie', 'urząd', 'inne'],
+  modes: Array.from({ length: 12 }, (_, i) => `m${i}`), park: ['ulica'], why: ['wygoda'], ages: ['a'], jobs: ['j'],
+  cols: {
+    ...Object.fromEntries(keys.map((k, i) => [k, ROWS.map((r) => r[i])])),
+    pk: blank(-1), x: blank(0), ag: blank(0), jb: blank(0), hc: blank(1), ps: blank(0), lc: blank(1), wr: blank(1), y: blank(0),
+    sf: [1, 1, 0, 0, 0],
+  },
+}
+const S = prepare(ZONES, T)
+const all = passing(S, { filters: {}, hours: null })
+
+suite('trips', () => {
+  it('reads outlines and groups zones', () => {
+    expect(rings([[100000, 200000, 5, -5]])).toEqual([[[1, 2], [1.00005, 1.99995]]])
+    expect(S.Z.districts[0]).toMatchObject({ pop: 4000, jobs: 5100, km2: 3, zones: [0, 1] })
+    expect([...areas(S.Z)]).toEqual([0, 1, 2, 3])
+  })
+  it('filters by any choice within a dimension and all of them between', () => {
+    const p = (filters, hours) => passing(S, { filters, hours })
+    expect(p({ mode: [2] })).toEqual([0, 1])
+    expect(p({ mode: [2, 0] })).toEqual([0, 1, 2])
+    expect(p({ mode: [2], goal: [1] })).toEqual([0])
+    expect(p({}, [7, 8])).toEqual([0, 3])
+    expect(p({ km: [0] })).toEqual([2])            // a trip off the map has no length
+    expect(p({ to: [0], from: [1, 2] })).toEqual([0, 3])
+    expect(p({ easy: [1] })).toEqual([0, 1])
+    expect(passing(S, { filters: { mode: [2], goal: [1] } }, 'mode')).toEqual([0])
+    expect(passing(S, { filters: { mode: [2] } }, 'mode')).toHaveLength(5)
+  })
+  it('takes trips by where they start, end, or whose they are', () => {
+    expect(touching(S, all, [1], 'from')).toEqual([0, 2])
+    expect(touching(S, all, [1], 'to')).toEqual([1, 2])
+    expect(touching(S, all, [1], 'any')).toEqual([0, 1, 2])
+    expect(touching(S, all, [0], 'home')).toEqual([])     // nobody here lives in zone 1
+    expect(touching(S, all, [1], 'home')).toEqual([0, 1, 2])
+  })
+  it('sums up', () => {
+    const d = describe(S, all)
+    expect(d).toMatchObject({ n: 5, w: 460 })
+    expect(d.inCar).toBe(1)
+    expect(d.km).toBeCloseTo((1.5 * 200 + 0 + 12 * 200) / 450)
+    expect(d.main.find((m) => m.key === 'car').share).toBeCloseTo(200 / 460)
+    expect(d.main.reduce((a, m) => a + m.share, 0)).toBeCloseTo(1)
+    expect(d.hours[2][7]).toBe(100)
+    expect(shares(S, all, 'mode').reduce((a, o) => a + o.n, 0)).toBe(5)
+  })
+  it('counts a trip once in each place it touches, or once at home', () => {
+    const z = perPlace(S, all, 'z', 'any')
+    expect(z[1]).toMatchObject({ any: 250, from: 150, to: 150, n: 3 })
+    const h = perPlace(S, all, 'z', 'home')
+    expect(h.map((p) => p.any)).toEqual([0, 250, 200])
+    expect(perPlace(S, all, 'd', 'any')[0].any).toBe(460)
+  })
+  it('finds partners, also off the map', () => {
+    const zone = touching(S, all, [0], 'any')
+    const p = perPartner(S, zone, [0], 'z', 'any')
+    expect([...p.w]).toEqual([0, 200, 200])
+    expect(p.off).toEqual([{ id: '022003', name: 'Dalej', w: 10, n: 1 }])
+    const q = perPartner(S, touching(S, all, [1], 'home'), [1], 'z', 'home')
+    expect([...q.w]).toEqual([200, 50, 0])
+    expect(pairs(S, all, 'z')[0]).toMatchObject({ w: 200, car: 200 })
+  })
+  it('gives rates only where people live', () => {
+    expect(PER.pop.of(S.Z.zones[1])).toBe(3000)
+    expect(PER.pop.of(S.Z.zones[2])).toBe(null)
+    expect(perOf('pop', 'pop')).toBe('km2')
+    expect(perOf('any', 'pop')).toBe('pop')
+    expect(PAINTS.car.v(null, perPlace(S, all, 'z', 'home')[1])).toBeCloseTo(200 / 250)
+  })
+  it('makes a scale without gaps', () => {
+    const sc = scale(breaks([1, 2, 3, 4, 5, 6, 7, 8, 9, 10], false))
+    expect(sc.steps[0].from).toBe(null)
+    expect(sc.steps.at(-1).to).toBe(null)
+    for (let i = 1; i < sc.steps.length; i++) expect(sc.steps[i].from).toBe(sc.steps[i - 1].to)
+    expect(sc.color(-1)).toBe(sc.steps[0].color)
+    expect(sc.color(99)).toBe(sc.steps.at(-1).color)
+  })
+  it('exports rows without anything finer than a zone', () => {
+    const [head, ...rows] = tripsTable(S, all)
+    expect(rows).toHaveLength(5)
+    expect(rows.every((r) => r.length === head.length)).toBe(true)
+    expect(head.join()).not.toMatch(/ulica|adres|osoba|płeć/)
+  })
+})
+
+const Q = {
+  key: 'tram', options: ['tak', 'nie', 'nie wiem'], good: [0], multi: 0, rho: [[0.2, 0.1], [0.2, 0.1], [0, 0]], rhoGood: null,
+  tab: { all: { a: { wro: [400, 40000, 30, 8, [600, 300, 100]] },
+    z: { 0: [50, 5000, 20, 6, [900, 50, 50], [700, 250, 50]], 1: [50, 5000, 5, 6, [500, 450, 50], [550, 400, 50]] } } },
+}
+suite('answers', () => {
+  it('uses corrected shares unless told otherwise', () => {
+    const row = Q.tab.all.z[0]
+    expect(shareOf(row, [0])).toBeCloseTo(0.7)
+    expect(shareOf(row, [0], true)).toBeCloseTo(0.9)
+    expect(shareOf(Q.tab.all.a.wro, [0])).toBeCloseTo(0.6)   // wholes have no correction
+    expect(shareOf(row, [0, 1])).toBeCloseTo(0.95)
+    expect(shareOf(null, [0])).toBe(null)
+  })
+  it('widens margins with how bunched the answers are', () => {
+    const [a, b] = [Q.tab.all.z[0], Q.tab.all.z[1]]
+    const plain = 1.96 * Math.sqrt((0.7 * 0.3) / 50)
+    expect(marginOf(Q, a, [0])).toBeGreaterThan(plain)
+    expect(marginOf(Q, a, [0], true)).toBeGreaterThan(marginOf(Q, b, [0], true))
+  })
+  it('starts on the good options and colours around the city', () => {
+    expect(startOpts(Q)).toEqual([0])
+    expect(diverging(0.6, 0.6, 0.2)).toEqual([120, 126, 138])
+    expect(diverging(9, 0.6, 0.2)).toEqual([214, 84, 28])
+    expect(spanOf([{ v: 0.9, n: 50 }, { v: 0.5, n: 50 }], 0.6)).toBeGreaterThanOrEqual(0.05)
+  })
+  it('smooths towards the people nearby', () => {
+    const zones = ZONES.zones.slice(0, 2).map((z, i) => ({ ...z, i }))
+    const s = surface(Q, 'all', [0], zones, { km: 0.5, cols: 40, box: [51.09, 17.0, 51.13, 17.08] })
+    const at = (lo) => s.v[Math.floor(s.rows / 2) * s.cols + Math.floor(((lo - 17) / 0.08) * s.cols)]
+    expect(at(17.03)).toBeGreaterThan(at(17.05))
+    expect(at(17.03)).toBeLessThanOrEqual(0.7)
+  })
+})
+
+suite('2018 against 2024', () => {
+  it('places sums of sections and adds up rings', () => {
+    const rows = changes({ roads: [{ ids: ['R1_01A', 'R1_01B'], v18: 100, v24: 80, day: 0 }, { ids: ['R1_02'], v18: 100, v24: 110, day: 0 }, { ids: ['X'], v18: 1, v24: 1 }] },
+      { points: [{ id: 'R1_01A', lat: 51, lon: 17, name: 'A' }, { id: 'R1_01B', lat: 51.2, lon: 17.2, name: 'B' }, { id: 'R1_02', lat: 51, lon: 17, name: 'C' }] })
+    expect(rows).toHaveLength(2)
+    expect(rows[0].lat).toBeCloseTo(51.1)
+    expect(ringChanges(rows)[0]).toMatchObject({ n: 2, v18: 200, v24: 190, fell: 1 })
+  })
+})
+
+suite('the address of a survey view', () => {
+  const base = { range: [0, 24], areas: null, labels: { num: false, pct: false, declutter: true }, net: {}, sig: {}, off: new Set(), flow: {}, occupancy: null }
+  const d = { range: [7, 9], flow: {} }
+  it('keeps the trips', () => {
+    const trip = { ...TRIPS0, level: 'z', paint: 'car', way: 'to', per: 'km2', picked: ['z12', 'z3001'], lines: false, filters: { mode: [2, 3], km: [0] } }
+    const back = readHash(hashOf({ ...base, view: 'trips', trip }, d))
+    expect({ ...TRIPS0, ...back.trip }).toEqual(trip)
+    expect(readHash(hashOf({ ...base, view: 'trips', trip: TRIPS0 }, d)).trip).toEqual({})
+  })
+  it('keeps the question', () => {
+    const ask = { ...ASK0, q: 'bike', opts: [0, 1], group: 'car', level: 'h', km: 1.5, raw: true }
+    expect({ ...ASK0, ...readHash(hashOf({ ...base, view: 'answers', ask }, d)).ask }).toEqual(ask)
+  })
+})

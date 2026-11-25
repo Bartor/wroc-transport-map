@@ -3,9 +3,8 @@ import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// Files the public build must not ship. survey.json is the household
-// interview sample: 1174 street addresses, 515 of them down to the flat number,
-// at metre precision - a list of which dwellings were surveyed.
+// Files the public build does not ship: survey.json, the 1174 addresses where
+// interviewers started their rounds.
 const PRIVATE = ['data/survey.json']
 
 /** `vite build --mode public` produces the site for GitHub Pages. */

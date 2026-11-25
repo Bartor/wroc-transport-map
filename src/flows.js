@@ -78,11 +78,12 @@ export const BY = {
   dir: { label: 'Kierunki', of: 'kierunków', after: 'po kierunkach' },
   mode: { label: 'Środki transportu', of: 'środków transportu', after: 'po środkach transportu' },
   line: { label: 'Linie', of: 'linii', after: 'po liniach' },
+  way: { label: 'Do / z centrum', of: 'kierunków wobec centrum', after: 'do i z centrum' },
 }
 
 /** What each layer can be split by. */
 export const BY_OF = {
-  road: ['section', 'dir', 'mode'],
+  road: ['section', 'dir', 'way', 'mode'],
   pt: ['section', 'mode', 'dir', 'line'],
   bike: ['section', 'dir'],
   ped: ['section', 'dir'],
@@ -98,6 +99,19 @@ export const UNITS = {
 }
 
 export const FLOW0 = { by: 'section', unit: 'persons', modes: null }
+
+// Towards the centre or away: told by the survey on the two cordons, by the
+// compass elsewhere; a road that runs around the centre is neither.
+export const WAYS = {
+  in: { label: 'Do centrum', color: '#e4572e' },
+  out: { label: 'Z centrum', color: '#3987e5' },
+  across: { label: 'W poprzek lub nieokreślone', color: '#6b7385' },
+}
+const wayOf = (data, id, dir) => data.ways?.[id]?.[dir]?.[0] || 'across'
+export const hasWays = (data, refs) => refs.some((r) => data.ways?.[r.id])
+/** Whether the survey itself says which way the section's directions go. */
+export const waysTold = (data, refs) => refs.every((r) => !data.ways?.[r.id]
+  || Object.values(data.ways[r.id]).every((w) => w[1]))
 
 const day = () => new Array(24).fill(0)
 
@@ -128,7 +142,7 @@ export function roadFlows(data, refs, { cats = null, roadway = false } = {}) {
           }
           if (m.off && !roadway) for (const c of m.off) veh[h] += s.off?.[dir]?.[h]?.[oi[c]] || 0
         }
-        if (veh.some(Boolean)) out.push({ ref, dir, mode: m.key, vehicles: veh, pcu })
+        if (veh.some(Boolean)) out.push({ ref, dir, mode: m.key, way: wayOf(data, ref.id, dir), vehicles: veh, pcu })
       }
     }
   }
@@ -184,13 +198,17 @@ export function flowPieces(rows, {
   const groups = new Map()
   for (const r of rows) {
     const key = { section: r.ref.id, dir: kind === 'pt' ? r.dir : `${r.ref.id}@${r.dir}`,
-      mode: r.mode, line: r.line }[by]
+      mode: r.mode, line: r.line, way: r.way }[by]
     if (!groups.has(key)) groups.set(key, { id: key, row: r, values: day() })
     add(groups.get(key).values, inUnit(r, unit, persons))
   }
   let list = [...groups.values()]
   if (by === 'mode') {
     const order = MODES.map((m) => m.key)
+    list.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
+  }
+  if (by === 'way') {
+    const order = Object.keys(WAYS)
     list.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id))
   }
   if (by === 'line' || (by === 'dir' && kind === 'pt')) {
@@ -221,6 +239,10 @@ export function flowPieces(rows, {
     if (by === 'mode') {
       return { ...base, name: MODE[g.id].label, label: MODE[g.id].label, fill: MODE[g.id].color,
         mode: g.id, hot: { kind: 'mode', id: g.id } }
+    }
+    if (by === 'way') {
+      return { ...base, name: WAYS[g.id].label, label: WAYS[g.id].label, fill: WAYS[g.id].color,
+        hot: { kind: 'way', id: g.id } }
     }
     if (by === 'dir' && kind !== 'pt') {
       return {

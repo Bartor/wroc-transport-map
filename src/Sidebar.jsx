@@ -46,11 +46,11 @@ const options = (o, label = (v) => v.label) => Object.entries(o)
   .map(([value, v]) => ({ value, label: label(v) }))
 
 /** Finding one street is the commonest action, so it stays pinned at the top. */
-function Search({ data, markers, onSelect, view, setView }) {
+function Search({ data, markers, onSelect, view, setView, extra }) {
   const search = useCallback((needle) => {
     const hit = (p) => [p.name, p.segment, p.stop, p.short, p.loc, p.id]
       .some((f) => (f || '').toLowerCase().includes(needle))
-    const out = []
+    const out = extra ? extra.find(needle) : []
     const add = (rows, kind, label, sub) => {
       for (const p of rows) {
         if (p.lat && hit(p)) {
@@ -66,12 +66,13 @@ function Search({ data, markers, onSelect, view, setView }) {
     add(data.ped, 'ped', (p) => p.short || p.name, (p) => p.segment)
     add(data.pt, 'pt', (p) => p.stop || p.name, (p) => p.loc)
     return out.slice(0, 20)
-  }, [data])
+  }, [data, extra])
 
   // A result from another survey switches to its view; the markers of that
   // view do not exist yet, so the raw record is selected and found inside
   // its point by the panel.
   const pick = (r) => {
+    if (r.place) { extra.pick(r.place); return }
     const next = viewOf(r.kind, view)
     if (next !== view) {
       setView(next)
@@ -92,7 +93,7 @@ export default memo(function Sidebar({
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, roadPeople, setPeople, occupancy, setOccupancy,
   net, setNet, nets, loadNet, basemap, setBasemap, sig, setSig, labels, setLabels,
-  markers, onSelect, selected, sheetOpen, setSheetOpen, off,
+  markers, onSelect, selected, sheetOpen, setSheetOpen, off, own, extra,
 }) {
   const [about, setAbout] = useState(false)   // the "O mapie" dialog
   const V = VIEWS[view]
@@ -172,9 +173,10 @@ export default memo(function Sidebar({
       )}>
       {about && <About data={data} onClose={() => setAbout(false)} />}
 
-      <Search data={data} markers={markers} onSelect={onSelect} view={view} setView={setView} />
+      <Search data={data} markers={markers} onSelect={onSelect} view={view} setView={setView} extra={extra} />
 
       {/* ------------------------------------------------------ main controls */}
+      {(!V.own || V.period) && (
       <Panel title="Okres" help={(
         <p>
           Wszystkie liczby na mapie to sumy z wybranego okresu, nie wartości
@@ -197,6 +199,7 @@ export default memo(function Sidebar({
           </Warn>
         )}
       </Panel>
+      )}
 
       <Panel title="Co pokazać" help={(
         <>
@@ -221,11 +224,17 @@ export default memo(function Sidebar({
           </p>
         </>
       )}>
-        <RadioCards label="Widok" name="view" value={view} onChange={setView}
-          options={Object.entries(VIEWS).map(([value, v]) => ({
-            value, label: v.label, sub: v.sub, color: v.split ? PIE_MARK : v.color,
-            count: v.split ? null : v.layers.reduce((a, l) => a + COUNTS[l](data), 0),
-          }))} />
+        {[['Pomiary', false], ['Badanie mieszkańców', true]].map(([title, ask]) => (
+          <Field key={title} label={title}>
+            <RadioCards label={title} name={`view-${ask}`} value={view} onChange={setView}
+              options={Object.entries(VIEWS).filter(([, v]) => !!v.ask === ask).map(([value, v]) => ({
+                value, label: v.label, color: v.split ? PIE_MARK : v.color,
+                // ten of them: only the chosen one explains itself
+                sub: value === view ? v.sub : undefined,
+                count: v.split || v.own ? null : v.layers.reduce((a, l) => a + COUNTS[l](data), 0),
+              }))} />
+          </Field>
+        ))}
 
         {/* options that mean something only in the chosen view */}
         {view === 'road' && (
@@ -267,8 +276,9 @@ export default memo(function Sidebar({
             )} />
         )}
 
-        <Divider />
+        {!V.own && <Divider />}
 
+        {!V.own && (
         <Field label="Etykiety na mapie" help={(
           <p>
             Etykiety stale widoczne przy punktach. Liczby i udziały można
@@ -286,14 +296,15 @@ export default memo(function Sidebar({
               onChange={(pct) => setLabels({ ...labels, pct })} />
           </Pair>
         </Field>
-        {labels.pct && !V.split && (
+        )}
+        {labels.pct && !V.split && !V.own && (
           <Warn>
             Udziały opisują podział modalny, więc są tylko w widoku węzłów.{' '}
             <LinkButton onClick={() => setView('nodes')}>Pokaż węzły</LinkButton>
           </Warn>
         )}
 
-        {data.survey && (
+        {data.survey && !V.own && (
           <>
             <Divider />
             <Toggle checked={survey} onChange={setSurvey}
@@ -303,7 +314,10 @@ export default memo(function Sidebar({
         )}
       </Panel>
 
+      {own}
+
       {/* ------------------------------------------------------------ results */}
+      {!V.own && (
       <Panel title={`Wyniki — ${period}`}>
         {V.split && totalSum > 0 ? (
           // modes: people, their share, and the share of vehicles beside it
@@ -341,6 +355,7 @@ export default memo(function Sidebar({
           onPick: () => onSelect({ kind: m.kind, id: m.id, ref: m.ref }),
         }))} />
       </Panel>
+      )}
 
       {/* ------------------------------------------------------ further down */}
       <Panel title="Sygnalizacja świetlna" collapsible defaultOpen={false}
@@ -383,7 +398,7 @@ export default memo(function Sidebar({
           <>
             <p>
               Model, nie pomiar. Graf skierowany z OSM, rozkład ruchu najszybszymi
-              trasami ze źródeł w miejscach zamieszkania z próby ankietowej, potem
+              trasami z punktów startowych ankieterów i z granic miasta, potem
               regresja na log natężenia, z liczbą ulic zbiegających się na obu
               końcach odcinka jako miarą rangi drogi. Skala podąża za wybranym
               okresem.

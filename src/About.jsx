@@ -114,6 +114,30 @@ export default function About({ data, onClose }) {
           'kwiecień–czerwiec 2024',
           <>{occ.value} os./poj. w dzień roboczy</>,
         ],
+        [
+          survey('Dworce i stacje, lotnisko', 'zał. 8.1 i 9.1'),
+          '32 stacje i 3 dworce autobusowe',
+          '8–21 maja 2024; lotnisko — cały rok',
+          '6–9 i 14–18',
+        ],
+        [
+          survey('Podróże i opinie mieszkańców', 'baza badania ankietowego, zał. do Raportu II'),
+          '10 566 osób w 4264 gospodarstwach, Wrocław i 9 gmin',
+          'kwiecień–czerwiec 2024; podróże z wtorku, środy lub czwartku',
+          'cała doba',
+        ],
+        [
+          survey('Przewozy towarów', 'zał. 10.3'),
+          '1291 przejazdów zgłoszonych przez firmy',
+          '18 kwietnia 2024',
+          'cała doba',
+        ],
+        [
+          survey('Prędkości', 'zał. 3.11'),
+          '46 odcinków, po jednym na typ drogi',
+          'marzec–maj 2024',
+          'ok. 69 tys. przejazdów',
+        ],
       ]} />
       <Hint>
         Na przekrojach drogowych liczono pojazdy według kategorii, osobno dla każdego
@@ -157,6 +181,32 @@ export default function About({ data, onClose }) {
         <li>
           <b>Położenie:</b> przystanki według numeru słupka w rozkładzie GTFS, przekroje
           według opisu odcinka w KBR.
+        </li>
+      </ul>
+      <h3>Badanie mieszkańców — jak czytać</h3>
+      <ul>
+        <li>
+          <b>Podróże.</b> Każda przebadana osoba ma wagę (średnio ok. 100 mieszkańców), więc liczby to szacunek
+          podróży na dobę; wagi odtwarzają opublikowane 1 397 390 podróży mieszkańców Wrocławia. Bez przyjezdnych
+          spoza 9 gmin. Długość to linia prosta między środkami rejonów.
+        </li>
+        <li>
+          <b>Na mieszkańca.</b> Obszary różnią się wielkością, więc domyślnie mapa dzieli przez liczbę mieszkańców
+          (szacunek z zał. 3.1) i liczy podróże z domu i do domu.
+        </li>
+        <li>
+          <b>Ankieter.</b> Odpowiedzi zależą od tego, kto pytał, bardziej niż od osiedla: w pytaniu o wjazd do
+          centrum ankieter wyjaśnia 38% różnic, osiedle ponad to ok. 1%. Dlatego mapa odpowiedzi jest domyślnie
+          skorygowana o ankietera, a przedziały są szerokie. Poparcie dla priorytetu tramwajów to 60%,
+          a przy losowaniu ankieterów 54–66%; wśród kierowców 48% (40–56%).
+        </li>
+        <li>
+          <b>Zmiana środka.</b> Nikogo nie zapytano, czy zrezygnuje z samochodu. Filtr „najłatwiejsze do zastąpienia”
+          opisuje cechy podróży, a „Co gdyby” to model o słabej i niepewnej reakcji na czas.
+        </li>
+        <li>
+          <b>Prywatność.</b> Miasto publikuje pełną bazę, z adresami. Ta strona używa tylko rejonów: nie czyta ulic,
+          numerów, szkół ani miejsc pracy i nie łączy podróży jednej osoby.
         </li>
       </ul>
       <p>

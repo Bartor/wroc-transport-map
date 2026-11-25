@@ -16,6 +16,61 @@ function selOf(kind, id) {
   return dir ? { kind, id: at, dir } : { kind, id }
 }
 
+// The survey views' settings. Filters read "mode:2.3|km:0.1": option numbers.
+const ints = (s) => s.split('.').filter((x) => /^\d+$/.test(x)).map(Number)
+const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
+
+function readTrip(q) {
+  const f = {}
+  for (const part of (q.get('f') || '').split(LIST)) {
+    const [k, list] = part.split(':')
+    if (k && list && ints(list).length) f[k] = ints(list)
+  }
+  return defined({
+    set: q.get('set') === 'freight' ? 'freight' : undefined,
+    level: ['d', 'z'].includes(q.get('lv')) ? q.get('lv') : undefined,
+    paint: q.get('pt') || undefined,
+    way: ['any', 'from', 'to'].includes(q.get('way')) ? q.get('way') : undefined,
+    per: ['abs', 'both', 'km2'].includes(q.get('per')) ? q.get('per') : undefined,
+    picked: q.has('z') ? q.get('z').split('.').filter(Boolean) : undefined,
+    lines: q.get('ln') === '0' ? false : undefined,
+    filters: Object.keys(f).length ? f : undefined,
+  })
+}
+
+function readAsk(q) {
+  return defined({
+    q: q.get('q') || undefined, opts: q.has('o') ? ints(q.get('o')) : undefined,
+    group: q.get('g') || undefined,
+    level: ['d', 'z', 'h'].includes(q.get('lv')) ? q.get('lv') : undefined,
+    km: q.has('km') && +q.get('km') >= 0.5 && +q.get('km') <= 2.5 ? +q.get('km') : undefined,
+    place: q.get('z') || undefined,
+    raw: q.get('raw') === '1' ? true : undefined,
+  })
+}
+
+function putTrip(q, t) {
+  if (t.set !== 'people') q.set('set', t.set)
+  if (t.level !== 'd') q.set('lv', t.level)
+  if (t.paint !== 'any') q.set('pt', t.paint)
+  if (t.way !== 'home') q.set('way', t.way)
+  if (t.per !== 'pop') q.set('per', t.per)
+  if (t.picked.length) q.set('z', t.picked.join('.'))
+  if (!t.lines) q.set('ln', '0')
+  const f = Object.entries(t.filters).map(([k, v]) => `${k}:${v.join('.')}`)
+  if (f.length) q.set('f', f.join(LIST))
+}
+
+function putAsk(q, a) {
+  if (a.q !== 'tram') q.set('q', a.q)
+  if (a.opts?.length) q.set('o', a.opts.join('.'))
+  if (a.group !== 'all') q.set('g', a.group)
+  if (a.level !== 'd') q.set('lv', a.level)
+  if (a.level === 'h' && a.km !== 1) q.set('km', String(a.km))
+  if (a.place) q.set('z', a.place)
+  if (a.raw) q.set('raw', '1')
+}
+
 /** What the address asks for; absent keys stay undefined. */
 export function readHash(hash = window.location.hash) {
   const q = new URLSearchParams(hash.replace(/^#/, ''))
@@ -46,6 +101,9 @@ export function readHash(hash = window.location.hash) {
     by: q.get('by') || undefined,
     unit: q.get('u') || undefined,
     modes: q.has('md') ? q.get('md').split(LIST).filter(Boolean) : undefined,
+    trip: q.get('v') === 'trips' ? readTrip(q) : undefined,
+    ask: q.get('v') === 'answers' ? readAsk(q) : undefined,
+    own: q.get('own') || undefined,
   }
 }
 
@@ -78,6 +136,9 @@ export function hashOf(s, d) {
   put('by', s.flow.by, d.flow.by)
   put('u', s.flow.unit, d.flow.unit)
   if (s.flow.modes) q.set('md', s.flow.modes.join(LIST))
+  if (s.view === 'trips' && s.trip) putTrip(q, s.trip)
+  if (s.view === 'answers' && s.ask) putAsk(q, s.ask)
+  if (s.own) q.set('own', s.own)
   // ':' '|' and ',' are fine in a fragment; left unescaped the link stays readable
   const out = q.toString().replace(/%3A/gi, ':').replace(/%7C/gi, '|').replace(/%2C/gi, ',')
     .replace(/%40/gi, '@')

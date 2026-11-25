@@ -26,10 +26,21 @@ przed publikacją:
 npm test
 ```
 
-ETL wymaga Pythona 3.10+ z `openpyxl` i `pyshp`:
+ETL wymaga Pythona 3.10+:
 
 ```bash
-pip install openpyxl pyshp
+pip install openpyxl pyshp numpy scipy pyproj
+```
+
+Badanie mieszkańców i pozostałe załączniki BIP (312 MB, nie ma ich w repo)
+rozpakowuje się do `data/kbr/x`:
+
+```bash
+python etl/diary.py && python etl/trips.py && python etl/extra.py
+```
+
+```bash
+python etl/choice_los.py && python etl/choice.py
 ```
 
 Pierwsze uruchomienie ETL pobiera sieć drogową i przystanki z Overpass API
@@ -46,7 +57,12 @@ Pierwsze uruchomienie ETL pobiera sieć drogową i przystanki z Overpass API
 | Ruch rowerowy | 43 przekroje | Zał. 3.4 | geokodowane z opisu odcinka |
 | Ruch pieszy | 17 przekrojów | Zał. 3.5 | geokodowane z opisu odcinka |
 | Potoki w pociągach | 11 kordonów | Zał. 7.1 | przecięcie linii z granicą miasta |
-| Próba ankietowa | 1174 adresy | shapefile | dokładne |
+| Dworce i stacje, lotnisko | 35 + 1 | Zał. 8.1, 9.1 | OSM, ręcznie |
+| Zmiana 2018 → 2024 | 114 miejsc | Zał. 3.3, „Porównanie KBR” | z wykazu |
+| Prędkości | 46 odcinków | Zał. 3.11 | końce odcinków |
+| Podróże i opinie mieszkańców | 405 rejonów, 58 osiedli i gmin | baza ankiet, zał. 3.1, 12.3 | granice rejonów |
+| Przewozy towarów | 1291 przejazdów | Zał. 10.3 | rejony |
+| Punkty startowe ankieterów | 1174 | shapefile | dokładne |
 
 Mapa pokazuje jedno badanie naraz („Co pokazać"): pomiary drogowe, potoki
 pasażerskie, rowery i piesi albo pociągi. Każde ma własną jednostkę, godziny
@@ -146,8 +162,8 @@ uzupełnia resztę modelem:
 1. **Graf skierowany** z OSM: 22 325 węzłów, 26 419 krawędzi. Węzłami są
    skrzyżowania (geometria pomiędzy nimi jest zwinięta w krawędź), kierunkowość
    bierze pod uwagę `oneway`, ronda i domyślną jednokierunkowość autostrad.
-2. **Rozkład ruchu** metodą najszybszej trasy. Źródła to 1174 adresy z próby
-   ankietowej — czyli faktyczny rozkład miejsc zamieszkania — plus punkty
+2. **Rozkład ruchu** metodą najszybszej trasy. Źródła to 1174 punkty startowe
+   ankieterów — przybliżony rozkład miejsc zamieszkania — plus punkty
    kordonowe ważone zmierzonym na nich natężeniem. Cele losowane z zanikiem
    odległości względem Rynku.
 3. **Regresja** log natężenia na: log obciążenia z rozkładu, klasę drogi, liczbę
@@ -320,6 +336,59 @@ porównywalne. Dymek i panel to sygnalizują.
 Etykiety na mapie można włączyć na stałe — jako liczby (#) albo udziały (%).
 Przy oddaleniu nakładające się etykiety są ukrywane, większe węzły mają
 pierwszeństwo; można to wyłączyć.
+
+## Badanie mieszkańców
+
+Miasto opublikowało całą bazę ankiety: 10 566 osób, 16 781 podróży, wagi
+i odpowiedzi. `etl/diary.py` czyta z niej wyłącznie wskazane kolumny — nigdy ulic,
+numerów, szkół, miejsc pracy ani pytań otwartych — a `etl/trips.py` publikuje
+podróże między rejonami bez identyfikatora osoby i odpowiedzi zsumowane po rejonach
+(co najmniej 5 osób). Wagi odtwarzają opublikowane 1 397 390 podróży na dobę.
+
+**Na mieszkańca.** Liczby bezwzględne mówią głównie o wielkości obszaru, więc
+domyślnie mapa pokazuje podróże z domu i do domu na mieszkańca (zał. 3.1; w gminach
+wokół — z wag). Podróże między dwoma miejscami poza domem (7%) nie mają domu.
+
+**Ankieter.** Korelacja odpowiedzi w obrębie ankietera jest kilka razy większa niż
+w obrębie osiedla:
+
+| Pytanie | osiedle | ankieter | osiedle ponad ankieterem (R²) |
+|---|---|---|---|
+| priorytet tramwajów i autobusów | 0,06 | 0,19 | 1,4% |
+| drogi rowerowe kosztem jezdni | 0,05 | 0,13 | 1,7% |
+| które auta do centrum | 0,09 | 0,38 | 1,1% |
+| najczęstszy środek: samochód | 0,06 | 0,07 | 1,9% |
+
+Mapa odpowiedzi odejmuje więc efekt ankietera (dwa zestawy efektów, ankieterów
+i osiedli, ściągane do zera o tyle, ile może być przypadkiem), a przedziały liczą
+jeszcze zgrupowanie w rundach. Poziomy dla miasta nie są korygowane; losowanie
+ankieterów daje: priorytet tramwajów 60% (54–66), kierowcy za 48% (40–56) i przeciw
+30% (22–40), „wszystkie auta do centrum” 53% (42–64), udział samochodu 39,8% (35–45).
+Różnica między niekierowcami a kierowcami jest pewniejsza (25 p.p., 18–31).
+
+**Zmiana środka.** Nikogo o nią nie pytano. 47% (42–53) podróży kierowców to jazda
+w pojedynkę, z wygody, dla czasu lub kosztu, do 5 km albo do/z centrum — cechy, nie
+deklaracja. `etl/choice.py` szacuje zagnieżdżony logit (pieszo, rower, samochód,
+transport zbiorowy) na 15 438 podróżach: ρ² 0,475, poza próbą 0,464. Współczynnik
+czasu −0,016/min (bł. 0,005) daje +5 min samochodem do centrum ≈ −0,8 p.p. udziału
+(−1,7…−0,8 między wariantami). Sama jazda samochodem nie jest identyfikowalna;
+cen w danych nie ma.
+
+**Model sieci a prawdziwe podróże.** Wprost wstawione podróże z ankiety pogarszają
+model (R² 0,50 wobec 0,63), bo na parę rejonów wypada ok. 1,4 podróży.
+
+## Zmiana 2018 → 2024
+
+Arkusz „Porównanie KBR” (zał. 3.3) zestawia 114 miejsc: Ring 1 −17%, Ring 2 −10%,
+Ring 3 −9%, granica miasta 0%, AOW +22%. To pojedyncze dni, a w międzyczasie otwarto
+m.in. aleję Wielkiej Wyspy. W tekście Raportu II trzy z największych spadków mają
+pomylone ulice — obowiązują numery punktów.
+
+## Do centrum i z centrum
+
+Badanie podaje to tylko na kordonach KW i KO. Gdzie indziej `etl/extra.py` wyznacza
+kierunek ze stron świata (do 60° od kierunku na Rynek); na kordonach zgadza się to
+z badaniem w 84 przypadkach na 90.
 
 ## Uwaga o położeniu punktów
 

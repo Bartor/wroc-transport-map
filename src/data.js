@@ -5,9 +5,8 @@ import './kit'
 
 const FILES = ['meta', 'points', 'road', 'pt', 'bike', 'ped', 'rail']
 
-// survey.json is absent from the public build (household addresses), so it is
-// optional.
-const OPTIONAL = ['signals', 'survey']
+// survey.json, where interviewers set out from, is not in the public build.
+const OPTIONAL = ['signals', 'survey', 'ways']
 
 /** One data file, or null when the build does not have it. The street-network
  *  model layers (3 MB of the 5 MB) load this way, when first asked for. */
@@ -38,7 +37,7 @@ export const LAYERS = {
   bike: { label: 'Ruch rowerowy', color: '#3fa34d', unit: 'rowerzystów' },
   ped: { label: 'Ruch pieszy', color: '#b5179e', unit: 'pieszych' },
   rail: { label: 'Pociągi (kordon miasta)', color: '#7048e8', unit: 'pasażerów' },
-  survey: { label: 'Adresy z próby ankietowej', color: '#8d99ae', unit: 'adresów' },
+  survey: { label: 'Punkty startowe ankieterów', color: '#8d99ae', unit: 'punktów' },
 }
 
 // What the map shows: one survey at a time. The layers come from separate
@@ -73,6 +72,28 @@ export const VIEWS = {
     label: 'Pociągi — kordon kolejowy',
     sub: 'pasażerowie w pociągach na granicy miasta (zał. 7.1)',
     layers: ['rail'], color: LAYERS.rail.color,
+  },
+  // These draw themselves (`own`), from files fetched the first time; `period`
+  // is whether the hours chosen mean anything to them.
+  stations: {
+    label: 'Dworce i stacje', sub: 'wsiadający i wysiadający w szczytach (zał. 8.1, 9.1)',
+    layers: [], own: ['stations', 'compare'], period: true, color: LAYERS.rail.color,
+  },
+  change: {
+    label: 'Zmiana 2018 → 2024', sub: '114 miejsc policzonych w obu badaniach',
+    layers: [], own: ['compare'], color: '#676cad',
+  },
+  speeds: {
+    label: 'Prędkości na odcinkach', sub: 'czasy przejazdu 69 tys. aut (zał. 3.11)',
+    layers: [], own: ['speeds'], period: true, color: '#4aa36b',
+  },
+  trips: {
+    label: 'Podróże mieszkańców', sub: 'skąd, dokąd, czym i po co — 16 781 podróży',
+    layers: [], own: ['zones', 'trips'], period: true, ask: true, color: '#3f8bd0',
+  },
+  answers: {
+    label: 'Odpowiedzi w ankiecie', sub: 'opinie i nawyki według miejsca zamieszkania',
+    layers: [], own: ['zones', 'answers'], ask: true, color: '#d6541c',
   },
 }
 
