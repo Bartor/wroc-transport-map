@@ -1,7 +1,7 @@
 // What the filtered trips are, in numbers. Every chart filters: a press on a
 // part keeps only it, here, on the map and in the sidebar, while the chart
 // itself goes on showing all of its parts.
-import { useMemo, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import {
   Block, Chips, DataTable, DetailsPanel, Donut, Fact, Facts, Hint, LinkButton, Notes, Select, ShareButtons,
   SplitBody, SplitTable, StatBlock, Warn, downloadCsv, fixed, fmt, fmtEst, hourRuns,
@@ -12,7 +12,7 @@ import { hotOn, setHot, useHot } from './hot'
 import { Small, isSmall } from './Small'
 import Stack, { Bar, colorsOf, isOrdered } from './Stack'
 import {
-  FEW, THIN, countMargin, meanFor, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
+  FEW, THIN, averages, averagesTable, countMargin, meanFor, meanNote, meanText, crossTab, crossTable, passing, perSpot, placeName, placesTable, shares, touching, tripRow, tripsTable,
 } from './trips'
 import { draw, tripsCard, tripsName } from './surveyCards'
 import { KM_NOTE, StatChips, WAYS, WAY_TEXT, flowLines, painted, pctText, statIn, unitOf } from './TripsView'
@@ -119,13 +119,15 @@ export default function TripsPanel({ x, setT, period, onClose }) {
   }, [S, idx, t.rows, t.split])
   const day = useMemo(() => (x.dayRows ? { ...patterns(x.dayRows), modes: dayModes(x.dayRows) } : null), [x.dayRows])
 
+  const means = useMemo(() => averages(S, idx), [S, idx])
   const fname = tripsName(title, period, x.way, t.filters)
   const spec = () => {
     const paint = painted(x)
     return tripsCard({
       x, title, period, paint, wayName: WAY_TEXT[x.way], lines: flowLines(x),
       legendTitle: show !== 'areas' ? 'Połączenia — kolor: najczęstszy środek' : paint.stat ? paint.title : partner ? `${x.way === 'from' ? 'Dokąd' : x.way === 'to' ? 'Skąd' : 'Druga strona podróży'} — ${paint.unit}` : paint.title,
-      stacks: (S.freight ? FREIGHT_STACKS : STACKS.slice(0, 3)).map(([key, label]) => stackOf(key, label)).filter(Boolean),
+      means,
+      stacks: (S.freight ? FREIGHT_STACKS : STACKS.slice(0, 2)).map(([key, label]) => stackOf(key, label)).filter(Boolean),
       top: top.slice(0, 12), small, perHead, ranked, note: paint.stat?.d.key === 'km' ? KM_NOTE : null,
     })
   }
@@ -196,6 +198,19 @@ export default function TripsPanel({ x, setT, period, onClose }) {
               Naciśnij część dowolnego wykresu, aby zostawić tylko ją — w panelu i na mapie.
             </Hint>
           </Block>
+          {means && (
+            <StatBlock title="Średnie">
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 10px', fontSize: 12, alignItems: 'baseline' }}>
+                {means.list.map((m) => (
+                  <Fragment key={m.key}>
+                    <span>{m.label}</span>
+                    <span style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}><b>{meanText(m)}</b> <small style={{ opacity: 0.7 }}>{meanNote(m)}<Small n={m.n} /></small></span>
+                  </Fragment>
+                ))}
+              </div>
+              <LinkButton block onClick={() => downloadCsv(averagesTable(means), `${fname}-srednie.csv`)}>Pobierz średnie (CSV)</LinkButton>
+            </StatBlock>
+          )}
           {(S.freight ? FREIGHT_STACKS : STACKS).map(([key, label]) => {
             const s = stackOf(key, label)
             return s && (

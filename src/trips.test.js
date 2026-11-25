@@ -13,7 +13,7 @@ import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days
 import { colorsOf, partsOf } from './Stack'
 import { isSmall, smallText } from './Small'
 import { meanOf, onMean, perPeopleOf, pickWarning, togglePick, valueOf } from './answers'
-import { meanFor } from './trips'
+import { averages, averagesTable, meanFor } from './trips'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
@@ -179,6 +179,20 @@ suite('answers', () => {
     expect(pickWarning(q, [0])).toBe(null)
     expect(pickWarning({ ...q, number: 1 }, [])).toBe(null)
     expect(valueOf(q, [10, 1, 1, [500, 500]], [])).toBe(null)
+  })
+  it('averages trips, and the people who made them once each', () => {
+    const c = { ...T.cols, p: [0, 0, 1, 2, 3] }
+    const A = averages({ ...S, T: { ...S.T, cols: c } }, all)
+    const of = (k) => A.list.find((m) => m.key === k)
+    expect(A.people).toBe(4)
+    expect(of('min')).toMatchObject({ n: 5 })
+    expect(of('min').v).toBeCloseTo((20 * 100 + 25 * 100 + 5 * 50 + 40 * 200 + 90 * 10) / 460)
+    expect(of('day').v).toBeCloseTo((2 * 100 + 50 + 200 + 10) / 360)
+    expect(of('in').v).toBe(1)
+    expect(of('kmh').v).toBeCloseTo((60 * (150 + 150 + 2400)) / (2000 + 2500 + 8000))
+    expect(A.modes.map((m) => m.key)).toEqual(['car', 'pt', 'walk'])
+    expect(averagesTable(A)[0]).toHaveLength(averagesTable(A).at(-1).length)
+    expect(averages(S, [])).toBe(null)
   })
   it('knows what an answer means', () => {
     const u = { key: 'u1', options: ['uciążliwy ruch kołowy', 'nie odczuwam uciążliwości', 'inne rzeczy'] }

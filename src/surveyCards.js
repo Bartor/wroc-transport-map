@@ -6,7 +6,7 @@ import { ORDERED } from './Stack'
 import { diffColor } from './closureColors'
 import { arc } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
-import { placeName } from './trips'
+import { THIN, meanNote, meanText, placeName } from './trips'
 
 const SITE = 'bartor.github.io/wroc-transport-map'
 const KBR = 'Kompleksowe Badania Ruchu Wrocław 2024'
@@ -148,6 +148,65 @@ export const listBlock = ({ title, rows }) => (ctx, y0, { W, PAD, INK, DIM, FAIN
     ctx.fillText(r.sub, x + 22, y + 20)
   })
   return top + half * 44 + 12
+}
+
+/** Averages as a grid: what, how much, and what it rests on. */
+export const meansBlock = ({ title, rows, columns = 4 }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para, wrap }) => {
+  const top = para(ctx, title.toUpperCase(), PAD, y0, W - 2 * PAD, 14, FAINT, 600) + 8
+  const cw = (W - 2 * PAD - 18 * (columns - 1)) / columns
+  ctx.textBaseline = 'top'
+  let y = top
+  for (let i = 0; i < rows.length; i += columns) {
+    const line = rows.slice(i, i + columns)
+    ctx.font = font(13)
+    const labels = line.map((r) => wrap(ctx, r.label, cw))
+    const deep = Math.max(...labels.map((l) => l.length))
+    line.forEach((r, k) => {
+      const x = PAD + k * (cw + 18)
+      ctx.font = font(13)
+      ctx.fillStyle = DIM
+      labels[k].forEach((t, q) => ctx.fillText(t, x, y + (deep - labels[k].length + q) * 17))
+      ctx.font = font(22, 700)
+      ctx.fillStyle = INK
+      ctx.fillText(r.value, x, y + deep * 17 + 2)
+      ctx.font = font(12)
+      ctx.fillStyle = FAINT
+      ctx.fillText(r.sub, x, y + deep * 17 + 30)
+    })
+    y += deep * 17 + 58
+  }
+  return y + 2
+}
+
+/** Length, time and speed by mode. */
+export const modeMeansBlock = ({ rows }) => (ctx, y0, { W, PAD, INK, DIM, FAINT, font, para }) => {
+  let y = para(ctx, 'ŚREDNIE WEDŁUG ŚRODKA', PAD, y0, W - 2 * PAD, 14, FAINT, 600) + 8
+  const at = [W - PAD - 420, W - PAD - 280, W - PAD - 130, W - PAD]
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'right'
+  ctx.font = font(12, 600)
+  ctx.fillStyle = FAINT
+  ;['DŁUGOŚĆ', 'CZAS', 'PRĘDKOŚĆ', 'PRÓBA'].forEach((h, i) => ctx.fillText(h, at[i], y))
+  y += 22
+  for (const r of rows) {
+    ctx.textAlign = 'left'
+    ctx.fillStyle = r.color
+    ctx.beginPath()
+    ctx.arc(PAD + 6, y + 9, 6, 0, 2 * Math.PI)
+    ctx.fill()
+    ctx.fillStyle = INK
+    ctx.font = font(16)
+    ctx.fillText(r.label, PAD + 22, y)
+    ctx.textAlign = 'right'
+    r.cells.forEach((t, i) => {
+      ctx.font = font(16, i < 3 ? 600 : 400)
+      ctx.fillStyle = i < 3 ? INK : DIM
+      ctx.fillText(t, at[i], y)
+    })
+    y += 27
+  }
+  ctx.textAlign = 'left'
+  return y + 14
 }
 
 /** The view over some rings, in card pixels: x grows east, y grows south. */
@@ -403,7 +462,7 @@ export function filterText(S, filters) {
 }
 
 /** The trips view as a card. `paint` is what the map is painted with. */
-export function tripsCard({ x, title, period, wayName, paint, legendTitle, stacks, lines, top, small, perHead, ranked, note }) {
+export function tripsCard({ x, title, period, wayName, paint, legendTitle, stacks, means, lines, top, small, perHead, ranked, note }) {
   const { S, t, stats, places, partner, show, sums } = x
   const { list, value, n } = paint
   const colorAt = paint.colorOf(false)
@@ -433,6 +492,9 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
         unit: S.freight ? 'przejazdów' : 'podróży', columns: { value: S.freight ? 'PRZEJAZDY' : 'PODRÓŻE', share: '%' },
         slices: S.modes.map((m, i) => ({ key: m.key, label: m.label, color: m.color, value: stats.mode.w[i], est: !S.freight })),
       }),
+      ...(means ? [meansBlock({ title: 'Średnie', rows: means.list.map((m) => ({ label: m.label, value: meanText(m) + smallText(m.n, THIN), sub: meanNote(m) })) })] : []),
+      ...(means && means.modes.length > 1 ? [modeMeansBlock({ rows: means.modes.map((g) => ({ label: g.label, color: g.color,
+        cells: [g.km ? `${fixed(g.km.v, 1)} km` : '—', g.min ? `${fixed(g.min.v, 0)} min` : '—', g.kmh ? `${fixed(g.kmh.v, 1)} km/h` : '—', `${fmt(g.n)}${smallText(g.n, THIN)}`] })) })] : []),
       ...stacks.map((s) => stackBlock({ title: s.label, parts: s.parts })),
       mapBlock({
         title: legendTitle, fit: fitOf(list, picked), border: cityBorder(list),
@@ -452,6 +514,7 @@ export function tripsCard({ x, title, period, wayName, paint, legendTitle, stack
       'Dzienniczki podróży z jednego dnia roboczego (wtorek–czwartek), przeliczone na mieszkańców Wrocławia i 9 gmin wagami KBR. Bez przyjezdnych z dalszych okolic.',
       // filtered by mode, the shares of modes are the filter's
       ...(t.filters.mode ? [] : [`${stats.main.map((m) => `${m.label} ${pctText(m.share)}${m.margin ? ` ±${Math.round(100 * m.margin)} p.p.` : ''}`).join(', ')} (95%).`]),
+      ...(means ? ['Średnie ważone; ± to przybliżony przedział 95%. Prędkość: droga w linii prostej przez cały czas od drzwi do drzwi, bez podróży w obrębie rejonu. Wiek: średnia przedziału.'] : []),
       ...(stats.n < 100 ? [`Tylko ${fmt(stats.n)} podróży w próbie — udziały orientacyjne.`] : []),
     ],
     source: `Źródło: ${KBR}, ${S.freight ? 'zał. 10.3' : 'badanie ankietowe w gospodarstwach domowych; na mieszkańca: od 6 lat, z wag badania'} — bip.um.wroc.pl.`,

@@ -295,6 +295,87 @@ export function margin(S, idx, share) {
   return n < 2 ? null : 1.96 * Math.sqrt(p * (1 - p) * (1 / n + ASKER / askers(idx.length)))
 }
 
+/** The middle of the values, by their weight. */
+function middle(list) {
+  const s = [...list].sort((a, b) => a[0] - b[0])
+  const half = s.reduce((a, q) => a + q[1], 0) / 2
+  let sum = 0
+  for (const [v, w] of s) { sum += w; if (sum >= half) return v }
+  return null
+}
+/** A mean of [value, weight], with its 95% margin: see `margin`. A trip is half
+ *  a day of one person; a person stands for themselves. */
+function meanOf(list, perPerson = false) {
+  let a = 0
+  let b = 0
+  let q = 0
+  for (const [v, w] of list) { a += w; b += w * w; q += w * v }
+  if (!a) return null
+  const v = q / a
+  const sd = Math.sqrt(list.reduce((s, [x, w]) => s + w * (x - v) ** 2, 0) / a)
+  const n = (a * a) / b / (perPerson ? 1 : 2)
+  return { v, n: list.length, median: middle(list), margin: n < 2 || sd === 0 ? null : 1.96 * sd * Math.sqrt(1 / n + ASKER / askers(list.length)) }
+}
+
+const MAIN_AT = (m) => MAIN.findIndex((g) => g.of.includes(MODE_AT[m]))
+/**
+ * Averages of everything that can be averaged: of the trips, and of the people
+ * who made them, each once.
+ */
+export function averages(S, idx) {
+  if (S.freight || !idx.length) return null
+  const c = S.T.cols
+  const trips = (of) => idx.map((i) => [of(c, i), c.w[i]]).filter(([v]) => v != null && !Number.isNaN(v))
+  const pt = MAIN.findIndex((g) => g.key === 'pt')
+  const when = (test, of) => (x, i) => (test(x, i) ? of(x, i) : null)
+  const inPt = (x, i) => MAIN_AT(x.m[i]) === pt
+  const drives = (x, i) => x.o[i] > 0
+  // each traveller once, and how many of these trips are theirs
+  const own = new Map()
+  for (const i of idx) { const q = own.get(c.p?.[i] ?? i); if (q) q.n += 1; else own.set(c.p?.[i] ?? i, { i, n: 1 }) }
+  const people = (of) => [...own.values()].map((q) => [of(c, q.i, q.n), c.w[q.i]]).filter(([v]) => v != null && v >= 0)
+  const speed = (list) => {
+    let km = 0
+    let min = 0
+    let n = 0
+    for (const i of list) if (c.km[i] > 0 && c.d[i] > 0) { km += c.w[i] * c.km[i]; min += c.w[i] * c.d[i]; n += 1 }
+    return min ? { v: (60 * km) / min, n } : null
+  }
+  const row = (key, label, unit, digits, m) => m && { key, label, unit, digits, ...m }
+  const list = [
+    row('km', 'Długość w linii prostej', 'km', 1, meanOf(trips((x, i) => x.km[i]))),
+    row('min', 'Czas podróży', 'min', 0, meanOf(trips((x, i) => x.d[i]))),
+    row('kmh', 'Prędkość w linii prostej', 'km/h', 1, speed(idx)),
+    row('wa', 'Dojście na przystanek', 'min', 1, meanOf(trips(when(inPt, (x, i) => x.wa?.[i])))),
+    row('wb', 'Dojście z przystanku', 'min', 1, meanOf(trips(when(inPt, (x, i) => x.wb?.[i])))),
+    row('wc', 'Czas przesiadki', 'min', 1, meanOf(trips((x, i) => x.wc?.[i]))),
+    row('cb', 'Dojście od zaparkowanego auta', 'min', 1, meanOf(trips(when(drives, (x, i) => x.wb?.[i])))),
+    row('in', 'Osób w samochodzie', '', 2, meanOf(trips((x, i) => x.o[i] || null))),
+    row('day', 'Tych podróży na podróżującą osobę', '', 2, meanOf(people((x, i, n) => n), true)),
+    row('age', 'Wiek podróżujących', 'lat', 1, meanOf(people((x, i) => x.ay?.[i]), true)),
+    row('size', 'Osób w ich gospodarstwie', '', 1, meanOf(people((x, i) => x.hs[i]), true)),
+    row('cars', 'Samochodów w ich gospodarstwie', '', 2, meanOf(people((x, i) => x.hc[i]), true)),
+  ].filter((m) => m && m.n >= Math.min(5, idx.length))     // a lone transfer is no average
+  const modes = MAIN.map((g, k) => {
+    const own1 = idx.filter((i) => MAIN_AT(c.m[i]) === k)
+    const of = (f) => meanOf(own1.map((i) => [f(i), c.w[i]]).filter(([v]) => v != null))
+    return { key: g.key, label: g.label, color: g.color, n: own1.length, km: of((i) => c.km[i]), min: of((i) => c.d[i]), kmh: speed(own1) }
+  }).filter((m) => m.n > 0)
+  return { list, modes, people: own.size }
+}
+/** A mean as it is read: "3,0 km", and what it rests on. */
+export const meanText = (m) => `${fixedPl(m.v, m.digits)}${m.unit ? ` ${m.unit}` : ''}`
+export const meanNote = (m) => [m.margin != null && `±${fixedPl(m.margin, m.digits)}`,
+  ['km', 'min'].includes(m.key) && m.median != null && `mediana ${fixedPl(m.median, m.digits)}`, `n=${m.n}`].filter(Boolean).join(' · ')
+const fixedPl = (v, digits) => v.toFixed(digits).replace('.', ',')
+export const averagesTable = ({ list, modes }) => [
+  ['średnia', 'wartość', 'jednostka', '± (95%)', 'mediana', 'w próbie'],
+  ...list.map((m) => [m.label, num(m.v, 2), m.unit, m.margin == null ? '' : num(m.margin, 2), m.median == null ? '' : num(m.median, 2), m.n]),
+  ...modes.flatMap((g) => [['km', 'długość', 'km'], ['min', 'czas', 'min'], ['kmh', 'prędkość w linii prostej', 'km/h']]
+    .filter(([k]) => g[k]).map(([k, label, unit]) => [`${g.label}: ${label}`, num(g[k].v, 2), unit,
+      g[k].margin == null ? '' : num(g[k].margin, 2), g[k].median == null ? '' : num(g[k].median, 2), g[k].n])),
+]
+
 /** Everything the panel says about a set of trips. */
 export function describe(S, idx) {
   const c = S.T.cols
@@ -684,16 +765,19 @@ export function placesTable(S, sums, level, idx = [], way = 'any') {
   const { list } = S.levels[level]
   const dims = OVERVIEW.map((k) => S.D.find((d) => d.key === k)).filter(Boolean)
     .map((d) => ({ d, ...perPlaceDim(S, idx, level, way, d) }))
+  const means = S.D.filter((d) => numberOf(S, d.key)).map((d) => ({ d, m: numberOf(S, d.key), by: perPlaceDim(S, idx, level, way, d).mean }))
   return [
     ['obszar', 'podróży w próbie', 'podróże/dobę', 'na mieszkańca (6+)',
       'zaczynane/dobę', 'kończone/dobę', ...S.main.map((m) => `% ${m.label}`),
       'śr. długość [km]', 'mieszkańcy', 'miejsca pracy', 'km²', 'osoby w badaniu',
+      ...means.map(({ d, m }) => `${d.label}: średnia [${m.unit}]`),
       ...dims.flatMap(({ d }) => [...d.options.map((o) => `${d.label}: ${o.label} — %`), `${d.label}: w próbie`])],
     ...list.map((p, k) => {
       const s = sums[k]
       return [placeName(p), s.n, num(s.any), p.w >= FEW ? num(s.any / p.w, 2) : '', num(s.from), num(s.to),
         ...S.main.map((m) => (s.any ? num((100 * m.of.reduce((a, x) => a + s.modes[x], 0)) / s.any, 1) : '')),
         s.kw ? num(s.km / s.kw, 1) : '', p.pop ?? '', p.jobs ?? '', num(p.km2, 2), p.n,
+        ...means.map(({ by, m }) => (by[k] == null ? '' : num(by[k], Math.max(1, m.digits)))),
         ...dims.flatMap(({ w, n, K }) => {
           const row = w.subarray(k * K, (k + 1) * K)
           const all = row.reduce((a, b) => a + b, 0)

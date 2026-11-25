@@ -123,7 +123,9 @@ export function painted({ S, t, sums, partner, idx, passed, zones, way }) {
   const digits = counted ? (per.many ? digitsFor(value) : 0) : P.digits || 0
   const noun = partner || !P.fixed ? (S.freight ? 'przejazdów' : 'podróży/dobę') : ''
   const unit = counted ? [noun, k > 1 ? per.many : per.unit].filter(Boolean).join(' ') : P.unit || ''
-  const text = (x) => (x == null ? '—' : share ? pctText(x) : digits ? fixed(x, digits) : fmtEst(x))
+  // a rate is small, so it is not rounded to tens as a count is
+  const rate = counted && !!per.unit
+  const text = (x) => (x == null ? '—' : share ? pctText(x) : digits ? fixed(x, digits) : rate ? (x < 10 ? fixed(x, 1) : fmt(Math.round(x))) : fmtEst(x))
   return withScale({ list, P, value, n, share, digits, unit, text,
     title: P.count && per.unit ? `${P.label} ${k > 1 ? per.many : per.unit}` : P.label })
 }
