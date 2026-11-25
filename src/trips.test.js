@@ -3,7 +3,7 @@ import {
   PAINTS, PER, TRIPS0, areas, breaks, describe, pairs, passing, perOf, perPartner, perPlace, prepare, rings,
   scale, shares, touching, tripsTable,
 } from './trips'
-import { ASK0, diverging, marginOf, shareOf, spanOf, startOpts, surface } from './answers'
+import { ASK0, sentiment, sentimentNote, diverging, marginOf, shareOf, spanOf, startOpts, surface } from './answers'
 import { changes, ringChanges } from './compare'
 import { hashOf, readHash } from './urlState'
 import { everythingTable, filterText, viewTable } from './surveyCards'
@@ -145,8 +145,22 @@ suite('answers', () => {
   it('starts on the good options and colours around the city', () => {
     expect(startOpts(Q)).toEqual([0])
     expect(diverging(0.6, 0.6, 0.2)).toEqual([120, 126, 138])
-    expect(diverging(9, 0.6, 0.2)).toEqual([214, 84, 28])
+    // more of a bad thing is orange, more of a good one green, else violet
+    expect(diverging(9, 0.6, 0.2, -1)).toEqual([214, 84, 28])
+    expect(diverging(9, 0.6, 0.2, 1)).toEqual([31, 161, 135])
+    expect(diverging(-9, 0.6, 0.2, 1)).toEqual([214, 84, 28])
+    expect(diverging(9, 0.6, 0.2, 0)).toEqual([150, 72, 178])
     expect(spanOf([{ v: 0.9, n: 50 }, { v: 0.5, n: 50 }], 0.6)).toBeGreaterThanOrEqual(0.05)
+  })
+  it('knows what an answer means', () => {
+    const u = { key: 'u1', options: ['uciążliwy ruch kołowy', 'nie odczuwam uciążliwości', 'inne rzeczy'] }
+    expect([0, 1, 2].map((o) => sentiment(u, [o]))).toEqual([-1, 1, 0])
+    expect(sentiment({ key: 'tram', options: [] }, [0, 1])).toBe(1)
+    expect(sentiment({ key: 'tram', options: [] }, [0, 4])).toBe(0)
+    expect(sentiment({ key: 'cars', options: [] }, [3])).toBe(-1)
+    expect(sentiment({ key: 'k3e', options: [] }, [3, 4])).toBe(-1)
+    expect(sentiment({ key: 'zcar', options: [] }, [0])).toBe(0)
+    expect(sentimentNote({ key: 'bike', options: [] }, [0])).toMatch(/poparcie/)
   })
   it('smooths towards the people nearby', () => {
     const zones = ZONES.zones.slice(0, 2).map((z, i) => ({ ...z, i }))

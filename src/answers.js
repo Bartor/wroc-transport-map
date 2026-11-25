@@ -122,15 +122,58 @@ export function surface(q, group, opts, zones, { km = 1, cols = 130, box, raw } 
   return { v, n: m, cols, rows, box }
 }
 
-// Below and above what the whole city says: blue to orange through grey.
-const DIV = [[33, 102, 172], [103, 169, 207], [120, 126, 138], [239, 163, 100], [214, 84, 28]]
-const mix = (a, b, t) => a.map((x, i) => Math.round(x + (b[i] - x) * t))
+// ------------------------------------------------------------------ sentiment
+// What it means when more people give an answer: 1 is good for them (or for a
+// change they are asked about), -1 bad, 0 neither. Facts and reasons are
+// neither: a car at home is not a verdict.
+const LIKERT = [1, 1, 0, -1, -1, 0]
+const ON_TIME = [1, 1, -1, -1, 0]
+const SENTIMENT = {
+  tram: LIKERT, bike: LIKERT,
+  // limits on cars in the centre, as support for them
+  cars: [1, 1, 1, -1, 0],
+  k6: ON_TIME, k7: ON_TIME,
+}
+export function sentimentOf(q, o) {
+  if (SENTIMENT[q.key]) return SENTIMENT[q.key][o] ?? 0
+  // what makes getting around hard: anything, unless it is that nothing does
+  if (/^u\d$/.test(q.key)) return /^nie odczuwam/.test(q.options[o]) ? 1 : /^inne/.test(q.options[o]) ? 0 : -1
+  if (/^k\d/.test(q.key)) return LIKERT[o] ?? 0
+  return 0
+}
+/** Of several answers together: what they share, or neither. */
+export const sentiment = (q, opts) => {
+  const s = new Set(opts.map((o) => sentimentOf(q, o)).filter(Boolean))
+  return s.size === 1 ? [...s][0] : 0
+}
+/** Opinions on a change are for and against; the rest is better and worse. */
+export const isOpinion = (q) => ['tram', 'bike', 'cars'].includes(q.key)
+export function sentimentNote(q, opts) {
+  const s = sentiment(q, opts)
+  if (!s) return 'fioletowy = częściej niż średnio, niebieski = rzadziej'
+  return isOpinion(q) ? 'zielony = większe poparcie zmiany niż średnio, pomarańczowy = mniejsze'
+    : 'zielony = lepiej niż średnio, pomarańczowy = gorzej'
+}
+
+// From low to high, through grey at the city's own share.
+const WORSE = [[214, 84, 28], [239, 163, 100]]
+const BETTER = [[124, 201, 181], [31, 161, 135]]
+const GREY = [120, 126, 138]
+const DIV = {
+  1: [...WORSE, GREY, ...BETTER],
+  [-1]: [...[...BETTER].reverse(), GREY, ...[...WORSE].reverse()],
+  0: [[46, 104, 173], [118, 160, 205], GREY, [190, 140, 205], [150, 72, 178]],
+}
+/** The colour of an answer itself, in bars. */
+export const SENT_COLOR = { 1: '#1fa187', [-1]: '#d6541c', 0: '#9a62bd' }
+const mix = (x, y, t) => x.map((v, i) => Math.round(v + (y[i] - v) * t))
 
 /** Colour of a share against the city's own; `span` is a whole half of it. */
-export function diverging(v, mid, span) {
-  const t = Math.max(0, Math.min(1, (v - mid) / span / 2 + 0.5)) * (DIV.length - 1)
-  const i = Math.min(DIV.length - 2, Math.floor(t))
-  return mix(DIV[i], DIV[i + 1], t - i)
+export function diverging(v, mid, span, sent = -1) {
+  const ramp = DIV[sent]
+  const t = Math.max(0, Math.min(1, (v - mid) / span / 2 + 0.5)) * (ramp.length - 1)
+  const i = Math.min(ramp.length - 2, Math.floor(t))
+  return mix(ramp[i], ramp[i + 1], t - i)
 }
 export const rgb = (c) => `rgb(${c.join(',')})`
 

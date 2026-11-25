@@ -15,7 +15,7 @@ export const signed = (x) => {
 }
 
 // --------------------------------------------------------- 2018 against 2024
-// falling is blue, rising orange, +-40% is as far as the colours go
+// falling is good for a street: green; rising orange, +-40% is as far as the colours go
 export const changeColor = (d) => rgb(diverging(d, 0, 0.4))
 
 export function ChangeMap({ rows, sel, onPick }) {
