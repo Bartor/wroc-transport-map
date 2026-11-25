@@ -2,6 +2,7 @@
 // and the notes that have to travel with them.
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
 import { SENT_COLOR, diverging, fullName, marginOf, meanOf, optionShares, perPeopleOf, rgb, sentimentNote, shareOf, valueOf } from './answers'
+import { diffColor } from './closureColors'
 import { arc } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
 import { placeName } from './trips'
@@ -233,8 +234,8 @@ export const mapBlock = ({ areas, fit, circles = [], arcs = [], rings = [], heat
     ctx.beginPath()
     c.path.forEach((p, i) => { const [a, b] = f.at(p); if (i) ctx.lineTo(a, b); else ctx.moveTo(a, b) })
     ctx.strokeStyle = c.color
-    ctx.globalAlpha = c.faint ? 0.35 : 0.7
-    ctx.lineWidth = Math.max(1, (c.width || 8) * Math.sqrt(c.w / topW))
+    ctx.globalAlpha = c.fixed ? 1 : c.faint ? 0.35 : 0.7
+    ctx.lineWidth = c.fixed ?? Math.max(1, (c.width || 8) * Math.sqrt(c.w / topW))
     ctx.stroke()
     ctx.globalAlpha = 1
   }
@@ -488,6 +489,56 @@ export function changeCard({ rows, rings, legend, color, zones }) {
     ],
     notes: ['Suma pojazdów w miejscach wspólnych, w tych samych godzinach. Pojedyncze dni pomiaru; między rundami otwarto m.in. aleję Wielkiej Wyspy.'],
     source: `Źródło: ${KBR}, zał. 3.3, „Porównanie KBR” — bip.um.wroc.pl.`,
+    ...footer(),
+  }
+}
+
+// -------------------------------------------------------------------- closure
+/** A closure: the streets around it, coloured by how their traffic changes. */
+export function closureCard({ x, title, up, down }) {
+  const shut = new Set(x.c.closed)
+  const thin = new Set(x.c.narrow)
+  const both = (f, k) => f[2 * k] + f[2 * k + 1]
+  const d = (s) => both(x.result.after, s.id) - both(x.result.before, s.id)
+  const moved = x.segments.filter((s) => Math.abs(d(s)) >= 300 || shut.has(s.id))
+  // what is near: far off, one of two like routes can flip for the other
+  const own = x.segments.filter((y) => shut.has(y.id) || thin.has(y.id)).map((y) => y.path[0])
+  const mid = [0, 1].map((i) => own.reduce((a, p) => a + p[i], 0) / own.length)
+  const close = (y) => Math.hypot(y.path[0][0] - mid[0], (y.path[0][1] - mid[1]) * 0.63) < 0.036
+  const box = moved.filter(close).filter((s) => Math.abs(d(s)) >= 800 || shut.has(s.id) || thin.has(s.id)).map((s) => s.path)
+  const fit = box.length ? box : moved.map((s) => s.path)
+  const [s0, n0, w0, e0] = fit.flat().reduce(([s, n, w, e], [la, lo]) => [Math.min(s, la), Math.max(n, la), Math.min(w, lo), Math.max(e, lo)], [90, -90, 180, -180])
+  const pad = 0.004
+  const frame4 = [[s0 - pad, w0 - pad], [n0 + pad, w0 - pad], [n0 + pad, e0 + pad], [s0 - pad, e0 + pad]]
+  const near = x.segments.filter((s) => s.path.some(([la, lo]) => la > s0 - pad && la < n0 + pad && lo > w0 - pad && lo < e0 + pad))
+  const line = (s) => {
+    if (shut.has(s.id)) return { path: s.path, w: 1, fixed: 6, color: '#ff3b5c', rank: 3 }
+    const v = d(s)
+    if (Math.abs(v) >= 300) return { path: s.path, w: 1, fixed: Math.min(13, 2 + Math.sqrt(Math.abs(v)) / 9), color: diffColor(v), rank: 1 + Math.abs(v) / 1e6 }
+    return { path: s.path, w: 1, fixed: ['motorway', 'trunk', 'primary', 'secondary'].includes(s.cls) ? 2 : 1, color: thin.has(s.id) ? '#c98500' : '#d5dae2', rank: 0 }
+  }
+  const s = x.result.summary
+  const sgn = (v) => `${v > 0 ? '+' : '−'}${fmt(Math.round(Math.abs(v) / 100) * 100)}`
+  const list = (rows) => rows.slice(0, 10).map((r) => ({ label: r.name, value: sgn(r.d), sub: `${fmtEst(r.a)} → ${fmtEst(r.b)} pojazdów` }))
+  const km = 100 * (s.after.vehKm / s.before.vehKm - 1)
+  return {
+    accent: '#ff3b5c', kicker: 'Model zamknięcia ulicy · KBR Wrocław 2024', title,
+    when: `Przez zamknięte odcinki jeździ ${fmtEst(s.affected)} przejazdów w 8 godzinach (6–10 i 15–19)${s.gone > 0 ? `; założenie: znika ${fmtEst(s.gone)}` : ''}`,
+    blocks: [
+      mapBlock({
+        fit: [frame4], areas: [], arcs: near.map(line).sort((a, b) => a.rank - b.rank),
+        legend: [{ label: 'zamknięte', color: '#ff3b5c' }, { label: 'więcej ruchu', color: diffColor(2000) }, { label: 'dużo więcej', color: diffColor(6000) },
+          { label: 'mniej ruchu', color: diffColor(-2000) }, { note: 'grubość = zmiana; poniżej 300 pojazdów nie pokazujemy' }],
+      }),
+      ...(up.length ? [listBlock({ title: 'Przybywa', rows: list(up) })] : []),
+      ...(down.length ? [listBlock({ title: 'Ubywa', rows: list(down).slice(0, 6) })] : []),
+    ],
+    notes: [
+      `Przejechane kilometry w całej sieci: ${km >= 0 ? '+' : '−'}${Math.abs(km).toFixed(2).replace('.', ',')}%.`,
+      'Model, nie pomiar: mediana błędu dla przekrojów, których nie widział, 17%, co dziesiąty myli się o ponad 52%.',
+      'Nie zna zakazów skrętu, sygnalizacji ani wyznaczonych objazdów; liczy stan po przyzwyczajeniu się kierowców.',
+    ],
+    source: `Źródło: ${KBR} (zał. 3.3, badanie ankietowe, zał. 12.3), OpenStreetMap; model własny.`,
     ...footer(),
   }
 }

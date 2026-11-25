@@ -29,7 +29,7 @@ npm test
 ETL wymaga Pythona 3.10+:
 
 ```bash
-pip install openpyxl pyshp numpy scipy pyproj
+pip install openpyxl pyshp numpy scipy pyproj numba
 ```
 
 Badanie mieszkańców i pozostałe załączniki BIP (312 MB, nie ma ich w repo)
@@ -40,7 +40,7 @@ python etl/diary.py && python etl/trips.py && python etl/extra.py
 ```
 
 ```bash
-python etl/choice_los.py && python etl/choice.py
+python etl/choice_los.py && python etl/choice.py && python etl/closure.py
 ```
 
 Pierwsze uruchomienie ETL pobiera sieć drogową i przystanki z Overpass API
@@ -382,6 +382,27 @@ cen w danych nie ma.
 
 **Model sieci a prawdziwe podróże.** Wprost wstawione podróże z ankiety pogarszają
 model (R² 0,50 wobec 0,63), bo na parę rejonów wypada ok. 1,4 podróży.
+
+## Zamykanie ulic
+
+`etl/closure.py` rozkłada 556 tys. przejazdów samochodów (8 godzin: 6–10 i 15–19) między
+379 rejonami i 43 wjazdami na sieć ulic z przepustowością, dopasowuje je do liczb z 228
+przekrojów i zapisuje sieć z macierzą do `closure.json`. `src/assign.js` liczy to samo
+w przeglądarce (w workerze, ok. 4–5 s), więc można zamknąć lub zwęzić dowolną ulicę.
+
+Dla przekrojów, których model nie widział (5 części, dzielone po punktach): mediana
+błędu 17%, 90. percentyl 52%, GEH<10 dla 76% (regresja sieciowa na tych samych
+częściach: 25%, 86%, 57%). Parametry wybrano na tych samych częściach, więc wynik jest
+nieco optymistyczny. Między pięcioma kalibracjami zmiany powyżej 500 pojazdów zachowują
+znak w 98–99%, a wielkość różni się o 8–11% (mediana).
+
+Próba na al. Wielkiej Wyspy (usunięta z sieci i porównana ze zmianą 2018–2024, po
+odjęciu ogólnej tendencji): w promieniu 2 km 13 miejsc, r 0,73, znak zgodny w 85% (sama
+tendencja 69%), średnia pomyłka 10 p.p. wobec 14 bez modelu i 11 dla najlepszej stałej;
+dwa miejsca wyraźnie źle (R2_17A, KW_10). Próbę oglądano przy czterech ustawieniach.
+
+Model nie zna zakazów skrętu, sygnalizacji ani objazdów; nie podaje minut. Ile przejazdów
+zniknie, zamiast objechać, jest założeniem czytelnika (domyślnie 0).
 
 ## Zmiana 2018 → 2024
 

@@ -72,7 +72,7 @@ function Search({ data, markers, onSelect, view, setView, extra }) {
   // view do not exist yet, so the raw record is selected and found inside
   // its point by the panel.
   const pick = (r) => {
-    if (r.place) { extra.pick(r.place); return }
+    if (r.place != null) { extra.pick(r.place); return }
     const next = viewOf(r.kind, view)
     if (next !== view) {
       setView(next)
@@ -224,10 +224,10 @@ export default memo(function Sidebar({
           </p>
         </>
       )}>
-        {[['Pomiary', false], ['Badanie mieszkańców', true]].map(([title, ask]) => (
+        {[['Pomiary', (v) => !v.ask && !v.model], ['Badanie mieszkańców', (v) => v.ask], ['Model', (v) => v.model]].map(([title, of]) => (
           <Field key={title} label={title}>
-            <RadioCards label={title} name={`view-${ask}`} value={view} onChange={setView}
-              options={Object.entries(VIEWS).filter(([, v]) => !!v.ask === ask).map(([value, v]) => ({
+            <RadioCards label={title} name={`view-${title}`} value={view} onChange={setView}
+              options={Object.entries(VIEWS).filter(([, v]) => of(v)).map(([value, v]) => ({
                 value, label: v.label, color: v.split ? PIE_MARK : v.color,
                 // ten of them: only the chosen one explains itself
                 sub: value === view ? v.sub : undefined,

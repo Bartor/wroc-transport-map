@@ -18,6 +18,22 @@ function selOf(kind, id) {
 
 // The survey views' settings. Filters read "mode:2.3|km:0.1": option numbers.
 const ints = (s) => s.split('.').filter((x) => /^\d+$/.test(x)).map(Number)
+// segments of a street mostly follow one another: 12-15.40
+const spans = (s) => s.split('.').flatMap((p) => {
+  const m = /^(\d+)(?:-(\d+))?$/.exec(p)
+  if (!m) return []
+  const [a, b] = [+m[1], +(m[2] ?? m[1])]
+  return b >= a && b - a < 500 ? Array.from({ length: b - a + 1 }, (_, i) => a + i) : []
+})
+const spanned = (list) => {
+  const out = []
+  for (const k of [...list].sort((a, b) => a - b)) {
+    const last = out[out.length - 1]
+    if (last && last[1] === k - 1) last[1] = k
+    else out.push([k, k])
+  }
+  return out.map(([a, b]) => (a === b ? a : `${a}-${b}`)).join('.')
+}
 const defined = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined))
 
 function readTrip(q) {
@@ -119,6 +135,10 @@ export function readHash(hash = window.location.hash) {
     trip: q.get('v') === 'trips' ? readTrip(q) : undefined,
     ask: q.get('v') === 'answers' ? readAsk(q) : undefined,
     own: q.get('own') || undefined,
+    closure: q.get('v') === 'closure' ? defined({
+      closed: q.has('cx') ? spans(q.get('cx')) : undefined, narrow: q.has('cn') ? spans(q.get('cn')) : undefined,
+      reduce: +q.get('cr') > 0 && +q.get('cr') <= 40 ? +q.get('cr') / 100 : undefined,
+    }) : undefined,
   }
 }
 
@@ -153,6 +173,11 @@ export function hashOf(s, d) {
   if (s.flow.modes) q.set('md', s.flow.modes.join(LIST))
   if (s.view === 'trips' && s.trip) putTrip(q, s.trip)
   if (s.view === 'answers' && s.ask) putAsk(q, s.ask)
+  if (s.view === 'closure' && s.closure) {
+    if (s.closure.closed.length) q.set('cx', spanned(s.closure.closed))
+    if (s.closure.narrow.length) q.set('cn', spanned(s.closure.narrow))
+    if (s.closure.reduce) q.set('cr', String(Math.round(100 * s.closure.reduce)))
+  }
   if (s.own) q.set('own', s.own)
   // ':' '|' and ',' are fine in a fragment; left unescaped the link stays readable
   const out = q.toString().replace(/%3A/gi, ':').replace(/%7C/gi, '|').replace(/%2C/gi, ',')

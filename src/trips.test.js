@@ -310,6 +310,12 @@ suite('the address of a survey view', () => {
     expect({ ...TRIPS0, ...back.trip }).toEqual(trip)
     expect(readHash(hashOf({ ...base, view: 'trips', trip: TRIPS0 }, d)).trip).toEqual({})
   })
+  it('keeps the streets shut', () => {
+    const closure = { closed: [7, 5, 6, 40], narrow: [9], reduce: 0.1 }
+    const h = hashOf({ ...base, view: 'closure', closure }, d)
+    expect(h).toContain('cx=5-7.40')
+    expect(readHash(h).closure).toEqual({ closed: [5, 6, 7, 40], narrow: [9], reduce: 0.1 })
+  })
   it('keeps the question', () => {
     const ask = { ...ASK0, q: 'bike', opts: [0, 1], group: 'car', level: 'h', km: 1.5, raw: true }
     expect({ ...ASK0, ...readHash(hashOf({ ...base, view: 'answers', ask }, d)).ask }).toEqual(ask)

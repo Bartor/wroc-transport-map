@@ -95,6 +95,10 @@ export const VIEWS = {
     label: 'Odpowiedzi w ankiecie', sub: 'opinie i nawyki według miejsca zamieszkania',
     layers: [], own: ['zones', 'answers'], ask: true, color: '#d6541c',
   },
+  closure: {
+    label: 'Zamknij ulicę', sub: 'gdzie pojadą samochody — model na policzonych ulicach',
+    layers: [], own: ['closure'], model: true, color: '#ff3b5c',
+  },
 }
 
 /** The view that shows a given layer best, for search results outside the

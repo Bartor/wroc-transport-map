@@ -183,6 +183,13 @@ export default function About({ data, onClose }) {
           według opisu odcinka w KBR.
         </li>
       </ul>
+      <h3>Zamykanie ulic</h3>
+      <p>
+        Model rozkłada 556 tys. przejazdów samochodów na sieć ulic z przepustowością, dopasowany do 228 przekrojów.
+        Dla przekrojów, których nie widział, mediana błędu to 17%. Pokazuje, które ulice zyskają i mniej więcej o ile;
+        nie zna zakazów skrętu, sygnalizacji ani wyznaczonych objazdów i nie liczy minut opóźnienia.
+      </p>
+
       <h3>Badanie mieszkańców — jak czytać</h3>
       <ul>
         <li>

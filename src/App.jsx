@@ -17,6 +17,7 @@ import {
   ChangeControls, ChangeMap, SpeedsControls, SpeedsMap, StationsControls, StationsMap, changeLegend,
   speedsLegend, stationsLegend,
 } from './MoreViews'
+import { CLOSE0, ClosureControls, ClosureMap, closureLegend, pickIn, useClosure } from './ClosureView'
 import { ASK0 } from './answers'
 import { readDays } from './days'
 import { changes } from './compare'
@@ -31,6 +32,7 @@ const morePanel = (name) => lazy(() => import('./MorePanels').then((m) => ({ def
 const ChangePanel = morePanel('ChangePanel')
 const StationsPanel = morePanel('StationsPanel')
 const SpeedsPanel = morePanel('SpeedsPanel')
+const ClosurePanel = lazy(() => import('./ClosurePanel'))
 
 // What the address asked for when the page opened, checked against what
 // exists; anything unknown falls back to the default.
@@ -108,6 +110,7 @@ export default function App() {
     ...TRIPS0, ...URL0.trip, paint: pick(URL0.trip?.paint, (x) => PAINTS[x], TRIPS0.paint),
   })
   const [ask, setAsk] = useState({ ...ASK0, ...URL0.ask })
+  const [closure, setClosure] = useState({ ...CLOSE0, ...URL0.closure })
   const [ownId, setOwnId] = useState(URL0.own || null)
   const [ownPanel, setOwnPanel] = useState(!isPhone() || !!URL0.own)
 
@@ -200,13 +203,13 @@ export default function App() {
     if (!data) return
     const h = hashOf({
       view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-      basemap, survey, net, sig, selected, off, flow, trip, ask, own: ownId,
+      basemap, survey, net, sig, selected, off, flow, trip, ask, closure, own: ownId,
     }, { ...DEFAULTS, occupancy: data.meta.carOccupancy.default })
     if (h !== window.location.hash && !(h === '' && !window.location.hash)) {
       window.history.replaceState(null, '', h || window.location.pathname + window.location.search)
     }
   }, [data, view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-    basemap, survey, net, sig, selected, off, flow, trip, ask, ownId])
+    basemap, survey, net, sig, selected, off, flow, trip, ask, closure, ownId])
 
   // The point the selection belongs to, shared by the map and the panel.
   const family = useMemo(
@@ -225,6 +228,11 @@ export default function App() {
   const askX = useAnswers(view === 'answers' ? files.answers : null, zones, ask, files[`answers/${askKey}`])
   const loadAnswers = useCallback(() => Promise.all(files.answers.questions.map((q) => loadFile(`answers/${q.key}`).then((tab) => ({ ...q, tab }))))
     .then((questions) => ({ ...files.answers, questions })), [files.answers])
+  const closureX = useClosure(files.closure, closure, view === 'closure')
+  const pickSegment = useCallback((k, one) => {
+    setClosure((c) => pickIn({ ...closureX, c }, k, c.tool, c.whole && !one))
+    setOwnPanel(true)
+  }, [closureX])
   const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])
   const dark = BASEMAPS[basemap].dark
   const pickTrip = useCallback((p, add) => {
@@ -250,6 +258,21 @@ export default function App() {
     if (ref) select({ kind: 'road', id, ref })
   }, [changeView, loaded, select])
   const extra = useMemo(() => {
+    if (view === 'closure' && closureX) {
+      return {
+        find: (needle) => {
+          const seen = new Map()
+          for (const q of closureX.segments) {
+            if (q.name?.toLowerCase().includes(needle)) {
+              const was = seen.get(q.name)
+              if (!was || q.len > was.len) seen.set(q.name, q)
+            }
+          }
+          return [...seen.values()].slice(0, 10).map((q) => ({ key: `s${q.id}`, label: q.name, sub: 'zamknij całą ulicę', color: VIEWS.closure.color, place: q.id }))
+        },
+        pick: (k) => setClosure((c) => pickIn({ ...closureX, c }, k, 'close', true)),
+      }
+    }
     if (!zones || !VIEWS[view].ask) return null
     const level = view === 'trips' ? trip.level : ask.level === 'd' ? 'd' : 'z'
     const list = level === 'd' ? zones.districts : zones.zones
@@ -258,7 +281,7 @@ export default function App() {
         .map((q) => ({ key: q.key, label: placeName(q), sub: q.level === 'd' ? (q.city ? 'osiedle' : 'gmina') : `rejon ${q.id} · ${q.district}`, color: VIEWS[view].color, place: q })),
       pick: (q) => (view === 'trips' ? setTrip((t) => ({ ...t, picked: [q.key] })) : setAsk((a) => ({ ...a, place: q.key }))),
     }
-  }, [zones, view, trip.level, ask.level])
+  }, [zones, view, trip.level, ask.level, closureX])
 
   const wantChoice = useCallback(() => fetchFile('choice'), [fetchFile])
   const sel0 = ownId ? { id: ownId } : null
@@ -278,6 +301,13 @@ export default function App() {
         controls: <AnswersControls x={askX} setA={setAsk} />,
         map: <AnswersMap x={askX} onPick={pickAsk} />, legend: answersLegend({ x: askX }),
         panel: <AnswersPanel x={askX} setA={setAsk} onClose={shut} loadAll={loadAnswers} />,
+      }
+    }
+    if (view === 'closure' && closureX) {
+      return {
+        controls: <ClosureControls x={closureX} setC={setClosure} />,
+        map: <ClosureMap x={closureX} onPick={pickSegment} />, legend: closureLegend({ x: closureX }),
+        panel: <ClosurePanel x={closureX} onClose={shut} />,
       }
     }
     if (view === 'change' && changed) {
