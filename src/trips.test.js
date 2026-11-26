@@ -393,6 +393,9 @@ suite('roadworks', () => {
     // only what lasted the whole study is marked
     expect(wholeStudy(w)).toBe(false)
     expect(wholeStudy({ ...w, from: '2022-08-27', to: '2024-06-22' })).toBe(true)
+    // districts whose trams went round it are told of the detour
+    const r = { ...w, reroute: { d: [5], what: 'objazd' } }
+    expect(worksIn([r], [5])).toEqual([{ ...r, what: 'objazd', via: true }])
     expect(isoDate('09.05.2024')).toBe('2024-05-09')
     expect(worksNear([w], [51.115, 17.033], ['09.05.2024'])).toEqual([w])
     expect(worksNear([w], [51.115, 17.033], ['2024-04-09'])).toEqual([])

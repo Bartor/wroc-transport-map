@@ -146,7 +146,7 @@ const dotsOf = (data, family, selected, off) => family.groups.flatMap((g) => g.m
 
 export default function MapView({
   data, visible, hours, period, wholeDay, people, net, nets, basemap, sig,
-  markers, labels, selected, onSelect, family, off, hot, setHot, own, ownLegend, ownOverlay, info, works,
+  markers, labels, selected, onSelect, family, off, hot, setHot, own, ownLegend, ownOverlay, info, works, worksAreas,
 }) {
   const index = useMemo(() => markerIndex(markers), [markers])
   // The model was fitted on the 8-hour common window; scale it to whatever
@@ -217,14 +217,14 @@ export default function MapView({
       <>
         <MapKeys info={info}>
           <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people }),
-            ...(works?.length ? [{ label: 'remont w czasie badań', color: WORKS_COLOR, line: true }, { note: 'remonty: grubo = zamknięte dla aut albo tramwajów, cienko = pas lub noce' }] : [])]} />
+            ...(works?.length ? [{ label: 'remont w czasie badań', color: WORKS_COLOR, line: true }, ...(worksAreas?.length ? [{ label: 'osiedla, przez które przebiegał remont lub objazd', color: WORKS_COLOR }] : [])] : [])]} />
         </MapKeys>
         {ownOverlay}
       </>
     )}>
       <FlyTo target={target} />
       {own}
-      {works?.length > 0 && <WorksLayer works={works} />}
+      {works?.length > 0 && <WorksLayer works={works} areas={worksAreas} />}
 
       {network && (
         <NetworkLayer key={net.mode} network={network}

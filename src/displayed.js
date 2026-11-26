@@ -13,7 +13,7 @@ const few = (list, k = 3) => (list.length > k ? `${list.slice(0, k).join(', ')} 
 
 const dug = (works, places) => {
   const list = worksIn(works, places.map(districtOf))
-  return list.length ? [{ label: 'Remonty', value: few(list.map((w) => `${w.name}, ${w.when}`)), warn: true }] : []
+  return list.length ? [{ label: 'Remonty', value: few(list.map((w) => `${w.via ? 'objazd: ' : ''}${w.name}, ${w.when}`)), warn: true }] : []
 }
 
 function ofTrips({ x, t, setT, period, spots, works }) {

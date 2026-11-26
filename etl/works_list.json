@@ -33,6 +33,14 @@
     ]
    ]
   ],
+  "reroute": {
+   "districts": [
+    "Karłowice-Różanka",
+    "Polanowice-Poświętne-Ligota",
+    "Osobowice-Rędzin"
+   ],
+   "what": "tramwaje z tej strony miasta nie jeździły Pomorską: od listopada 2022 linie 15 (Karłowice) oraz 70 i 74 (Poświętne) kursowały objazdem przez Trzebnicką, a do Osobowic dowoził autobus zastępczy 714 — do 22 czerwca 2024."
+  },
   "sources": [
    [
     "wroclaw.pl, otwarcie",
@@ -45,6 +53,10 @@
    [
     "tramwaje",
     "https://www.wroclaw.pl/komunikacja/przejazd-probny-tramwajow-przez-pomorska-skoda-gamma-i-dwie-pesy"
+   ],
+   [
+    "objazd tramwajów",
+    "https://www.wroclaw.pl/komunikacja/od-6-listopada-tramwaje-mpk-15-70-74-remont-pomorskiej"
    ]
   ]
  },

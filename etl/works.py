@@ -128,6 +128,8 @@ def main():
         length = sum(metres(a, b) for g in lines for a, b in zip(g, g[1:]))
         # only as many vertices as it takes
         thin = [[g[i] for i in range(len(g)) if i % 3 == 0 or i == len(g) - 1] for g in lines]
+        if w.get("reroute"):
+            w["reroute"]["d"] = [names.index(d) for d in w["reroute"].pop("districts")]
         out.append({**{k: v for k, v in w.items() if k not in ("ways", "districts")}, "d": sorted(own),
                     "g": [[[round(x, 5) for x in p] for p in g] for g in thin]})
         print("  %-14s %s - %s %6d m  %s" % (w["id"], w["from"], w["to"], length, ", ".join(names[k] for k in sorted(own))))

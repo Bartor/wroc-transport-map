@@ -1,12 +1,17 @@
 // Roadworks on the map, and in words where they matter.
-import { Polyline, LayerGroup } from 'react-leaflet'
+import { Polygon, Polyline, LayerGroup } from 'react-leaflet'
 import { Block, Hint } from '@bartor-net/ui-kit'
 import { MapTooltip, TipNote } from '@bartor-net/ui-kit/map'
 import { WORKS_COLOR } from './works'
 
-export function WorksLayer({ works }) {
+export function WorksLayer({ works, areas = [] }) {
   return (
     <LayerGroup>
+      {/* the districts they bear on, under them and not in the way of a click */}
+      {areas.map((a) => (
+        <Polygon key={a.key} positions={a.rings} interactive={false}
+          pathOptions={{ color: WORKS_COLOR, weight: 2, opacity: 0.85, dashArray: '2 5', fill: false }} />
+      ))}
       {works.filter((w) => w.g.length).map((w) => (
         <LayerGroup key={w.id}>
           <Polyline positions={w.g} interactive={false} pathOptions={{ color: '#15181e', weight: w.hard ? 7 : 5, opacity: 0.9, lineCap: 'butt' }} />
@@ -32,7 +37,7 @@ export function WorksBlock({ works, title = 'Remonty w czasie badań', hint }) {
       {title && <h4 style={{ color: WORKS_COLOR }}>{title}</h4>}
       {works.map((w) => (
         <p key={w.id} style={{ margin: '0 0 6px', fontSize: 12, borderLeft: `3px solid ${WORKS_COLOR}`, paddingLeft: 8 }}>
-          <b>{w.name}</b>{w.where ? `, ${w.where}` : ''} — {w.what} <span style={{ opacity: 0.75 }}>{w.when}{w.approx ? ' (daty przybliżone)' : ''}</span>{' '}
+          <b>{w.via ? `Objazd: ${w.name}` : w.name}</b>{w.where && !w.via ? `, ${w.where}` : ''} — {w.what} <span style={{ opacity: 0.75 }}>{w.when}{w.approx ? ' (daty przybliżone)' : ''}</span>{' '}
           {w.sources.map(([label, url], i) => <small key={url}>{i ? ', ' : ''}<a href={url} target="_blank" rel="noreferrer">{label}</a></small>)}
         </p>
       ))}

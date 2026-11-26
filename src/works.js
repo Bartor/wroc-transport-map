@@ -27,8 +27,12 @@ export function useWorks(all = false) {
 
 export const WORKS_COLOR = '#ffb400'
 
-/** Of some districts, by their numbers. */
-export const worksIn = (list, districts) => list.filter((w) => w.d.some((d) => districts.includes(d)))
+/** Of some districts, by their numbers: dug up there, or their trams sent
+ *  round it - then said so instead. */
+export const worksIn = (list, districts) => list.flatMap((w) => (w.d.some((d) => districts.includes(d)) ? [w]
+  : w.reroute?.d.some((d) => districts.includes(d)) ? [{ ...w, what: w.reroute.what, via: true }] : []))
+/** Every district a work bears on. */
+export const districtsOf = (w) => [...w.d, ...(w.reroute?.d || [])]
 /** The district of a place of either level. */
 export const districtOf = (p) => (p.level === 'd' ? p.i : p.d)
 
@@ -55,4 +59,4 @@ export const worksNear = (list, at, dates = [], km = 0.4) => {
   const days = dates.map(isoDate).filter(Boolean)
   return list.filter((w) => farFrom(w, at) <= km && (!days.length || days.some((d) => d >= w.from && d <= w.to)))
 }
-export const worksText = (list) => list.map((w) => `${w.name} (${w.when})`).join('; ')
+export const worksText = (list) => list.map((w) => `${w.via ? 'objazd tramwajów — ' : ''}${w.name} (${w.when})`).join('; ')
