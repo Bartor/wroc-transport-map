@@ -4,23 +4,31 @@ import { loadFile } from './data'
 
 let known = null
 let asked = null
+/**
+ * Only what lasted the whole study is marked: counts and diaries were of typical
+ * working days, rescheduled where needed - the report names only the farmers'
+ * protests of March and Pomorska, whose counting point was moved to Grodzka.
+ * A shorter closure most likely missed the days that were counted.
+ */
+export const STUDY = ['2024-03-21', '2024-06-20']
+export const wholeStudy = (w) => w.from <= STUDY[0] && w.to >= STUDY[1]
+
 /** What is known by now: for pictures, which cannot wait. */
-export const worksNow = () => known || []
-export function useWorks() {
+export const worksNow = () => (known || []).filter(wholeStudy)
+/** Those that lasted the whole study; `all` for every one. */
+export function useWorks(all = false) {
   const [list, setList] = useState(known)
   useEffect(() => {
     asked ||= loadFile('works').then((j) => { known = j.works; return known }).catch(() => { known = []; return known })
     asked.then(setList)
   }, [])
-  return list || []
+  return (list || []).filter((x) => all || wholeStudy(x))
 }
 
 export const WORKS_COLOR = '#ffb400'
 
-// trips were asked about from the day before the first interview to the last
-const ASKED = ['2024-04-05', '2024-06-20']
-/** Of some districts, by their numbers, while people there were asked. */
-export const worksIn = (list, districts) => list.filter((w) => w.to >= ASKED[0] && w.from <= ASKED[1] && w.d.some((d) => districts.includes(d)))
+/** Of some districts, by their numbers. */
+export const worksIn = (list, districts) => list.filter((w) => w.d.some((d) => districts.includes(d)))
 /** The district of a place of either level. */
 export const districtOf = (p) => (p.level === 'd' ? p.i : p.d)
 

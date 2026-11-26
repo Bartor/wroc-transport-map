@@ -363,8 +363,8 @@ export default memo(function Sidebar({
       {works.length > 0 && (
         <Panel title="Remonty w czasie badań" collapsible defaultOpen={false} badge={showWorks ? `${works.length}` : null} help={(
           <p>
-            Remonty i zamknięcia, które trwały między 21 marca a 20 czerwca 2024, gdy liczono ruch i pytano mieszkańców. Zmieniały
-            trasy i środki podróży w okolicy. Lista z komunikatów i prasy, może nie być pełna.
+            Remonty i zamknięcia, które trwały przez całe badania, od 21 marca do 20 czerwca 2024. Krótsze pomiary najpewniej
+            ominęły: liczono w typowe dni robocze, a raport KBR nie wspomina o innych utrudnieniach. Pełna lista — w opisie mapy.
           </p>
         )}>
           <Toggle checked={showWorks} onChange={setShowWorks} label="Pokaż na mapie" swatch={WORKS_COLOR} count={works.length} />

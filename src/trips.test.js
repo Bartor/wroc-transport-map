@@ -15,7 +15,7 @@ import { isSmall, smallText } from './Small'
 import { meanOf, onMean, perPeopleOf, pickWarning, togglePick, valueOf } from './answers'
 import { averages, averagesTable, links, meanFor } from './trips'
 import { arrowed, layout, loop, spread } from './arcs'
-import { isoDate, worksIn, worksNear } from './works'
+import { isoDate, wholeStudy, worksIn, worksNear } from './works'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
 
 // two city zones in one district, one commune around, one place further out
@@ -390,7 +390,9 @@ suite('roadworks', () => {
   it('are those of a district while it was asked, or near a count on its day', () => {
     expect(worksIn([w], [3])).toEqual([w])
     expect(worksIn([w], [4])).toEqual([])
-    expect(worksIn([{ ...w, from: '2024-03-01', to: '2024-04-01' }], [3])).toEqual([])
+    // only what lasted the whole study is marked
+    expect(wholeStudy(w)).toBe(false)
+    expect(wholeStudy({ ...w, from: '2022-08-27', to: '2024-06-22' })).toBe(true)
     expect(isoDate('09.05.2024')).toBe('2024-05-09')
     expect(worksNear([w], [51.115, 17.033], ['09.05.2024'])).toEqual([w])
     expect(worksNear([w], [51.115, 17.033], ['2024-04-09'])).toEqual([])

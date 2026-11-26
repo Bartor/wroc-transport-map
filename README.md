@@ -404,9 +404,12 @@ model (R² 0,50 wobec 0,63), bo na parę rejonów wypada ok. 1,4 podróży.
 
 `etl/works_list.json` to 27 remontów i zamknięć z czasu pomiarów i ankiet (21 marca –
 20 czerwca 2024), ręcznie spisanych z komunikatów miasta, MPK i prasy, każdy ze źródłem.
-`etl/works.py` dobiera im kształt ze ścieżek OSM i osiedla; mapa pokazuje je przerywaną
-linią, a panele, róg mapy i obrazy wymieniają je przy osiedlach i przy punktach
-policzonych w pobliżu (400 m) w dniach remontu. Lista może nie być pełna, a końce
+`etl/works.py` dobiera im kształt ze ścieżek OSM i osiedla. Zaznaczane są tylko te, które
+trwały przez całe badania (Pomorska, Wilkszyńska, estakada al. Sobieskiego): pomiary
+robiono w typowe dni robocze, a raport z etapu III (rozdz. 3.2) wymienia tylko protesty
+rolników w marcu i przeniesienie punktu z Pomorskiej na Grodzką. Mapa pokazuje je
+przerywaną linią, a panele, róg mapy i obrazy wymieniają je przy osiedlach i przy
+punktach w pobliżu (400 m); krótsze są w opisie mapy. Lista może nie być pełna, a końce
 drobnych prac są często przybliżone.
 
 ## Zamykanie ulic

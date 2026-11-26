@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Hint, Modal, TextTable } from '@bartor-net/ui-kit'
 import { parentOf } from './data'
 import { WorksBlock } from './WorksLayer'
-import { useWorks } from './works'
+import { useWorks, wholeStudy } from './works'
 
 // What the map is, how and when the counts were taken, how the map turns
 // them into what it shows, and what was going on in the city meanwhile.
@@ -49,7 +49,21 @@ const REPO = 'https://github.com/Bartor/wroc-transport-map'
 const Out = ({ href, children }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>
 
 /** Everything that was dug up or shut at the time. */
-const AllWorks = () => <WorksBlock works={useWorks()} title="" />
+function AllWorks() {
+  const all = useWorks(true)
+  return (
+    <>
+      <p>
+        Pomiary ruchu i dzienniczki podróży dotyczą typowych dni roboczych, a harmonogram w razie potrzeby zmieniano. Raport KBR
+        wymienia tylko protesty rolników w marcu i Pomorską, gdzie punkt R1_20A przeniesiono na Grodzką (R1_21B). Na mapie i przy
+        osiedlach zaznaczamy więc tylko to, co trwało przez całe badania (21 marca – 20 czerwca 2024):
+      </p>
+      <WorksBlock works={all.filter(wholeStudy)} title="" />
+      <p>Krótsze remonty i zamknięcia z tego czasu — pomiary najpewniej ich ominęły, a w ankietach mogły trafić na pojedyncze dni:</p>
+      <WorksBlock works={all.filter((w) => !wholeStudy(w))} title="" />
+    </>
+  )
+}
 
 /** A survey and the appendix it comes from. */
 const survey = (name, where) => <>{name}<small>{where}</small></>
