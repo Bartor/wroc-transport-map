@@ -131,6 +131,7 @@ function openLoop(pts, weight) {
   return k === 1 ? pts : pts.map((p) => [x + (p[0] - x) * k, y + (p[1] - y) * k])
 }
 
+const GAP = 2           // between the lines of a link, px
 const HUB = [5, 38]         // how far from its middle the lines of a place end, px
 /**
  * Flows as they are drawn, in pixels. A flow with `fw` or `bw` has arrowheads,
@@ -142,8 +143,9 @@ export function layout(flows, project, width = 6) {
   const top = Math.max(1, ...flows.filter((f) => !f.loop).map((f) => f.w))
   const items = flows.map((f) => {
     const weight = f.fixed ?? Math.max(f.hotAs ? 2 : 1, width * (f.loop ? 0.7 : 1) * Math.sqrt(Math.min(1, f.w / top))) + (f.strong ? 2 : 0)
+    const lines = (f.parts || []).filter((p) => p.share >= 0.04).length
     const heads = f.fixed ? null : headSizes(f, weight)
-    return { f, weight, heads, a: project(f.from), b: project(f.to) }
+    return { f, weight, heads, lines, a: project(f.from), b: project(f.to) }
   })
   const hubs = new Map()
   for (const it of items) {
@@ -153,7 +155,7 @@ export function layout(flows, project, width = 6) {
     for (const [at, p, toward, side, head] of ends) {
       const key = at.join()
       if (!hubs.has(key)) hubs.set(key, { p, ends: [] })
-      hubs.get(key).ends.push({ it, side, angle: Math.atan2(toward[1] - p[1], toward[0] - p[0]), px: Math.max(it.weight, head * 1.24) + 1.5 })
+      hubs.get(key).ends.push({ it, side, angle: Math.atan2(toward[1] - p[1], toward[0] - p[0]), px: Math.max(it.weight + (it.lines > 1 ? GAP * (it.lines - 1) + 1.8 * it.lines : 0), head * 1.24) + 1.5 })
     }
   }
   for (const { p, ends } of hubs.values()) {
@@ -165,26 +167,34 @@ export function layout(flows, project, width = 6) {
   }
   return items.map(({ f, weight, heads, a, b, a2, b2 }) => {
     const pts = f.path ? f.path.map(project) : f.loop ? openLoop(loop(f.from, f.loop).map(project), weight) : curve(a2 || a, b2 || b)
-    const { line, tip, tail } = arrowed(pts, heads || {})
-    // too thin to tell apart is not told apart
-    let parts = (f.parts || []).filter((p) => p.share * weight >= 0.9)
+    const bare = arrowed(pts, heads || {})
+    // a line a mode, side by side with a gap: as wide as it would be alone
+    // with the share it has, and never so thin that it cannot be seen
+    let parts = (f.parts || []).filter((p) => p.share >= 0.04)
     if (parts.length < 2) parts = [{ color: parts.length && f.parts ? parts[0].color : f.color, share: 1 }]
     const all = parts.reduce((s, p) => s + p.share, 0)
-    let at = 0
+    const widths = parts.map((p) => (parts.length > 1 ? Math.max(1.8, weight * (p.share / all)) : weight))
+    const span = widths.reduce((s, x) => s + x, 0) + GAP * (parts.length - 1)
+    let at = -span / 2
     const strands = []
     const tops = []
-    for (const p of parts) {
-      const s = p.share / all
-      const u0 = 2 * at - 1
-      const u1 = 2 * (at + s) - 1
-      strands.push({ color: p.color, weight: parts.length > 1 ? Math.max(1, weight * s) + 0.3 : weight, pts: aside(line, ((u0 + u1) / 2) * (weight / 2)) })
-      // the head is sliced the way the line is
-      const slice = ([l, t, r], x, y) => [[r[0] + (l[0] - r[0]) * x, r[1] + (l[1] - r[1]) * x], t, [r[0] + (l[0] - r[0]) * y, r[1] + (l[1] - r[1]) * y]]
-      if (tip) tops.push({ color: p.color, pts: slice(tip, (u0 + 1) / 2, (u1 + 1) / 2) })
-      if (tail) tops.push({ color: p.color, pts: slice(tail, (1 - u1) / 2, (1 - u0) / 2) })
-      at += s
-    }
-    return { f, weight, line, strands, heads: tops, outlines: [tip, tail].filter(Boolean) }
+    const outlines = []
+    parts.forEach((p, k) => {
+      const wk = widths[k]
+      const off = at + wk / 2
+      at += wk + GAP
+      if (parts.length === 1) {
+        strands.push({ color: p.color, weight: wk, pts: bare.line })
+        for (const h of bare.heads) tops.push({ color: p.color, pts: h })
+        outlines.push(...bare.heads)
+        return
+      }
+      const own = arrowed(aside(pts, off), heads ? headSizes(f, wk) : {})
+      strands.push({ color: p.color, weight: wk, pts: own.line })
+      for (const h of own.heads) tops.push({ color: p.color, pts: h })
+      outlines.push(...own.heads)
+    })
+    return { f, weight: span, line: bare.line, strands, heads: tops, outlines }
   })
 }
 
