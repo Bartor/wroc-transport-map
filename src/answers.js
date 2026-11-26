@@ -2,7 +2,9 @@
 // answers.json holds, per question and group of people, rows for zones,
 // districts and wholes: [people, how bunched they are by interviewer, and by
 // round, thousandths on each option, the same corrected - opinions only, a mean
-// in thousandths and the same per person - numbers only].
+// in thousandths and the same per person - numbers only; then, for opinions, the
+// uncertainty of each corrected share and of its difference from the city's,
+// in thousandths (sds of draws), and the share of the place one interviewer asked].
 //
 // Who asked matters more than where: between interviewers the answers differ
 // several times as much as between districts. The corrected weights have the
@@ -55,8 +57,23 @@ function rhoOf(q, opts) {
  * count for less than as many picked apart. Corrected shares have the
  * interviewer taken off, all but what he shares with the place.
  */
+/** Whether the model of interviewers stands behind every option asked about. */
+const modelled = (q, row, opts, raw) => !raw && !!row?.[7] && !!q.model && opts.every((o) => q.model.fitted[o])
+const fromDraws = (sds, opts) => Math.min(1, 1.96 * Math.sqrt(opts.reduce((s, o) => s + (sds[o] / 1000) ** 2, 0)))
+
+/** How far a place must be from its city to tell them apart: less than its
+ *  own margin, as much of the uncertainty is the city's too. */
+export function gapOf(q, row, opts, raw = false) {
+  if (modelled(q, row, opts, raw) && row[8]?.some((x) => x > 0)) return fromDraws(row[8], opts)
+  return marginOf(q, row, opts, raw)
+}
+/** Nearly all of a place was asked by one interviewer: it cannot be told from them. */
+export const oneAsker = (row) => (row?.[9] ?? 0) >= 800
+
 export function marginOf(q, row, opts, raw = false) {
   if (!row || row[0] < 2 || isNone(q, opts)) return null
+  // the model's own: from draws of its effects
+  if (modelled(q, row, opts, raw)) return fromDraws(row[7], opts)
   if (onMean(q, opts)) {
     const [byAsker, byRound] = q.rhoMean
     return 1.96 * q.sd * Math.sqrt((1 + byAsker * (row[1] - 1) + byRound * (row[2] - 1)) / row[0])

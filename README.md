@@ -380,14 +380,31 @@ Fakty łączą sąsiadów także wtedy, gdy pytali ich różni ludzie; opinie pr
 186 z 293 rejonów miało więcej niż jednego ankietera. Skrajny zapisał „wszystkie auta
 do centrum” u 98% z 492 osób, inni w tych samych rejonach u 51%.
 
-Mapa odpowiedzi odejmuje więc od opinii — nie od faktów — efekt ankietera (dwa zestawy efektów, ankieterów
-i osiedli, ściągane do zera o tyle, ile może być przypadkiem), a przedziały liczą
-jeszcze zgrupowanie w rundach. W symulacjach zostaje 41–70% prawdziwych różnic, a błąd
-jest mniejszy niż bez korekty (0,08–0,10 wobec 0,11–0,14); przedziały mają pokrycie 91–98%. Poziomy dla miasta nie są korygowane; losowanie
-ankieterów daje: priorytet tramwajów 60% (54–66), kierowcy za 48% (40–56) i przeciw
-30% (22–40), „wszystkie auta do centrum” 53% (42–64), udział samochodu 39,8% (35–45).
-„Kierowcy” to osoby na co dzień jeżdżące samochodem. Przedziały nie obejmują 31% odpowiedzi
-na zaproszenie do badania. Różnica między niekierowcami a kierowcami jest pewniejsza (25 p.p., 18–31).
+Mapa odpowiedzi koryguje więc opinie — nie fakty — modelem (`etl/interviewers.py`,
+`etl/glmm.py`): dla każdej odpowiedzi regresja logistyczna z losowymi efektami ankietera,
+osiedla i rejonu (skrzyżowanymi: każdy ankieter pracował średnio w ok. 6 osiedlach) oraz
+cechami badanych (wiek, płeć, wykształcenie, zajęcie, środek, samochody, osoby i dzieci w
+domu, kłopoty z poruszaniem się), dopasowana przybliżeniem Laplace'a. Wartość osoby to
+przewidywanie z uśrednionym ankieterem; sumują ją wagi KBR. Na skali logitu odchylenie
+ankieterów wynosi 1–3, osiedli 0,3–0,5, a cechy badanych go nie zmniejszają (w badaniach
+twarzą w twarz zwykle ICC 0,02–0,1). ± pochodzi ze 120 losowań efektów (×1,15 na
+niepewność samych wariancji); różnica obszaru od miasta ma własne ±, mniejsze, bo
+niepewność poziomu jest wspólna. Obszar, w którym ponad 80% badanych pytał jeden
+ankieter, nie jest oceniany osobno. Odpowiedzi rzadsze niż 50 zostają bez korekty.
+
+Sprawdzenia: w symulacji na prawdziwym przydziale ankieterów model odtwarza wariancje
+(1,95/0,45/0,55 wobec 2,0/0,4/0,5) i daje płaską mapę, gdy osiedla się nie różnią
+(poprzednia korekta: rozrzut 0,045). Układ osiedli z dwóch losowych połów ankieterów
+zgadza się (korelacja) na 0,47 dla priorytetu tramwajów, 0,31 dla dróg rowerowych, 0,18
+dla wjazdu aut do centrum, a dla ocen komunikacji ok. 0 — wtedy aplikacja ostrzega.
+Ankieterów, którzy prawie wszystkim zapisali to samo (≤3% lub ≥97%, co najmniej 35 p.p.
+od reszty), nie usuwamy; model dopasowuje się drugi raz bez nich i aplikacja podaje, o ile
+zmieniają się osiedla. Poziom miasta jest niepewny o kilka do kilkunastu punktów: priorytet
+tramwajów 60% ±8, wśród jeżdżących na co dzień samochodem 51% ±8, w domach bez
+samochodu 72% ±9. Przedziały nie obejmują 31%
+odpowiedzi na zaproszenie do badania. Literatura: O'Muircheartaigh i Campanelli 1998,
+Schnell i Kreuter 2005, Vassallo, Durrant i Smith 2017, West i Blom 2017; MRP: Gelman i
+Little 1997.
 
 **Zmiana środka.** Nikogo o nią nie pytano. 47% (42–53) podróży kierowców z Wrocławia (41% wszystkich) to jazda
 w pojedynkę, z wygody, dla czasu lub kosztu, do 5 km albo do/z centrum — cechy, nie

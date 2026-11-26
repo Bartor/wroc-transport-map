@@ -217,12 +217,11 @@ export default function About({ data, onClose }) {
           między osiedlami do ok. 25% mogą być przypadkiem.
         </li>
         <li>
-          <b>Ankieter.</b> Odpowiedzi zależą od tego, kto pytał, bardziej niż od osiedla: w pytaniu o wjazd do
-          centrum ankieter wyjaśnia 38% różnic, osiedle ponad to ok. 1%. Nie wynika to z okolicy, w której pracował:
+          <b>Ankieter.</b> Odpowiedzi na pytania o opinie zależą od tego, kto pytał, bardziej niż od osiedla i cech badanych:
           różni ankieterzy w tym samym rejonie dostawali odpowiedzi niepodobne do siebie, a ten sam — podobne nawet ponad 4 km
-          dalej. Dlatego mapa odpowiedzi jest domyślnie
-          skorygowana o ankietera, a przedziały są szerokie. Poparcie dla priorytetu tramwajów to 60%,
-          a przy losowaniu ankieterów 54–66%; wśród osób jeżdżących na co dzień samochodem 48% (40–56%). Przedziały nie
+          dalej. Mapa odpowiedzi jest więc domyślnie skorygowana modelem z efektami ankietera, osiedla i rejonu: pokazuje, co
+          zapisałby przeciętny ankieter, a ± pochodzi z modelu. Poziom całego miasta jest niepewny o kilka do kilkunastu
+          punktów, a układ osiedli w części pytań się nie powtarza — wtedy aplikacja o tym mówi. Przedziały nie
           obejmują tego, że na udział zgodziło się ok. 31% gospodarstw.
         </li>
         <li>

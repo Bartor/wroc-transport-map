@@ -14,7 +14,7 @@ import { FEW_ANSWERS, Small } from './Small'
 import Stack, { Bar, KINDS, ORDERED, SCALE } from './Stack'
 import { answersCard, answersName, draw, everythingTable, viewTable } from './surveyCards'
 import {
-  answersTable, meanDigits, meanLabel, meanOf, onMean, perPeopleOf, valueOf, clampOpts, diverging, isNone, isWhole, pickWarning, togglePick, fullName, marginOf, optionShares, rgb, rowAt, sentiment, sentimentNote, sentimentOf,
+  answersTable, meanDigits, meanLabel, meanOf, onMean, perPeopleOf, valueOf, clampOpts, diverging, isNone, isWhole, pickWarning, togglePick, fullName, marginOf, gapOf, oneAsker, optionShares, rgb, rowAt, sentiment, sentimentNote, sentimentOf,
   SENT_COLOR, shareOf, spanOf, startOpts, surface, valuesOf,
 } from './answers'
 
@@ -37,7 +37,8 @@ export function useAnswers(A, Z, a0, tab) {
   const opts = useMemo(() => (q ? clampOpts(q, a.opts ?? startOpts(q)) : []), [q, a.opts])
   const places = Z && (a.level === 'd' ? Z.districts : Z.zones)
   const city = q && rowAt(q, group, 'a', 'wro')
-  const mid = q ? valueOf(q, city, opts, true) ?? 0 : 0
+  // the city as the map has it: corrected where the map is
+  const mid = q ? valueOf(q, city, opts, a0.raw) ?? 0 : 0
   const vals = useMemo(() => {
     if (!q || !places) return []
     // the smoothed map still answers a hover with the zone underneath
@@ -77,11 +78,12 @@ const enough = (a) => ENOUGH[a.level === 'd' ? 'd' : 'z']
 export function AnswersMap({ x, onPick, dark }) {
   const { a, q, opts, mid, span, vals, heat, sent } = x
   const picked = useMemo(() => new Set(a.place ? [a.place] : []), [a.place])
+  const blur = (v) => (!a.raw && !!q.opinion && oneAsker(v.row)) || Math.abs(v.v - mid) < gapOf(q, v.row, opts, a.raw)
   const items = useMemo(() => vals.map((v) => ({
     ...v, color: v.v == null ? null : rgb(diverging(v.v, mid, span, sent, dark)),
-    alpha: v.v == null ? null : Math.min(0.85, (0.12 + 0.5 * Math.min(1, v.n / enough(a))) * fillBoost()) * (Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw) ? 0.5 : 1),
-    // a difference the sample cannot tell from none
-    faint: v.v != null && Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw),
+    alpha: v.v == null ? null : Math.min(0.85, (0.12 + 0.5 * Math.min(1, v.n / enough(a))) * fillBoost()) * (blur(v) ? 0.5 : 1),
+    // a difference the sample cannot tell from none, or a place of one interviewer
+    faint: v.v != null && blur(v),
   })), [vals, a, mid, span, sent, q, opts, dark])
   return (
     <>
@@ -92,6 +94,7 @@ export function AnswersMap({ x, onPick, dark }) {
           {row ? (
             <>
               {optText(q, opts)}: <b>{valText(q, opts, v)}</b> {marginText(q, opts, marginOf(q, row, opts, a.raw))}<Small n={n} few={FEW_ANSWERS} /><br />
+              {!a.raw && !!q.opinion && oneAsker(row) && <><TipNote>(!) prawie wszystkich pytał jeden ankieter — osobno nie do oceny</TipNote><br /></>}
               <TipNote>{n} odpowiedzi · Wrocław {valText(q, opts, mid)}{perPeopleOf(row) != null ? ` · ${fmt(perPeopleOf(row))} ${q.per}` : ''}</TipNote>
             </>
           ) : <TipNote>za mało odpowiedzi</TipNote>}
@@ -166,20 +169,20 @@ export function AnswersControls({ x, setA }) {
         {!!q.opinion && <Toggle checked={!a.raw} onChange={(on) => set({ raw: !on })} label="Skoryguj o ankietera" help={(
           <>
             <p>
-              Odpowiedzi różnią się między ankieterami kilka razy bardziej niż między osiedlami — w pytaniu
-              o wjazd do centrum sam numer ankietera wyjaśnia 38% różnic, a osiedle ponad to ok. 1%. Każdy z 42
-              ankieterów pracował w kilku osiedlach Wrocławia, więc surowa mapa opinii pokazuje w dużej mierze, kto pytał.
+              Odpowiedzi na pytania o opinie zależą od tego, kto pytał, bardziej niż od osiedla, rejonu i cech badanych razem.
+              W tym samym rejonie odpowiedzi osób pytanych przez różnych ankieterów prawie się nie zgadzają, a pytanych przez
+              tego samego — także ponad 4 km od siebie — wyraźnie. Wiek, płeć, wykształcenie czy samochód w domu tego nie
+              tłumaczą: ankieterzy nie trafiali po prostu na innych ludzi.
             </p>
             <p>
-              To nie skutek tego, że ankieter pracował w jednej okolicy: w tym samym rejonie odpowiedzi osób pytanych
-              przez różnych ankieterów prawie się nie zgadzają (korelacja ok. 1%), a pytanych przez tego samego —
-              także ponad 4 km od siebie — zgadzają się wyraźnie (8–48%). Jeden ankieter zapisał „wszystkie auta do
-              centrum” u 98% z 492 osób; inni w tych samych rejonach u 51%.
+              Korekta to model (regresja logistyczna dla każdej odpowiedzi) z efektami ankietera, osiedla i rejonu oraz cechami
+              badanych. Każdy ankieter pracował w kilku osiedlach, więc da się je rozdzielić. Mapa pokazuje, co zapisałby
+              przeciętny ankieter, a ± — niepewność z modelu: poziom całego miasta jest niepewny o kilka do kilkunastu punktów,
+              bo ankieterów było tylko ok. 40. Różnice osiedli od miasta są pewniejsze niż same poziomy.
             </p>
             <p>
-              Korekta odejmuje od odpowiedzi to, o ile u danego ankietera różnią się one od reszty, z poprawką
-              na osiedla, w których pytał. Wygładza też część prawdziwych różnic — zostaje z nich ok. połowa —
-              bo ankieterzy pracowali na swoich terenach. Faktów, jak liczba samochodów, nie poprawiamy.
+              Ankieterów, którzy prawie wszystkim zapisali to samo, nie usuwamy — model i tak niewiele z nich bierze — ale
+              wymieniamy ich i podajemy, ile zmieniłoby się bez nich. Faktów, jak liczba samochodów, nie poprawiamy.
             </p>
           </>
         )} />}
@@ -188,6 +191,29 @@ export function AnswersControls({ x, setA }) {
             caption={`Wygładzenie: ${String(a.km).replace('.', ',')} km`} />
         )}
       </Panel>
+    </>
+  )
+}
+
+const pl1 = (x) => String(x).replace('.', ',')
+/** What the model of interviewers says about this question. */
+function ModelNotes({ q }) {
+  const m = q.model
+  const shown = m.shown.map((o) => q.options[o]).join(' + ')
+  const sd = m.sd[String(m.shown[0])]
+  return (
+    <>
+      <li>
+        Skorygowane modelem: tak, jakby pytał przeciętny ankieter{sd ? `; dla „${q.options[m.shown[0]]}” różnice między ankieterami są ok. ${pl1((sd[0] / Math.max(0.05, sd[1])).toFixed(0))} razy większe niż między osiedlami` : ''}.
+        {m.fitted.some((f) => !f) && ' Odpowiedzi wybrane rzadziej niż przez 50 osób są bez korekty.'}
+      </li>
+      {m.halves != null && <li>Układ osiedli dla „{shown}” w dwóch losowych połowach ankieterów: korelacja {pl1(m.halves.toFixed(2))} (1 — taki sam, 0 — żaden związek).</li>}
+      {m.flag.length > 0 && m.sens && (
+        <li>
+          Ankieterzy nr {m.flag.join(', ')} zapisali „{shown}” prawie wszystkim albo prawie nikomu. Bez ich {m.sens.n} odpowiedzi
+          osiedla zmieniają się średnio o {pl1((m.sens.mean / 10).toFixed(1))} p.p., najwyżej o {pl1((m.sens.max / 10).toFixed(1))}.
+        </li>
+      )}
     </>
   )
 }
@@ -201,7 +227,7 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
   const v = valueOf(q, row, opts, a.raw)
   const mg = (r, o = opts) => marginText(q, o, marginOf(q, r, o, a.raw))
   const gname = A.groups.find((g) => g.key === group).label
-  const sure = (y) => Math.abs(y.v - mid) >= marginOf(q, y.row, opts, a.raw)
+  const sure = (y) => Math.abs(y.v - mid) >= gapOf(q, y.row, opts, a.raw) && !(!a.raw && q.opinion && oneAsker(y.row))
   const ranked = vals.filter((y) => y.v != null && y.n >= enough(a) && sure(y)).sort((s, t) => t.v - s.v)
   const by = A.groups.filter((g) => q.tab[g.key]).map((g) => {
     const r = p ? rowAt(q, g.key, level, p.i) : rowAt(q, g.key, 'a', 'wro')
@@ -227,6 +253,10 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
         {around && <Fact label="Gminy wokół">{valText(q, opts, valueOf(q, around, opts))}</Fact>}
       </Facts>
       {warning && <Warn>{warning}</Warn>}
+      {!a.raw && q.model?.halves != null && q.model.halves < 0.3 && (
+        <Warn>Układ osiedli w tym pytaniu się nie powtarza: dwie losowe połowy ankieterów dają różne mapy. Pewniejsze są wynik całego miasta i różnice między grupami.</Warn>
+      )}
+      {!a.raw && q.opinion && p && oneAsker(row) && <Warn>Prawie wszystkich tutaj pytał jeden ankieter, więc obszaru nie da się ocenić osobno: wynik to wzór miasta i to, kim są tutejsi badani.</Warn>}
       {optText(q, opts).length > 34 && <Hint>„{optText(q, opts)}”</Hint>}
       {row && row[0] < 30 && <Warn>Tylko {row[0]} odpowiedzi — to za mało, by oceniać ten obszar osobno.</Warn>}
       <WorksBlock works={works} hint="Odpowiedzi o codziennych podróżach mogą być pod wpływem remontu." />
@@ -288,7 +318,8 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
         {q.note && <li>{q.note}</li>}
         <li>Te same osoby pytały kierowców i niekierowców, więc różnice między grupami są pewniejsze niż same poziomy i niż różnice między osiedlami.</li>
         {!!q.home && <li>Liczone po gospodarstwach, ich wagami; grupa = gospodarstwa, w których jest choć jedna taka osoba.</li>}
-        {p && !a.raw && !!q.opinion && <li>Wartości obszarów po korekcie o ankietera; poziom całego miasta bez niej.</li>}
+        {!a.raw && q.model && <ModelNotes q={q} />}
+        {a.raw && !!q.opinion && <li>Bez korekty o ankietera: mapa pokazuje w dużej mierze, kto pytał.</li>}
         <li>Obszary z mniej niż {A.minN} odpowiedziami są puste. Na udział w badaniu zgodziło się ok. 31% gospodarstw; przedziały tego nie obejmują.</li>
         <li>KBR 2024, badanie ankietowe w gospodarstwach domowych (zał. do Raportu II).</li>
       </Notes>

@@ -16,6 +16,8 @@ import collections, json, math, os, re, sys, urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ages
+import interviewers
+from interviewers import COVER
 import diary
 import geocode
 import places
@@ -705,25 +707,131 @@ def icc(y, key):
     return float(max(0.0, (msb - msw) / (msb + (n0 - 1) * msw))) if msb > 0 else 0.0
 
 
-def without_asker(y, asker, place, rounds=25):
-    """Answers less what the interviewer adds to them.
-
-    People answer some interviewers differently than others, far more than they
-    do in one district than in the next, and an interviewer works in few
-    districts. Two sets of effects, interviewers' and districts', each shrunk
-    by how much of it could be chance, are fitted in turn until they settle;
-    the interviewers' is taken off."""
+def opinion_models(Q, frames, zones, at):
+    """Every opinion question fitted, option by option, with interviewers
+    averaged out (etl/interviewers.py): per person the corrected value of each
+    option and its draws, and what the app says about the fit."""
     import numpy as np
-    mu = y.mean()
-    u, v = np.zeros(asker.max() + 1), np.zeros(place.max() + 1)
-    na, np_ = np.bincount(asker, minlength=len(u)), np.bincount(place, minlength=len(v))
-    for _ in range(rounds):
-        for key, n, e, other in ((place, np_, v, u[asker]), (asker, na, u, v[place])):
-            r = y - mu - other
-            rho = icc(r, key)
-            lam = (1 - rho) / rho if rho > 1e-4 else 1e6
-            e[:] = np.bincount(key, r, len(e)) / (n + lam)
-    return y - u[asker]
+    plans, tasks = [], []
+    for q in Q:
+        if not q["opinion"]:
+            continue
+        F = frames[int(bool(q.get("home")))]
+        P, zi, di, w, asker = (F[x] for x in ("P", "zi", "di", "w", "asker"))
+        got = [q["f"](p) for p in P]
+        idx = np.flatnonzero(np.array([x is not None for x in got]) & (zi >= 0))
+        k = len(q["options"])
+        Y = np.zeros((len(idx), k))
+        for r, i in enumerate(idx):
+            for o in got[i] or ():
+                Y[r, o] = 1
+        fac = [np.unique(v, return_inverse=True)[1] for v in (asker[idx], di[idx], zi[idx])]
+        X = interviewers.traits([P[i] for i in idx])
+        good = list(q["good"]) if q["good"] and not q["multi"] else None
+        sets = [[o] for o in range(k)] + ([good] if good and len(good) > 1 else [])
+        fit = []
+        for s in sets:
+            y = Y[:, s].sum(axis=1)
+            ok = min(y.sum(), len(y) - y.sum()) >= interviewers.FEW
+            fit.append(len(tasks) if ok else None)
+            if ok:
+                tasks.append((y, X, fac, len(tasks), interviewers.DRAWS))
+        # what the app shows first: the good answers, or the commonest one
+        raw = w[idx] @ Y / w[idx].sum()
+        best = max((o for o in range(k) if not re.match(r"(nie odczuwam|inne)", q["options"][o])), key=lambda o: raw[o], default=0)
+        shown = good or [best]
+        y = Y[:, shown].sum(axis=1)
+        # interviewers who recorded nearly one answer for everyone
+        ids = np.array([P[i]["askerId"] for i in idx])
+        # - and that far from everyone else: all good ratings are common
+        mean = float(w[idx] @ y / w[idx].sum())
+        flag = sorted({str(a) for a in set(ids) if (ids == a).sum() >= 30 and not 0.03 < y[ids == a].mean() < 0.97
+                       and abs(y[ids == a].mean() - mean) >= 0.35})
+        keep = ~np.isin(ids, flag)
+        extra = {}
+        if flag and keep.sum() > 200 and min(y[keep].sum(), keep.sum() - y[keep].sum()) >= interviewers.FEW:
+            sub_fac = [np.unique(f[keep], return_inverse=True)[1] for f in fac]
+            extra["sens"] = len(tasks)
+            tasks.append((y[keep], X[keep], sub_fac, len(tasks), 0))
+        # each half of the interviewers alone
+        rng = np.random.default_rng(7)
+        people = np.unique(fac[0])
+        halves = []
+        for _ in range(interviewers.SPLITS):
+            one = np.isin(fac[0], rng.permutation(people)[:len(people) // 2])
+            pair = []
+            for part in (one, ~one):
+                sub_fac = [np.unique(f[part], return_inverse=True)[1] for f in fac]
+                pair.append((part, len(tasks)))
+                tasks.append((y[part], X[part], sub_fac, len(tasks), 0))
+            halves.append(pair)
+        plans.append(dict(q=q, idx=idx, Y=Y, w=w[idx], di=di[idx], ids=ids, keep=keep, sets=sets, fit=fit,
+                          shown=shown, flag=flag, extra=extra, halves=halves, y=y, good=good))
+    log("  answers: %d fits of %d opinion questions" % (len(tasks), len(plans)))
+    res = interviewers.run(tasks)
+    out = {}
+    for pl in plans:
+        q, Y, k = pl["q"], pl["Y"], pl["Y"].shape[1]
+        n, R = len(Y), interviewers.DRAWS
+        V = Y.copy()
+        D = np.repeat(Y[:, :, None], R, axis=2).astype(np.float32)
+        fitted = [0] * k
+        sds = {}
+        for s, j in zip(pl["sets"], pl["fit"]):
+            r = res[j] if j is not None else None
+            if r is None or len(s) > 1:
+                continue
+            V[:, s[0]], D[:, s[0], :], fitted[s[0]] = r["mean"], r["draws"], 1
+            sds[s[0]] = r["sd"]
+        if not q["multi"] and any(fitted):
+            # one answer each: the options add up to one, and to the direct
+            # fit of the good ones where there is one
+            g = pl["good"]
+            j = pl["fit"][-1] if g and len(g) > 1 else None
+            rg = res[j] if j is not None else None
+            if rg is not None:
+                rest = [o for o in range(k) if o not in g]
+                for arr, pg in [(V, rg["mean"])] + [(D[:, :, r_], rg["draws"][:, r_]) for r_ in range(R)]:
+                    for part, total in ((g, pg), (rest, 1 - pg)):
+                        s_ = arr[:, part].sum(axis=1)
+                        arr[:, part] *= np.where(s_ > 0, total / np.maximum(s_, 1e-9), 0)[:, None]
+            else:
+                V /= np.maximum(V.sum(axis=1, keepdims=True), 1e-9)
+                D /= np.maximum(D.sum(axis=1, keepdims=True), 1e-9)
+        # districts: what changes without the flagged interviewers, and how
+        # well the halves agree
+        w, di, y = pl["w"], pl["di"], pl["y"]
+        enough = [x for x in np.unique(di) if (di == x).sum() >= 40]
+        shown = V[:, pl["shown"]].sum(axis=1)
+        base = district_means(shown, w, di, enough)
+        sens = None
+        if "sens" in pl["extra"] and res[pl["extra"]["sens"]] is not None:
+            keep = pl["keep"]
+            alt = district_means(res[pl["extra"]["sens"]]["mean"], w[keep], di[keep],
+                                 [x for x in enough if (di[keep] == x).sum() >= 20])
+            dif = [abs(alt[x] - base[x]) for x in alt]
+            sens = {"n": int((~keep).sum()), "mean": round(1000 * float(np.mean(dif))), "max": round(1000 * float(np.max(dif)))} if dif else None
+        rs = []
+        for (a_, ja), (b_, jb) in pl["halves"]:
+            if res[ja] is None or res[jb] is None:
+                continue
+            both = [x for x in enough if (di[a_] == x).sum() >= 15 and (di[b_] == x).sum() >= 15]
+            if len(both) < 8:
+                continue
+            ma = district_means(res[ja]["mean"], w[a_], di[a_], both)
+            mb = district_means(res[jb]["mean"], w[b_], di[b_], both)
+            rs.append(float(np.corrcoef([ma[x] for x in both], [mb[x] for x in both])[0, 1]))
+        out[q["key"]] = {"value": V, "draws": D, "about": {
+            "fitted": fitted, "sd": {str(o): v for o, v in sds.items()}, "shown": pl["shown"],
+            "flag": pl["flag"], "sens": sens, "halves": round(float(np.median(rs)), 2) if rs else None}}
+        log("  %-8s fitted %d/%d, interviewer sd %s, halves r=%s, flagged %s" % (
+            q["key"], sum(fitted), k, "/".join("%.1f" % v[0] for v in sds.values()),
+            out[q["key"]]["about"]["halves"], pl["flag"]))
+    return out
+
+
+def district_means(values, w, di, keep):
+    return {x: float(w[di == x] @ values[di == x] / w[di == x].sum()) for x in keep}
 
 
 def stage_answers(d, zones):
@@ -751,8 +859,10 @@ def stage_answers(d, zones):
                 "in": {g: np.array([any(test(m) for m in of(p)) for p in P]) for g, _, test in GROUPS}}
 
     frames = {0: frame(0), 1: frame(1)}
+    Q = questions(d)
+    models = opinion_models(Q, frames, zones, at)
     out = []
-    for q in questions(d):
+    for q in Q:
         F = frames[int(bool(q.get("home")))]
         P, zi, di, w, asker, walk, wro, tested = (F[k] for k in ("P", "zi", "di", "w", "asker", "walk", "wro", "in"))
         got = [q["f"](p) for p in P]
@@ -768,16 +878,21 @@ def stage_answers(d, zones):
         idx = np.flatnonzero(asked)
         _, ai = np.unique(asker[idx], return_inverse=True)
         _, wi = np.unique(walk[idx], return_inverse=True)
-        A = Y.copy()
         rho = []
         sets = [[o] for o in range(k)] + ([q["good"]] if len(q["good"]) > 1 else [])
         for s in sets:
             y = Y[idx][:, s].sum(axis=1)
-            a = without_asker(y, ai, di[idx]) if q["opinion"] else y
-            if len(s) == 1 and q["opinion"]:
-                A[idx, s[0]] = a
-            # between interviewers; then between rounds, the interviewer taken off
-            rho.append([round(icc(y, ai), 3), round(icc(a, wi), 3)])
+            # between interviewers, and between rounds
+            rho.append([round(icc(y, ai), 3), round(icc(y, wi), 3)])
+        M = models.get(q["key"])
+        if M:
+            # every person asked: as an average interviewer would have recorded
+            V = np.zeros_like(Y)
+            V[idx] = M["value"]
+            Dr = np.zeros((len(P), k, M["draws"].shape[2]), np.float32)
+            Dr[idx] = M["draws"]
+            city = {g: np.einsum("i,ikr->kr", w[asked & tested[g] & wro], Dr[asked & tested[g] & wro])
+                    / max(1e-9, w[asked & tested[g] & wro].sum()) for g, _, _ in GROUPS}
         tabs = {}
         for g, _, _ in GROUPS:
             me = asked & tested[g]
@@ -798,12 +913,15 @@ def stage_answers(d, zones):
                     # random one of them sees it
                     bunch = lambda key: (np.bincount(np.unique(key[i], return_inverse=True)[1]) ** 2).sum() / len(i)
                     row = [len(i), round(bunch(asker), 1), round(bunch(walk), 1), [round(1000 * x) for x in raw]]
-                    if lv != "a" and q["opinion"]:
-                        # shares again: none below nothing, adding up as they did
-                        fixed = np.maximum(0, ww @ A[i] / ww.sum())
-                        if not q["multi"] and fixed.sum() > 0:
-                            fixed *= raw.sum() / fixed.sum()
-                        row.append([round(1000 * x) for x in np.minimum(1, fixed)])
+                    if M:
+                        # corrected shares, how uncertain they are, how far that
+                        # differs from the city's own, and how much of the place
+                        # one interviewer asked
+                        m = np.einsum("i,ikr->kr", ww, Dr[i]) / ww.sum()
+                        row += [[round(1000 * x) for x in ww @ V[i] / ww.sum()], None, None,
+                                [round(1000 * COVER * x) for x in m.std(axis=1)],
+                                [round(1000 * COVER * x) for x in (m - city[g]).std(axis=1)],
+                                round(1000 * np.bincount(asker[i]).max() / len(i))]
                     if number is not None:
                         # on average, and of everyone in those households
                         row += [None] * (4 - len(row) + 1)
@@ -819,6 +937,8 @@ def stage_answers(d, zones):
             if q.get("spread"):
                 var += float(np.mean([q["spread"](P[i]) for i in idx]))
             more = {"sd": round(var ** 0.5, 3), "rhoMean": [round(icc(y, ai), 3), round(icc(y, wi), 3)]}
+        if M:
+            more["model"] = M["about"]
         out.append({**{x: v for x, v in q.items() if x not in ("f", "num", "spread")}, "number": int(number is not None),
                     **more, "rho": rho[:k], "rhoGood": rho[k] if len(rho) > k else None,
                     "groups": list(tabs)})

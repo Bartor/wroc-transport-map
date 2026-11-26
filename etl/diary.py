@@ -125,6 +125,8 @@ def build():
     runs = {"asker": {}, "round": {}}
     for p in people.values():
         p["home"] = hid.setdefault(p["home"], len(hid))
+        # the survey's own number of the interviewer, as the city publishes it
+        p["askerId"] = str(p["asker"])
         for k, seen in runs.items():
             p[k] = seen.setdefault(p[k], len(seen))
         del p["person"]

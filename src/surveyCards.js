@@ -1,7 +1,7 @@
 // Pictures of the survey views: what is asked or filtered, the map, the bars,
 // and the notes that have to travel with them.
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
-import { SENT_COLOR, diverging, fullName, marginOf, meanDigits, meanLabel, meanOf, optionShares, perPeopleOf, pickWarning, rgb, sentimentNote, shareOf, valueOf } from './answers'
+import { SENT_COLOR, diverging, fullName, gapOf, marginOf, meanDigits, meanLabel, meanOf, optionShares, perPeopleOf, pickWarning, rgb, sentimentNote, shareOf, valueOf } from './answers'
 import { ORDERED } from './Stack'
 import { uiDark } from './ink'
 import { diffColor } from './closureColors'
@@ -426,8 +426,8 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend, optL
         areas: vals.map((t) => ({
           rings: t.p.rings, on: picked.has(t.p.key), c: t.p.c,
           color: t.v == null ? null : rgb(diverging(t.v, mid, span, sent, false)),
-          alpha: t.v == null ? null : (0.25 + 0.75 * Math.min(1, t.n / enough)) * (Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw) ? 0.5 : 1),
-          faint: t.v != null && Math.abs(t.v - mid) < marginOf(q, t.row, opts, a.raw),
+          alpha: t.v == null ? null : (0.25 + 0.75 * Math.min(1, t.n / enough)) * (Math.abs(t.v - mid) < gapOf(q, t.row, opts, a.raw) ? 0.5 : 1),
+          faint: t.v != null && Math.abs(t.v - mid) < gapOf(q, t.row, opts, a.raw),
           name: a.level === 'h' ? null : t.p.name, text: t.v == null ? null : text(t.v) + smallText(t.n, FEW_ANSWERS),
           sub: t.v == null ? null : `${mtext(t.row)} · n=${t.n}`, weight: t.n,
         })),
@@ -444,7 +444,8 @@ export function answersCard({ x, p, row, by, gname, ranked, colors, legend, optL
       `(!) — mniej niż ${FEW_ANSWERS} odpowiedzi.`,
       'Udziały ważone. ± to przybliżony przedział 95%, który uwzględnia, że odpowiedzi zależą od ankietera.',
       !q.opinion ? 'Blade pola: różnica od średniej w granicach błędu.' : a.raw ? 'Mapa bez korekty o ankietera: odpowiedzi różnią się między ankieterami bardziej niż między osiedlami.'
-        : `Wartości obszarów skorygowane o ankietera. ${a.level === 'h' ? 'Blade miejsca: mało odpowiedzi.' : 'Blade pola: różnica od średniej w granicach błędu.'}`,
+        : `Skorygowane modelem: tak, jakby pytał przeciętny ankieter; ± z modelu. ${a.level === 'h' ? 'Blade miejsca: mało odpowiedzi.' : 'Blade pola: różnica od miasta w granicach błędu albo obszar jednego ankietera.'}`,
+      ...(!a.raw && q.model?.halves != null ? [`Układ osiedli w dwóch losowych połowach ankieterów: korelacja ${String(q.model.halves.toFixed(2)).replace('.', ',')}${q.model.halves < 0.3 ? ' — mapa osiedli się nie powtarza' : ''}.`] : []),
       ...(a.level !== 'h' && !ranked.length && !pickWarning(q, opts) ? ['Żaden obszar nie różni się od średniej bardziej, niż wynosi błąd.'] : []),
       ...(q.multi ? ['Można było wskazać kilka odpowiedzi.'] : []),
     ],
