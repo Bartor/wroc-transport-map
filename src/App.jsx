@@ -68,9 +68,10 @@ export default function App() {
     on: !!URL0.net && !!NET_MODES[URL0.net],
     mode: pick(URL0.net, (m) => NET_MODES[m], 'road'), min: 3000,
   })
-  const [theme, setTheme0] = useTheme('light')
+  const [theme, setTheme0] = useTheme('dark')
   const [basemapPick, setBasemap] = useState(pick(URL0.basemap, (b) => BASEMAPS[b], null))
-  const basemap = basemapPick || (theme === 'dark' ? DEFAULT_BASEMAP : 'lightGray')
+  // survey areas are coloured: they read best on a light map, whatever the page
+  const basemap = basemapPick || (theme === 'dark' && !VIEWS[view].ask ? DEFAULT_BASEMAP : 'lightGray')
   // a new theme brings its own basemap
   const setTheme = useCallback((t) => { setTheme0(t); setBasemap(null) }, [setTheme0])
   const [sig, setSig] = useState({ on: !!URL0.sig, filter: URL0.sig || 'candidates' })
@@ -246,7 +247,8 @@ export default function App() {
   const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])
   const dark = BASEMAPS[basemap].dark
   setInkDark(dark)
-  setUiDark(theme === 'dark')
+  // orders of colours on the panels run as on the map
+  setUiDark(dark)
   const pickTrip = useCallback((p, add) => {
     setTrip((t) => ({
       ...t,

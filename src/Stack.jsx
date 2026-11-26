@@ -45,7 +45,10 @@ export function Bar({ parts, on, height = 22, onPick, hot, setHot }) {
   return (
     <div style={{ display: 'flex', gap: 2, height, margin: '4px 0' }}>
       {parts.filter((p) => p.share > 0).map((p) => {
-        const dim = h != null ? h !== p.key : some && !on.has(p.key)
+        // what is picked stands out; what is pointed at is only outlined
+        const picked = some && on.has(p.key)
+        const dim = some && !picked
+        const pointed = h === p.key
         return (
           <button key={p.key} type="button" title={`${p.label}: ${pct(p.share)}${p.title ? ` · ${p.title}` : ''}`}
             aria-pressed={some ? on.has(p.key) : undefined}
@@ -53,8 +56,9 @@ export function Bar({ parts, on, height = 22, onPick, hot, setHot }) {
             onMouseEnter={() => light(p.key)} onMouseLeave={() => light(null)}
             style={{
               flex: `${p.share} 1 0`, minWidth: 2, border: 0, padding: 0, borderRadius: 2, background: p.color,
-              opacity: dim ? 0.35 : 1, color: ink(p.color), font: '600 11px system-ui', overflow: 'hidden',
-              cursor: onPick ? 'pointer' : 'default', outlineOffset: 1,
+              opacity: dim ? (pointed ? 0.7 : 0.35) : 1, color: ink(p.color), font: '600 11px system-ui', overflow: 'hidden',
+              cursor: onPick ? 'pointer' : 'default', outline: pointed ? '2px solid var(--kit-strong)' : 'none', outlineOffset: 1,
+              boxShadow: picked ? 'inset 0 -3px 0 var(--kit-strong)' : 'none', position: 'relative', zIndex: pointed ? 1 : 0,
             }}>
             {p.share >= 0.07 ? pct(p.share) : ''}
           </button>
@@ -78,9 +82,10 @@ export default function Stack({ parts, on, onPick }) {
               display: 'inline-flex', alignItems: 'center', gap: 5, border: 0, background: 'none', padding: '1px 0',
               color: 'inherit', font: 'inherit', cursor: onPick ? 'pointer' : 'default',
               fontWeight: some && on.has(p.key) ? 700 : 400,
-              opacity: (hot != null && hot !== p.key) || (hot == null && some && !on.has(p.key)) ? 0.5 : 1,
+              opacity: some && !on.has(p.key) ? 0.55 : 1, textDecoration: hot === p.key ? 'underline' : 'none',
             }}>
-            <span style={{ width: 9, height: 9, borderRadius: 2, background: p.color, flex: 'none' }} />
+            <span style={{ width: 9, height: 9, borderRadius: 2, background: p.color, flex: 'none', boxShadow: some && on.has(p.key) ? '0 0 0 2px var(--kit-strong)' : 'none' }} />
+            {some && on.has(p.key) && <span aria-hidden="true">✓</span>}
             {p.label} <b style={{ fontVariantNumeric: 'tabular-nums' }}>{pct(p.share)}</b>
             {p.value != null && <span style={{ opacity: 0.65, fontVariantNumeric: 'tabular-nums' }}>{fmt(p.value)}</span>}
             {p.note && <span style={{ opacity: 0.65 }}>{p.note}</span>}

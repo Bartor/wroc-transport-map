@@ -256,7 +256,7 @@ export function AnswersPanel({ x, setA, onClose, loadAll }) {
             }))} />
           ) : by.map(({ g, r, v: s }) => (
             <div key={g.key} style={{ marginBottom: 4 }}>
-              <button type="button" onClick={() => set({ group: g.key })} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', border: 0, padding: 0, background: 'none', color: 'inherit', font: 'inherit', fontSize: 12, cursor: 'pointer', fontWeight: g.key === group ? 700 : 400 }}>
+              <button type="button" onClick={() => set({ group: g.key })} style={{ display: 'flex', justifyContent: 'space-between', width: '100%', border: 0, padding: '1px 4px', borderLeft: `3px solid ${g.key === group ? 'var(--kit-accent)' : 'transparent'}`, borderRadius: 3, background: g.key === group ? 'var(--kit-hover)' : 'none', color: 'inherit', font: 'inherit', fontSize: 12, cursor: 'pointer', fontWeight: g.key === group ? 700 : 400 }}>
                 <span>{g.label}</span><span><b>{valText(q, opts, s)}</b> <small style={{ opacity: 0.7 }}>{mg(r)} · n={fmt(r[0])}<Small n={r[0]} few={FEW_ANSWERS} /></small></span>
               </button>
               <Bar height={16} on={new Set(opts.map(String))} onPick={(key) => toggle(+key)}
