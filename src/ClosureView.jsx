@@ -7,6 +7,7 @@ import { Chips, Field, Hint, LinkButton, Panel, Slider, Warn, fmt, fmtEst, isPho
 import { DOWN, NOISE, UP, diffColor } from './closureColors'
 import { ASSUME, CASES, KINDS, MOST, SOURCES } from './evaporation'
 import { setHot, useHot } from './hot'
+import { ink } from './ink'
 
 export const CLOSE0 = { closed: [], narrow: [], reduce: 0, whole: false, tool: 'close' }
 
@@ -138,11 +139,11 @@ function styleOf(x, s, hot) {
   if (x.result) {
     const d = both(x.result.after, s.id) - v
     if (Math.abs(d) >= NOISE) {
-      return { color: on ? '#ffffff' : diffColor(d), weight: Math.min(13, 2 + Math.sqrt(Math.abs(d)) / 9) + (on ? 2 : 0), opacity: 0.95, dashArray: narrow ? '6 6' : null }
+      return { color: on ? ink() : diffColor(d), weight: Math.min(13, 2 + Math.sqrt(Math.abs(d)) / 9) + (on ? 2 : 0), opacity: 0.95, dashArray: narrow ? '6 6' : null }
     }
   }
   if (narrow) return { color: '#ffd166', weight: on ? 6 : 4, opacity: 1, dashArray: '6 6' }
-  return { color: on ? '#ffffff' : '#7f93ad', weight: (MAJOR.has(s.cls) ? 1.2 : 0.8) + Math.sqrt(Math.max(0, v)) / 60 + (on ? 2 : 0),
+  return { color: on ? ink() : '#7f93ad', weight: (MAJOR.has(s.cls) ? 1.2 : 0.8) + Math.sqrt(Math.max(0, v)) / 60 + (on ? 2 : 0),
     opacity: on ? 1 : x.result ? 0.28 : 0.6, dashArray: null }
 }
 
@@ -378,8 +379,8 @@ function Vanish({ c, setC }) {
 // ---------------------------------------------------------- the button on the map
 const bar = {
   position: 'absolute', top: 14, left: '50%', zIndex: 1000, whiteSpace: 'nowrap', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 12,
-  padding: '8px 10px 8px 14px', borderRadius: 10, background: 'rgba(22,24,30,.94)', color: '#e8ebf0', fontSize: 13,
-  boxShadow: '0 4px 18px rgba(0,0,0,.45)', border: '1px solid rgba(255,255,255,.12)', maxWidth: 'calc(100% - 24px)', flexWrap: 'wrap', justifyContent: 'center',
+  padding: '8px 10px 8px 14px', borderRadius: 10, background: 'var(--kit-float)', color: 'var(--kit-text)', fontSize: 13,
+  boxShadow: '0 4px 18px var(--kit-shadow)', border: '1px solid var(--kit-line)', maxWidth: 'calc(100% - 24px)', flexWrap: 'wrap', justifyContent: 'center',
 }
 const button = { border: 0, borderRadius: 7, padding: '8px 14px', font: '600 13px system-ui', cursor: 'pointer', background: '#ff3b5c', color: '#fff' }
 
@@ -415,7 +416,7 @@ export function ClosureBar({ x, setC }) {
             <span>{warming ? 'Przygotowanie modelu…' : 'Liczenie objazdów…'}</span><span style={{ fontVariantNumeric: 'tabular-nums' }}>{Math.round(100 * share)}%</span>
           </div>
           <div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(100 * share)}
-            style={{ height: 8, borderRadius: 4, background: 'rgba(255,255,255,.15)', overflow: 'hidden' }}>
+            style={{ height: 8, borderRadius: 4, background: 'var(--kit-track)', overflow: 'hidden' }}>
             <div style={{ height: '100%', width: `${100 * share}%`, background: '#ff3b5c' }} />
           </div>
         </div>
@@ -426,7 +427,7 @@ export function ClosureBar({ x, setC }) {
             <span style={{ opacity: 0.7 }}> · {fmt(m)} m{x.stale ? ' · wynik nieaktualny' : done ? ' · policzone' : ''}</span>
           </span>
           {!done && <button type="button" style={button} onClick={() => x.calculate(c)}>Oblicz objazdy</button>}
-          <button type="button" style={{ ...button, background: 'transparent', border: '1px solid rgba(255,255,255,.25)', padding: '7px 10px' }}
+          <button type="button" style={{ ...button, background: 'transparent', color: 'var(--kit-text)', border: '1px solid var(--kit-line-strong)', padding: '7px 10px' }}
             onClick={() => setC({ ...c, closed: [], narrow: [] })}>Wyczyść</button>
         </>
       )}

@@ -1,7 +1,7 @@
 import {
   Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState,
 } from 'react'
-import { AppMessage, AppShell, ErrorBoundary, Hint, LinkButton, Panel, hoursOf, isPhone } from '@bartor-net/ui-kit'
+import { AppMessage, AppShell, ErrorBoundary, Hint, LinkButton, Panel, hoursOf, isPhone, useTheme } from '@bartor-net/ui-kit'
 import { BASEMAPS, DEFAULT_BASEMAP } from '@bartor-net/ui-kit/map'
 import {
   loadAll, loadFile, LAYERS, ROAD_METRICS, PRESETS, rangeLabel, periodShare,
@@ -19,6 +19,7 @@ import {
 } from './MoreViews'
 import { showing } from './displayed'
 import { districtsOf, useWorks } from './works'
+import { setInkDark, setUiDark } from './ink'
 import { CLOSE0, ClosureBar, ClosureControls, ClosureMap, closureLegend, pickIn, useClosure } from './ClosureView'
 import { ASK0 } from './answers'
 import { readDays } from './days'
@@ -41,7 +42,8 @@ const ClosurePanel = lazy(() => import('./ClosurePanel'))
 const URL0 = readHash()
 const DEFAULTS = {
   view: 'nodes', range: PRESETS.am.range, metric: 'all', aggregate: true,
-  roadPeople: true, basemap: DEFAULT_BASEMAP, flow: FLOW0,
+  // the basemap follows the theme until one is picked
+  roadPeople: true, basemap: 'auto', flow: FLOW0,
 }
 const pick = (v, ok, def) => (v !== undefined && ok(v) ? v : def)
 
@@ -66,7 +68,11 @@ export default function App() {
     on: !!URL0.net && !!NET_MODES[URL0.net],
     mode: pick(URL0.net, (m) => NET_MODES[m], 'road'), min: 3000,
   })
-  const [basemap, setBasemap] = useState(pick(URL0.basemap, (b) => BASEMAPS[b], DEFAULTS.basemap))
+  const [theme, setTheme0] = useTheme('light')
+  const [basemapPick, setBasemap] = useState(pick(URL0.basemap, (b) => BASEMAPS[b], null))
+  const basemap = basemapPick || (theme === 'dark' ? DEFAULT_BASEMAP : 'lightGray')
+  // a new theme brings its own basemap
+  const setTheme = useCallback((t) => { setTheme0(t); setBasemap(null) }, [setTheme0])
   const [sig, setSig] = useState({ on: !!URL0.sig, filter: URL0.sig || 'candidates' })
   // permanent map labels: numbers, shares (%), either or both; with neither
   // the details come on hover
@@ -207,13 +213,13 @@ export default function App() {
     if (!data) return
     const h = hashOf({
       view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-      basemap, survey, net, sig, selected, off, flow, trip, ask, closure, own: ownId, works: showWorks,
+      basemap: basemapPick || 'auto', survey, net, sig, selected, off, flow, trip, ask, closure, own: ownId, works: showWorks,
     }, { ...DEFAULTS, occupancy: data.meta.carOccupancy.default })
     if (h !== window.location.hash && !(h === '' && !window.location.hash)) {
       window.history.replaceState(null, '', h || window.location.pathname + window.location.search)
     }
   }, [data, view, range, metric, areas, aggregate, wholeDay, roadPeople, occupancy, labels,
-    basemap, survey, net, sig, selected, off, flow, trip, ask, closure, ownId, showWorks])
+    basemapPick, survey, net, sig, selected, off, flow, trip, ask, closure, ownId, showWorks])
 
   // The point the selection belongs to, shared by the map and the panel.
   const family = useMemo(
@@ -239,6 +245,8 @@ export default function App() {
   }, [closureX])
   const changed = useMemo(() => (files.compare && loaded ? changes(files.compare, loaded) : null), [files.compare, loaded])
   const dark = BASEMAPS[basemap].dark
+  setInkDark(dark)
+  setUiDark(theme === 'dark')
   const pickTrip = useCallback((p, add) => {
     setTrip((t) => ({
       ...t,
@@ -358,7 +366,7 @@ export default function App() {
         wholeDay={wholeDay} setWholeDay={setWholeDay}
         people={people} roadPeople={roadPeople} setPeople={setPeople}
         occupancy={occupancy} setOccupancy={setOccupancy}
-        net={net} setNet={setNet} nets={nets} loadNet={loadNet} basemap={basemap} setBasemap={setBasemap}
+        net={net} setNet={setNet} nets={nets} loadNet={loadNet} basemap={basemap} setBasemap={setBasemap} theme={theme} setTheme={setTheme}
         sig={sig} setSig={setSig} labels={labels} setLabels={setLabels}
         markers={markers} onSelect={select} selected={selected}
         sheetOpen={sheetOpen} setSheetOpen={setSheetOpen} extra={extra}

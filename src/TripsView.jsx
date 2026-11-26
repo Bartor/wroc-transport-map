@@ -8,6 +8,7 @@ import { CircleLayer, MapLabels, MapTooltip, TipNote, TipRow } from '@bartor-net
 import ScenarioPanel from './ScenarioPanel'
 import { Small, smallText } from './Small'
 import { Arcs, ZoneLayer } from './ZoneLayer'
+import { fillBoost, ink } from './ink'
 import { rng, scatter, loopSize } from './arcs'
 import { DAY_MODES, daysOf } from './days'
 import { useHot } from './hot'
@@ -141,7 +142,7 @@ function withScale(p) {
       label: s.from == null ? `poniżej ${f(s.to ?? 0)}` : s.to == null ? `${f(s.from)} i więcej` : `${f(s.from)} – ${f(s.to)}`,
     })) }
 }
-const alphaOf = (n) => 0.24 + 0.4 * Math.min(1, n / THIN)
+const alphaOf = (n) => Math.min(0.85, (0.24 + 0.4 * Math.min(1, n / THIN)) * fillBoost())
 
 // -------------------------------------------------------------------- the map
 /** Where a trip's end is drawn: at its address, along its street, or anywhere
@@ -310,7 +311,7 @@ export function TripsMap({ x, dark, onPick, setT }) {
         <CircleLayer points={spots.map((s, i) => ({ s, i })).filter(({ i }) => perS.n[i] > 0).sort((a, b) => perS.w[b.i] - perS.w[a.i]).map(({ s, i }) => {
           const on = t.filters.spot?.[0] === i
           return { key: `${i}${on ? '+' : ''}${hot.spot === i ? '!' : ''}`, lat: s.lat, lon: s.lon, i, s, r: sqrtRadius(perS.w[i], topSpot, 4, 20),
-            style: { color: on || hot.spot === i ? '#ffffff' : '#0b1016', weight: on || hot.spot === i ? 3 : 1, fillColor: S.modes[perS.mode(i)].color, fillOpacity: 0.85 } }
+            style: { color: on || hot.spot === i ? ink() : '#0b1016', weight: on || hot.spot === i ? 3 : 1, fillColor: S.modes[perS.mode(i)].color, fillOpacity: 0.85 } }
         })} onPick={(p) => setT((q) => { const { spot, ...rest } = q.filters; return { ...q, filters: spot?.[0] === p.i ? rest : { ...rest, spot: [p.i] } } })}
           tip={({ s, i }) => (
             <MapTooltip>

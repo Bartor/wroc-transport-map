@@ -3,6 +3,7 @@
 import { fixed, fmt, fmtEst, renderCard, slug, splitBlock } from '@bartor-net/ui-kit'
 import { SENT_COLOR, diverging, fullName, marginOf, meanDigits, meanLabel, meanOf, optionShares, perPeopleOf, pickWarning, rgb, sentimentNote, shareOf, valueOf } from './answers'
 import { ORDERED } from './Stack'
+import { uiDark } from './ink'
 import { diffColor } from './closureColors'
 import { arc, layout } from './arcs'
 import { FEW_ANSWERS, smallText } from './Small'
@@ -50,7 +51,7 @@ export const barsBlock = ({ title, rows, color, whole }) => (ctx, y0, { W, PAD, 
 /** An order runs dark to light on the dark page, and the other way on paper. */
 const paper = (color) => {
   const i = ORDERED.indexOf(color)
-  return i < 0 ? color : ORDERED[ORDERED.length - 1 - i]
+  return i < 0 || !uiDark() ? color : ORDERED[ORDERED.length - 1 - i]
 }
 
 /** Parts of a whole as one bar with a legend; several rows share the legend. */

@@ -4,6 +4,7 @@ import L from 'leaflet'
 import { layout } from './arcs'
 import { diverging } from './answers'
 import { setHot } from './hot'
+import { ink } from './ink'
 
 // Hundreds of outlines: one canvas rather than an element each. Lines stay
 // elements: a second canvas on top would take the pointer from the areas.
@@ -13,7 +14,7 @@ const areaCanvas = () => { areas ||= L.canvas({ padding: 0.4 }); return areas }
 const Zone = memo(function Zone({ item, on, hot, onPick, tip, quiet, plain }) {
   const fill = quiet ? 0.001 : !item.color ? 0.05 : item.alpha ?? (item.faint ? 0.22 : 0.62)
   const style = {
-    color: on || hot ? '#ffffff' : plain ? '#8d99ae' : '#0b1016', weight: on ? 2.5 : hot ? 2 : 0.7,
+    color: on || hot ? ink() : plain ? '#8d99ae' : '#0b1016', weight: on ? 2.5 : hot ? 2 : 0.7,
     opacity: on || hot ? 1 : plain ? 0.4 : 0.55,
     fillColor: item.color || '#5c6675', fillOpacity: hot ? Math.max(fill, 0.25) : fill,
   }
@@ -48,7 +49,7 @@ const Arc = memo(function Arc({ it, tip, hotAs, onPick, opacity, cased, on }) {
   const handlers = useMemo(() => (hotAs ? {
     mouseover: () => setHot(hotAs), mouseout: () => setHot({}), ...(onPick ? { click: onPick } : {}),
   } : undefined), [hotAs, onPick])
-  const edge = on ? '#ffffff' : '#0b1016'
+  const edge = on ? ink() : '#0b1016'
   return (
     <>
       {/* an edge, so that it stands off whatever is under it */}

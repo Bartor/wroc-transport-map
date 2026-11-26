@@ -1,6 +1,7 @@
 // Parts of a whole as one bar, with its legend: press a part to filter by it.
 import { useState } from 'react'
 import { fmt } from '@bartor-net/ui-kit'
+import { uiDark } from './ink'
 
 const pct = (s) => (s > 0 && s < 0.005 ? '<1%' : `${Math.round(100 * s)}%`)
 const ink = (hex) => {
@@ -17,7 +18,7 @@ export const KINDS = ['#3987e5', '#0ca30c', '#c98500', '#b5179e', '#6cc5d9', '#9
 export const isOrdered = (key) => ['km', 'min', 'in', 'cars', 'size', 'age', 'edu', 'change', 'wa', 'wb', 'wc'].includes(key)
 
 /** Colours for a dimension's options: its own, else by whether they have an order. */
-export const colorsOf = (d, ordered, dark = true) => d.options.map((o, i) => o.color
+export const colorsOf = (d, ordered, dark = uiDark()) => d.options.map((o, i) => o.color
   || (ordered ? ORDERED[Math.round(((dark ? i : d.options.length - 1 - i) * (ORDERED.length - 1)) / Math.max(1, d.options.length - 1))] : KINDS[i % KINDS.length]))
 
 // An answer on a scale, from for to against, and no opinion.

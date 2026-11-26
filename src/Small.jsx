@@ -10,6 +10,6 @@ export const smallText = (n, few) => (isSmall(n, few) ? ' (!)' : '')
 export function Small({ n, few = FEW_TRIPS }) {
   return isSmall(n, few) && (
     <abbr title={`Mała próba: ${n} — wartość orientacyjna (poniżej ${few})`} aria-label={`mała próba: ${n}`}
-      style={{ color: '#e0a526', fontWeight: 700, textDecoration: 'none', cursor: 'help' }}> (!)</abbr>
+      style={{ color: 'var(--kit-warn)', fontWeight: 700, textDecoration: 'none', cursor: 'help' }}> (!)</abbr>
   )
 }

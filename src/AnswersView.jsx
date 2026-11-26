@@ -7,6 +7,7 @@ import {
 import { MapTooltip, TipNote } from '@bartor-net/ui-kit/map'
 import { HeatImage, ZoneLayer } from './ZoneLayer'
 import Bars from './Bars'
+import { fillBoost, uiDark } from './ink'
 import { WorksBlock } from './WorksLayer'
 import { districtOf, useWorks, worksIn } from './works'
 import { FEW_ANSWERS, Small } from './Small'
@@ -52,7 +53,7 @@ export function useAnswers(A, Z, a0, tab) {
 /** Colours of a question's answers: good to bad, or kinds of things. */
 export const optColors = (q) => q.options.map((_, i) => {
   // a number runs from dark to light
-  if (q.number || q.key === 'school0') return ORDERED[Math.round((i * (ORDERED.length - 1)) / Math.max(1, q.options.length - 1))]
+  if (q.number || q.key === 'school0') return ORDERED[Math.round(((uiDark() ? i : q.options.length - 1 - i) * (ORDERED.length - 1)) / Math.max(1, q.options.length - 1))]
   if (q.multi) return SENT_COLOR[sentimentOf(q, i)]
   // modes have their colours everywhere
   if (q.key === 'usual') return ['#e4572e', '#3987e5', '#b5179e', '#0ca30c'][i]
@@ -78,7 +79,7 @@ export function AnswersMap({ x, onPick, dark }) {
   const picked = useMemo(() => new Set(a.place ? [a.place] : []), [a.place])
   const items = useMemo(() => vals.map((v) => ({
     ...v, color: v.v == null ? null : rgb(diverging(v.v, mid, span, sent, dark)),
-    alpha: v.v == null ? null : (0.12 + 0.5 * Math.min(1, v.n / enough(a))) * (Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw) ? 0.5 : 1),
+    alpha: v.v == null ? null : Math.min(0.85, (0.12 + 0.5 * Math.min(1, v.n / enough(a))) * fillBoost()) * (Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw) ? 0.5 : 1),
     // a difference the sample cannot tell from none
     faint: v.v != null && Math.abs(v.v - mid) < marginOf(q, v.row, opts, a.raw),
   })), [vals, a, mid, span, sent, q, opts, dark])

@@ -94,7 +94,7 @@ export default memo(function Sidebar({
   data, view, setView, visible, survey, setSurvey, works, showWorks, setShowWorks, range, setRange,
   metric, setMetric, areas, setAreas, hours, period, aggregate, setAggregate,
   wholeDay, setWholeDay, people, roadPeople, setPeople, occupancy, setOccupancy,
-  net, setNet, nets, loadNet, basemap, setBasemap, sig, setSig, labels, setLabels,
+  net, setNet, nets, loadNet, basemap, setBasemap, theme, setTheme, sig, setSig, labels, setLabels,
   markers, onSelect, selected, sheetOpen, setSheetOpen, off, own, extra,
 }) {
   const [about, setAbout] = useState(false)   // the "O mapie" dialog
@@ -163,8 +163,14 @@ export default memo(function Sidebar({
       peek={`${period} · ustawienia i wyniki`} expandLabel="Rozwiń panel ustawień i wyników"
       open={sheetOpen} setOpen={setSheetOpen}
       action={(
-        <InfoButton label="O mapie i metodzie" onClick={() => setAbout(true)}
-          title="O mapie: metoda, terminy pomiarów, utrudnienia" />
+        <span style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button type="button" className="kit-info-btn" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+            title={theme === 'dark' ? 'Jasny motyw' : 'Ciemny motyw'} aria-label={theme === 'dark' ? 'Włącz jasny motyw' : 'Włącz ciemny motyw'}>
+            <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
+          </button>
+          <InfoButton label="O mapie i metodzie" onClick={() => setAbout(true)}
+            title="O mapie: metoda, terminy pomiarów, utrudnienia" />
+        </span>
       )}
       footer={(
         <>
@@ -522,6 +528,8 @@ export default memo(function Sidebar({
         </Field>
 
         <Field label="Podkład mapy">
+          <Chips tight label="Motyw" onPick={setTheme} items={[
+            { key: 'light', label: 'jasny', on: theme === 'light' }, { key: 'dark', label: 'ciemny', on: theme === 'dark' }]} />
           <Select value={basemap} label="Podkład mapy" onChange={setBasemap}
             options={basemapOptions()} />
         </Field>

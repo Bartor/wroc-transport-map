@@ -1,5 +1,6 @@
 // Three smaller surveys: the same roads counted in 2018 and 2024, boardings at
 // stations, and travel times on 46 stretches of road.
+import { ink } from './ink'
 import { useMemo } from 'react'
 import {
   Hint, LinkButton, Panel, RankList, TextTable, Warn, csvNumber as num, downloadCsv, fmt, sqrtRadius,
@@ -22,7 +23,7 @@ export function ChangeMap({ rows, sel, onPick }) {
   const top = Math.max(...rows.map((r) => r.v24))
   const points = useMemo(() => [...rows].sort((a, b) => b.v24 - a.v24).map((r) => ({
     key: `${r.key}${sel?.id === r.key ? '+' : ''}`, lat: r.lat, lon: r.lon, r: sqrtRadius(r.v24, top, 5, 22), row: r,
-    style: { color: sel?.id === r.key ? '#fff' : '#0b1016', weight: sel?.id === r.key ? 3 : 1, fillColor: changeColor(r.d), fillOpacity: 0.85 },
+    style: { color: sel?.id === r.key ? ink() : '#0b1016', weight: sel?.id === r.key ? 3 : 1, fillColor: changeColor(r.d), fillOpacity: 0.85 },
   })), [rows, sel, top])
   return (
     <CircleLayer points={points} onPick={(p) => onPick(p.row)} tip={({ row: r }) => (
@@ -88,13 +89,13 @@ export function StationsMap({ S, hours, sel, onPick }) {
     <>
       <CircleLayer points={list.filter((x) => x.s.lat).map(({ s, v }) => ({
         key: `${s.name}${sel?.id === s.name ? '+' : ''}`, lat: s.lat, lon: s.lon, r: sqrtRadius(v, top, 4, 26), s, v,
-        style: { color: sel?.id === s.name ? '#fff' : '#0b1016', weight: sel?.id === s.name ? 3 : 1, fillColor: KIND[s.kind].color, fillOpacity: v ? 0.85 : 0.2 },
+        style: { color: sel?.id === s.name ? ink() : '#0b1016', weight: sel?.id === s.name ? 3 : 1, fillColor: KIND[s.kind].color, fillOpacity: v ? 0.85 : 0.2 },
       }))} onPick={(p) => onPick(p.s.name)} tip={({ s, v }) => (
         <MapTooltip><b>{s.name}</b><br />{fmt(v)} wsiadających i wysiadających<br />
           <TipNote>{fmt(sum(s.on, hours))} wsiadło · {fmt(sum(s.off, hours))} wysiadło</TipNote></MapTooltip>
       )} />
       <CircleLayer points={[{ key: `air${sel?.id === 'air' ? '+' : ''}`, lat: S.airport.lat, lon: S.airport.lon, r: 12,
-        style: { color: sel?.id === 'air' ? '#fff' : '#0b1016', weight: sel?.id === 'air' ? 3 : 1, fillColor: '#6b7385', fillOpacity: 0.9 } }]}
+        style: { color: sel?.id === 'air' ? ink() : '#0b1016', weight: sel?.id === 'air' ? 3 : 1, fillColor: '#6b7385', fillOpacity: 0.9 } }]}
         onPick={() => onPick('air')} tip={() => (
           <MapTooltip><b>Port lotniczy</b><br />{fmt(airportYear(S))} pasażerów w roku</MapTooltip>
         )} />
