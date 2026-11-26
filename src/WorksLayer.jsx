@@ -12,6 +12,19 @@ export function WorksLayer({ works, areas = [] }) {
         <Polygon key={a.key} positions={a.rings} interactive={false}
           pathOptions={{ color: WORKS_COLOR, weight: 2, opacity: 0.85, dashArray: '2 5', fill: false }} />
       ))}
+      {/* tracks it left without trams, as their only way went through it */}
+      {works.filter((w) => w.reroute?.g?.length).map((w) => (
+        <LayerGroup key={`${w.id}-idle`}>
+          <Polyline positions={w.reroute.g} interactive={false} pathOptions={{ color: '#15181e', weight: 5, opacity: 0.6, lineCap: 'round' }} />
+          <Polyline positions={w.reroute.g} interactive={false} pathOptions={{ color: WORKS_COLOR, weight: 3, opacity: 0.95, dashArray: '1 7', lineCap: 'round' }} />
+          <Polyline positions={w.reroute.g} pathOptions={{ color: '#000000', weight: 14, opacity: 0 }}>
+            <MapTooltip sticky>
+              <b>Tory bez tramwajów</b> <TipNote>{w.name}, {w.when}</TipNote><br />
+              {w.reroute.what}
+            </MapTooltip>
+          </Polyline>
+        </LayerGroup>
+      ))}
       {works.filter((w) => w.g.length).map((w) => (
         <LayerGroup key={w.id}>
           <Polyline positions={w.g} interactive={false} pathOptions={{ color: '#15181e', weight: w.hard ? 7 : 5, opacity: 0.9, lineCap: 'butt' }} />

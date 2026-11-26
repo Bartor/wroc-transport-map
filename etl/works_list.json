@@ -39,7 +39,49 @@
     "Polanowice-Poświętne-Ligota",
     "Osobowice-Rędzin"
    ],
-   "what": "tramwaje z tej strony miasta nie jeździły Pomorską: od listopada 2022 linie 15 (Karłowice) oraz 70 i 74 (Poświętne) kursowały objazdem przez Trzebnicką, a do Osobowic dowoził autobus zastępczy 714 — do 22 czerwca 2024."
+   "ways": [
+    [
+     "Łowiecka",
+     [
+      51.1225,
+      17.024,
+      51.126,
+      17.032
+     ]
+    ],
+    [
+     "Władysława Reymonta",
+     [
+      51.125,
+      17.027,
+      51.1305,
+      17.0285
+     ]
+    ],
+    [
+     "most Osobowicki",
+     null
+    ],
+    [
+     "Bałtycka",
+     [
+      51.1325,
+      17.026,
+      51.1406,
+      17.0335
+     ]
+    ],
+    [
+     "Osobowicka",
+     [
+      51.13,
+      16.989,
+      51.146,
+      17.029
+     ]
+    ]
+   ],
+   "what": "tory przez Łowiecką, most Osobowicki, Bałtycką i Osobowicką stały puste: jedyna droga tramwajów do centrum prowadziła Pomorską. Od listopada 2022 linie 15 (Karłowice) oraz 70 i 74 (Poświętne) kursowały objazdem przez Trzebnicką, a do Osobowic dowoził autobus zastępczy 714 — do 22 czerwca 2024."
   },
   "sources": [
    [

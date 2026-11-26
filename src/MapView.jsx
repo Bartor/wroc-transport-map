@@ -217,7 +217,7 @@ export default function MapView({
       <>
         <MapKeys info={info}>
           <MapLegend items={[...(ownLegend || []), ...legendItems({ visible, net, sig, pies, people }),
-            ...(works?.length ? [{ label: 'remont w czasie badań', color: WORKS_COLOR, line: true }, ...(worksAreas?.length ? [{ label: 'osiedla, przez które przebiegał remont lub objazd', color: WORKS_COLOR }] : [])] : [])]} />
+            ...(works?.length ? [{ label: 'remont w czasie badań', color: WORKS_COLOR, line: true }, ...(works.some((w) => w.reroute?.g?.length) ? [{ label: 'tory bez tramwajów przez remont', color: WORKS_COLOR, line: true }] : []), ...(worksAreas?.length ? [{ label: 'osiedla, przez które przebiegał remont lub objazd', color: WORKS_COLOR }] : [])] : [])]} />
         </MapKeys>
         {ownOverlay}
       </>

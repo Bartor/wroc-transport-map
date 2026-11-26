@@ -129,7 +129,12 @@ def main():
         # only as many vertices as it takes
         thin = [[g[i] for i in range(len(g)) if i % 3 == 0 or i == len(g) - 1] for g in lines]
         if w.get("reroute"):
-            w["reroute"]["d"] = [names.index(d) for d in w["reroute"].pop("districts")]
+            r = w["reroute"]
+            r["d"] = [names.index(d) for d in r.pop("districts")]
+            # tracks the closure left without trams: theirs only led through it
+            idle = [g for name, how in r.pop("ways", []) for g in stretch(name, how)]
+            r["g"] = [[[round(x, 5) for x in p] for i, p in enumerate(g) if i % 3 == 0 or i == len(g) - 1] for g in idle]
+            print("  %-14s tracks without trams: %d m" % ("", sum(metres(a, b) for g in idle for a, b in zip(g, g[1:]))))
         out.append({**{k: v for k, v in w.items() if k not in ("ways", "districts")}, "d": sorted(own),
                     "g": [[[round(x, 5) for x in p] for p in g] for g in thin]})
         print("  %-14s %s - %s %6d m  %s" % (w["id"], w["from"], w["to"], length, ", ".join(names[k] for k in sorted(own))))
