@@ -303,6 +303,8 @@ export default function App() {
   const wantChoice = useCallback(() => fetchFile('choice'), [fetchFile])
   const sel0 = ownId ? { id: ownId } : null
   const shut = () => { setOwnPanel(false); setOwnId(null) }
+  // a line picked on the map opens the panel, as a place does
+  useEffect(() => { if (trip.link) setOwnPanel(true) }, [trip.link])
   /** A survey view's parts: in the sidebar, on the map, in the panel. */
   function ownParts() {
     if (view === 'trips' && tripsX) {
@@ -310,7 +312,8 @@ export default function App() {
         controls: <TripsControls x={tripsX} setT={setTrip} hasFreight={!!freight}
           choice={files.choice} onChoice={wantChoice} />,
         map: <TripsMap x={tripsX} dark={dark} onPick={pickTrip} setT={setTrip} />, legend: tripsLegend({ x: tripsX, dark }),
-        panel: <TripsPanel x={tripsX} setT={setTrip} period={period} onClose={shut} />,
+        panel: <TripsPanel x={tripsX.link ? { ...tripsX, idx: tripsX.link.idx, stats: tripsX.linkStats } : tripsX} setT={setTrip} period={period}
+          onClose={tripsX.link ? () => setTrip((q) => ({ ...q, link: null })) : shut} />,
       }
     }
     if (view === 'answers' && askX) {

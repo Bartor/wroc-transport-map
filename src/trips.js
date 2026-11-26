@@ -55,6 +55,8 @@ export const placeName = (p) => (p.level === 'd' ? p.name : p.name.includes(' - 
 // What the trips view starts with.
 export const TRIPS0 = {
   set: 'people', level: 'd', paint: 'any', way: 'home', per: 'pop', picked: [], filters: {}, many: false,
+  // a line on the map, picked: its two places' keys, "a~b"
+  link: null,
   // how it is shown: areas, flows, trips, spots or days
   show: 'areas', names: false, stat: { dim: 'km', opts: [0, 1] }, top: 60, rows: 'km', split: 'mode', pattern: null,
 }
@@ -404,6 +406,26 @@ export function describe(S, idx) {
       return out
     }),
   }
+}
+
+/** Trips of a line between two places, either way, and how many each way. */
+export function onLink(S, idx, level, link) {
+  const { of, byKey } = S.levels[level]
+  const [a, b] = link.split('~').map((k) => byKey.get(k))
+  if (!a || !b) return null
+  const { list } = S.levels[level]
+  const ia = list.indexOf(a)
+  const ib = list.indexOf(b)
+  const c = S.T.cols
+  const out = []
+  let there = 0
+  let back = 0
+  for (const i of idx) {
+    const f = of[c.f[i]]
+    const t = of[c.t[i]]
+    if (f === ia && t === ib) { out.push(i); there += c.w[i] } else if (f === ib && t === ia) { out.push(i); back += c.w[i] }
+  }
+  return { a, b, idx: out, there, back }
 }
 
 /** Shares of one dimension, biggest first unless it has an order of its own. */

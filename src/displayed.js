@@ -25,6 +25,8 @@ function ofTrips({ x, t, setT, period, spots, works }) {
     { label: places.length > 1 ? 'Zaznaczone' : 'Obszar', value: places.length ? few(places.map(placeName)) : 'wszystkie',
       clear: places.length ? () => setT((q) => ({ ...q, picked: [] })) : null },
     { label: 'Czyje', value: WAYS.find((w) => w[0] === x.way)[1] },
+    ...(x.link ? [{ label: 'Linia', value: x.link.a === x.link.b ? `w obrębie: ${placeName(x.link.a)}` : `${placeName(x.link.a)} ↔ ${placeName(x.link.b)}`,
+      clear: () => setT((q) => ({ ...q, link: null })) }] : []),
   ]
   if (show === 'areas') {
     const p = painted(x)

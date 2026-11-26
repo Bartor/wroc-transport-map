@@ -53,8 +53,9 @@ const Arc = memo(function Arc({ it, tip, hotAs, onPick, opacity, cased, on }) {
   return (
     <>
       {/* an edge, so that it stands off whatever is under it */}
-      {(cased || on) && <Polyline positions={it.line} interactive={false} pathOptions={{ color: edge, weight: it.weight + (on ? 4 : 2.5), opacity: on ? 1 : opacity * 0.55, lineCap: it.heads.length ? 'butt' : 'round' }} />}
-      {(cased || on) && it.outlines.map((h, i) => <Polygon key={i} positions={h} interactive={false} pathOptions={{ color: edge, weight: on ? 4 : 2.5, opacity: on ? 1 : opacity * 0.55, fill: false, lineJoin: 'round' }} />)}
+      {/* always there, only shown: one put in later would lie over the lines */}
+      <Polyline positions={it.line} interactive={false} pathOptions={{ color: edge, weight: it.weight + (on ? 4 : 2.5), opacity: on ? 1 : cased ? opacity * 0.55 : 0, lineCap: it.heads.length ? 'butt' : 'round' }} />
+      {it.outlines.map((h, i) => <Polygon key={i} positions={h} interactive={false} pathOptions={{ color: edge, weight: on ? 4 : 2.5, opacity: on ? 1 : cased ? opacity * 0.55 : 0, fill: false, lineJoin: 'round' }} />)}
       {it.strands.map((s, i) => <Polyline key={i} positions={s.pts} interactive={false} pathOptions={{ color: s.color, weight: s.weight, opacity, lineCap: it.heads.length ? 'butt' : 'round' }} />)}
       {it.heads.map((h, i) => <Polygon key={i} positions={h.pts} interactive={false} pathOptions={{ stroke: false, fillColor: h.color, fillOpacity: opacity }} />)}
       {/* what is pointed at: wider than it looks */}

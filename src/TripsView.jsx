@@ -1,6 +1,6 @@
 // The trips of the household survey (and the freight one): what is filtered,
 // and what the map shows. The panel is apart, with the charts.
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useCallback } from 'react'
 import {
   Chips, Field, Hint, LinkButton, Panel, Select, Slider, Toggle, fixed, fmt, fmtEst, labelBox, labelHtml, sqrtRadius,
 } from '@bartor-net/ui-kit'
@@ -14,7 +14,7 @@ import { DAY_MODES, daysOf } from './days'
 import { useHot } from './hot'
 import { colorsOf, isOrdered } from './Stack'
 import {
-  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, links, numberOf, pairs, passing, perPartner,
+  PAINTS, PER, THIN, TRIPS0, TRIP_PRESETS, breaks, countMargin, describe, digitsFor, links, numberOf, onLink, pairs, passing, perPartner,
   perOf, perPlace, perPlaceDim, perSpot, perThousand, placeName, scale, shares, statOf, touching,
 } from './trips'
 
@@ -58,8 +58,11 @@ export function useTrips(S, t, hours, spots, days) {
   )
   // days with a trip that passes, of the people who live in what is picked
   const dayRows = useMemo(() => (days && S && !S.freight ? daysOf(days, passed, zones) : null), [days, S, passed, zones])
-  return useMemo(() => S && { S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows },
-    [S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows])
+  // a line picked on the map: its trips, for the panel; the map keeps them all
+  const link = useMemo(() => (S && t.link ? onLink(S, idx, t.level, t.link) : null), [S, idx, t.level, t.link])
+  const linkStats = useMemo(() => (link ? describe(S, link.idx) : null), [S, link])
+  return useMemo(() => S && { S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows, link, linkStats },
+    [S, t, hours, way, show, passed, places, zones, idx, stats, sums, partner, spots, days, dayRows, link, linkStats])
 }
 
 export const unitOf = (S) => (S.freight ? 'przejazdów w badaniu' : 'podróży/dobę')
@@ -170,6 +173,9 @@ function sample(list, k, seed = 7) {
 }
 
 /** Trips that stay in a place, as loops at its middle. */
+/** A line's key in the address: its places' keys. */
+export const linkKey = (f) => `${f.a.key}~${f.b.key}`
+
 const loops = (list, modeW, color, all) => list.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `l${f.key}`, loop: loopSize(f.a.km2),
   from: f.a.c, to: f.a.c, w: modeW(f), fw: 1, bw: 0, color: color(f), place: f.a, all }))
 
@@ -201,7 +207,7 @@ export function flowLines(x, hot = {}) {
     return {
       arcs: [
         ...out.filter((f) => modeW(f) > 0).map((f) => ({ ...f, key: `f${f.key}`, pair: f.key, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), parts: parts(f),
-          faint: f.n < 3, many, on: hot.place === f.b.key || hot.pair === f.key,
+          faint: f.n < 3, many, on: hot.place === f.b.key || hot.pair === f.key || t.link === linkKey(f),
           // only a place at the other end of a line puts the rest in its shade
           dim: (lit && hot.place !== f.b.key) || (hot.pair != null && hot.pair !== f.key) })),
         ...loops(all.filter((f) => f.self), modeW, color, total).map((f) => ({ ...f, parts: parts(f), faint: f.n < 3 })),
@@ -214,7 +220,7 @@ export function flowLines(x, hot = {}) {
     return {
       arcs: [
         ...all.filter((f) => !f.self && modeW(f) > 0).map((f) => ({ ...f, pair: f.key, many: true, from: f.a.c, to: f.b.c, w: modeW(f), color: color(f), parts: parts(f), faint: f.n < 5,
-          on: hot.pair === f.key, dim: (hot.pair != null && hot.pair !== f.key) || (lit && hot.place !== f.a.key && hot.place !== f.b.key) })),
+          on: hot.pair === f.key || t.link === linkKey(f), dim: (hot.pair != null && hot.pair !== f.key) || (lit && hot.place !== f.a.key && hot.place !== f.b.key) })),
         ...loops(all.filter((f) => f.self), modeW, color).map((f) => ({ ...f, parts: parts(f), faint: f.n < 5, dim: lit && hot.place !== f.place.key })),
       ],
     }
@@ -299,9 +305,11 @@ export function TripsMap({ x, dark, onPick, setT }) {
     return { key: p.key, lat: p.c[0], lon: p.c[1], r: 0, html: labelHtml(lines0), box: labelBox(lines0), weight: v ?? 0 }
   })), [t.names, show, list, values, p0, partner, counts, P])
   // made anew, they would all be laid out anew
-  const flows = useMemo(() => [...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), ...(f.place ? { hotAs: HOT_PLACE(f.place.key), onPick: () => onPick(f.place) } : { hotAs: f.many ? HOT_PAIR(f.pair) : HOT_PLACE(f.b.key) }) })), ...chains],
+  const pickLink = useCallback((k) => setT((q) => ({ ...q, link: q.link === k ? null : k })), [setT])
+  const flows = useMemo(() => [...lines.arcs.map((f) => (single ? f : { ...f, tip: flowTip(f), onPick: () => pickLink(linkKey(f)),
+    ...(f.place ? { hotAs: HOT_PLACE(f.place.key), on: f.on || t.link === linkKey(f) } : { hotAs: f.many ? HOT_PAIR(f.pair) : HOT_PLACE(f.b.key) }) })), ...chains],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lines, chains, single, onPick])
+    [lines, chains, single, pickLink, t.link])
   const topSpot = perS ? Math.max(1, ...perS.w) : 1
   return (
     <>

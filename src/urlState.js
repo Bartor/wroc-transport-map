@@ -60,6 +60,7 @@ function readTrip(q) {
     rows: q.get('x') || undefined,
     split: q.get('y') || undefined,
     pattern: /^[0-5]+$/.test(q.get('day') || '') ? q.get('day') : undefined,
+    link: /^[a-z0-9]+~[a-z0-9]+$/i.test(q.get('ln') || '') ? q.get('ln') : undefined,
     filters: Object.keys(f).length ? f : undefined,
   })
 }
@@ -89,6 +90,7 @@ function putTrip(q, t) {
   if (t.rows !== 'km') q.set('x', t.rows)
   if (t.split !== 'mode') q.set('y', t.split)
   if (t.pattern) q.set('day', t.pattern)
+  if (t.link) q.set('ln', t.link)
   const f = Object.entries(t.filters).map(([k, v]) => `${k}:${v.join('.')}`)
   if (f.length) q.set('f', f.join(LIST))
 }

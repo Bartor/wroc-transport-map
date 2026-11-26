@@ -13,7 +13,7 @@ import { dayModes, dayText, daysOf, daysTable, patterns, readDays } from './days
 import { colorsOf, partsOf } from './Stack'
 import { isSmall, smallText } from './Small'
 import { meanOf, onMean, perPeopleOf, pickWarning, togglePick, valueOf } from './answers'
-import { averages, averagesTable, links, meanFor } from './trips'
+import { averages, averagesTable, links, meanFor, onLink } from './trips'
 import { arrowed, layout, loop, spread } from './arcs'
 import { isoDate, wholeStudy, worksIn, worksNear } from './works'
 import { crossTab, crossTable, digitsFor, perPlaceDim, perSpot, perThousand, placesTable, statOf } from './trips'
@@ -92,6 +92,12 @@ suite('trips', () => {
     const h = perPlace(S, all, 'z', 'home')
     expect(h.map((p) => p.any)).toEqual([0, 250, 200])
     expect(perPlace(S, all, 'd', 'any')[0].any).toBe(460)
+  })
+  it('takes the trips of one line, either way', () => {
+    const l = onLink(S, all, 'z', 'z1~z2')
+    expect(l.idx).toEqual([0, 1])
+    expect([l.there, l.back]).toEqual([100, 100])
+    expect(onLink(S, all, 'z', 'z2~z2').idx).toEqual([2])
   })
   it('finds partners, also off the map', () => {
     const zone = touching(S, all, [0], 'any')
@@ -366,7 +372,7 @@ suite('the address of a survey view', () => {
   const base = { range: [0, 24], areas: null, labels: { num: false, pct: false, declutter: true }, net: {}, sig: {}, off: new Set(), flow: {}, occupancy: null }
   const d = { range: [7, 9], flow: {} }
   it('keeps the trips', () => {
-    const trip = { ...TRIPS0, level: 'z', paint: 'stat', stat: { dim: 'age', opts: [1, 2] }, way: 'to', per: 'km2', picked: ['z12', 'z3001'], show: 'flows', names: true, top: 100, rows: 'age', split: 'goal', pattern: '010', filters: { mode: [2, 3], km: [0] } }
+    const trip = { ...TRIPS0, link: 'z1~z2', level: 'z', paint: 'stat', stat: { dim: 'age', opts: [1, 2] }, way: 'to', per: 'km2', picked: ['z12', 'z3001'], show: 'flows', names: true, top: 100, rows: 'age', split: 'goal', pattern: '010', filters: { mode: [2, 3], km: [0] } }
     const back = readHash(hashOf({ ...base, view: 'trips', trip }, d))
     expect({ ...TRIPS0, ...back.trip }).toEqual(trip)
     expect(readHash(hashOf({ ...base, view: 'trips', trip: TRIPS0 }, d)).trip).toEqual({})

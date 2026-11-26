@@ -61,7 +61,9 @@ export default function TripsPanel({ x, setT, period, onClose }) {
   const [list, setList] = useState(false)
   const one = places.length === 1 ? places[0] : null
   const spot = t.filters.spot && spots ? spots[t.filters.spot[0]] : null
-  const title = spot ? spot.name : one ? placeName(one) : places.length ? `${places.length} obszary razem` : 'Wszystkie obszary'
+  const link = x.link
+  const title = link ? (link.a === link.b ? `W obrębie: ${placeName(link.a)}` : `${placeName(link.a)} ↔ ${placeName(link.b)}`)
+    : spot ? spot.name : one ? placeName(one) : places.length ? `${places.length} obszary razem` : 'Wszystkie obszary'
   const { list: drawn } = S.levels[t.level]
   const perHead = !S.freight && t.per === 'pop'
   const many = S.freight ? 'przejazdów' : 'podróży'
@@ -169,15 +171,22 @@ export default function TripsPanel({ x, setT, period, onClose }) {
         <Chips small label="Aktywne filtry — naciśnij, aby usunąć" onPick={(key) => { const { [key]: _, ...rest } = t.filters; setT({ ...t, filters: rest }) }}
           items={active.map((d) => ({ key: d.key, on: true, label: `${d.label}: ${t.filters[d.key].map((i) => d.options[i]?.label).join(', ')} ×` }))} />
       )}
+      {link && (
+        <Hint>
+          Podróże tej linii: {link.a === link.b ? 'zaczęte i skończone w obszarze' : <>z {placeName(link.a)} do {placeName(link.b)} {S.freight ? fmt(link.there) : fmtEst(link.there)}, z powrotem {S.freight ? fmt(link.back) : fmtEst(link.back)}</>}
+          {' '}— spośród tych na mapie.{' '}
+          <LinkButton onClick={() => setT({ ...t, link: null })}>Wróć do {one ? placeName(one) : 'obszarów'}</LinkButton>
+        </Hint>
+      )}
       <Facts>
         <Fact label={S.freight ? 'Przejazdy w próbie' : 'Podróży na dobę'} tone="now">{S.freight ? fmt(stats.n) : `${fmtEst(stats.w)}${stats.n ? ` ±${Math.round(100 * countMargin(stats.n))}%` : ''}`}</Fact>
-        {!S.freight && own >= FEW && <Fact label="Na mieszkańca (6+)">{fixed(stats.w / own, 2)}</Fact>}
+        {!S.freight && !link && own >= FEW && <Fact label="Na mieszkańca (6+)">{fixed(stats.w / own, 2)}</Fact>}
         {!S.freight && <Fact label="W próbie">{fmt(stats.n)}<Small n={stats.n} /></Fact>}
         {stats.km != null && <Fact label="Średnio w linii prostej">{fixed(stats.km)} km</Fact>}
         {stats.min != null && <Fact label="Średni czas">{Math.round(stats.min)} min</Fact>}
         {stats.inCar != null && <Fact label="Osób w samochodzie">{fixed(stats.inCar, 2)}</Fact>}
-        {one?.pop != null && <Fact label={one.popEst ? 'Mieszkańcy (szacunek)' : 'Mieszkańcy'}>{fmt(one.pop)}</Fact>}
-        {one?.jobs != null && <Fact label="Miejsca pracy">{fmt(one.jobs)}</Fact>}
+        {!link && one?.pop != null && <Fact label={one.popEst ? 'Mieszkańcy (szacunek)' : 'Mieszkańcy'}>{fmt(one.pop)}</Fact>}
+        {!link && one?.jobs != null && <Fact label="Miejsca pracy">{fmt(one.jobs)}</Fact>}
       </Facts>
       {thin && stats.n > 0 && (
         <Warn>Tylko {fmt(stats.n)} {many} w próbie — udziały są orientacyjne. Poszerz okres, filtry albo obszar.</Warn>
